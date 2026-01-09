@@ -206,10 +206,10 @@ function AdminClassManagement() {
   const firestore = useFirestore();
   const { hasRole } = useAuth();
   
-  const classesCollection = useMemoFirebase(() => (firestore && hasRole('administrator')) ? collection(firestore, 'tridy') : null, [firestore, hasRole]);
+  const classesCollection = useMemoFirebase(() => (firestore) ? collection(firestore, 'tridy') : null, [firestore]);
   const { data: classes, isLoading: classesLoading } = useCollection<Class>(classesCollection);
   
-  const teachersQuery = useMemoFirebase(() => (firestore && hasRole('administrator')) ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore, hasRole]);
+  const teachersQuery = useMemoFirebase(() => (firestore) ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore]);
   const { data: teachers, isLoading: teachersLoading } = useCollection<User>(teachersQuery);
 
 
