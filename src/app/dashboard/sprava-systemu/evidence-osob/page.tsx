@@ -71,6 +71,7 @@ const roleTranslations: { [key in Role]: string } = {
   ziak: 'Žák',
   administrator: 'Administrátor',
   'vedouci pracovnik': 'Vedoucí pracovník',
+  'asistent pedagoga': 'Asistent pedagoga',
 };
 const allRoles = Object.keys(roleTranslations) as Role[];
 

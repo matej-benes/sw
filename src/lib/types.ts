@@ -1,4 +1,4 @@
-export type Role = 'ucitel' | 'rodic' | 'ziak' | 'administrator' | 'vedouci pracovnik';
+export type Role = 'ucitel' | 'rodic' | 'ziak' | 'administrator' | 'vedouci pracovnik' | 'asistent pedagoga';
 
 export interface User {
   id: string;
@@ -47,6 +47,7 @@ export interface Trida {
     nazev: string;
     ucitelId: string;
     zastupciIds?: string[];
+    asistentiIds?: string[];
     ziaciIds: string[];
 }
 

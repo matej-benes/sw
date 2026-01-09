@@ -21,7 +21,7 @@
         },
         "roles": {
           "type": "array",
-          "description": "The user's roles (e.g., ucitel, rodic, ziak, administrator, vedouci pracovnik).",
+          "description": "The user's roles (e.g., ucitel, rodic, ziak, administrator, vedouci pracovnik, asistent pedagoga).",
           "items": {
             "type": "string"
           }
@@ -67,6 +67,11 @@
         "zastupciIds": {
             "type": "array",
             "description": "References to Users. An array of substitute class teacher IDs.",
+            "items": { "type": "string" }
+        },
+        "asistentiIds": {
+            "type": "array",
+            "description": "References to Users. An array of pedagogical assistant IDs.",
             "items": { "type": "string" }
         },
         "ziaciIds": {

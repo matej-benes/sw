@@ -73,6 +73,7 @@ const classSchema = z.object({
   nazev: z.string().min(1, 'Název je povinný'),
   ucitelId: z.string().min(1, 'Je nutné vybrat třídního učitele'),
   zastupciIds: z.array(z.string()).optional(),
+  asistentiIds: z.array(z.string()).optional(),
 });
 
 type ClassFormData = z.infer<typeof classSchema>;
@@ -80,11 +81,13 @@ type ClassFormData = z.infer<typeof classSchema>;
 function ClassForm({
   classData,
   teachers,
+  assistants,
   onSave,
   closeDialog,
 }: {
   classData?: Class | null;
   teachers: User[];
+  assistants: User[];
   onSave: (data: ClassFormData) => void;
   closeDialog: () => void;
 }) {
@@ -100,6 +103,7 @@ function ClassForm({
       nazev: classData?.nazev || '',
       ucitelId: classData?.ucitelId || '',
       zastupciIds: classData?.zastupciIds || [],
+      asistentiIds: classData?.asistentiIds || [],
     },
   });
 
@@ -111,6 +115,10 @@ function ClassForm({
   const teacherOptions = useMemo(() => 
     teachers.map(t => ({ value: t.id, label: t.name })),
   [teachers]);
+
+  const assistantOptions = useMemo(() =>
+    assistants.map(a => ({ value: a.id, label: a.name })),
+  [assistants]);
 
   const selectedClassTeacherId = watch('ucitelId');
 
@@ -174,6 +182,26 @@ function ClassForm({
           </p>
         )}
       </div>
+       <div className="space-y-1">
+        <Label htmlFor="assistants">Asistenti pedagoga</Label>
+        <Controller
+            name="asistentiIds"
+            control={control}
+            render={({ field }) => (
+                <MultiSelect
+                    options={assistantOptions}
+                    onValueChange={field.onChange}
+                    defaultValue={field.value || []}
+                    placeholder="Vyberte asistenty..."
+                />
+            )}
+        />
+         {errors.asistentiIds && (
+          <p className="text-sm text-destructive">
+            {errors.asistentiIds.message}
+          </p>
+        )}
+      </div>
       <div className="space-y-1">
         <Label htmlFor="studentCount">Počet žáků</Label>
         <Input
@@ -195,20 +223,28 @@ function ClassForm({
   );
 }
 
-function ClassRow({ classData, teachers, onEdit, onDelete }: { classData: Class, teachers: User[], onEdit: (classData: Class) => void, onDelete: (classData: Class) => void }) {
-    const teacher = teachers.find(t => t.id === classData.ucitelId);
-    const substituteTeachers = classData.zastupciIds?.map(id => teachers.find(t => t.id === id)?.name).filter(Boolean) || [];
+function ClassRow({ classData, allUsers, onEdit, onDelete }: { classData: Class, allUsers: User[], onEdit: (classData: Class) => void, onDelete: (classData: Class) => void }) {
+    const teacher = allUsers.find(t => t.id === classData.ucitelId);
+    const substituteTeachers = classData.zastupciIds?.map(id => allUsers.find(t => t.id === id)?.name).filter(Boolean) || [];
+    const assistants = classData.asistentiIds?.map(id => allUsers.find(t => t.id === id)?.name).filter(Boolean) || [];
     
     return (
         <TableRow>
             <TableCell className="font-medium">{classData.nazev}</TableCell>
             <TableCell>
-                <span className="font-semibold text-destructive">{teacher?.name || 'Neznámý'} (Třídní)</span>
-                {substituteTeachers.length > 0 && (
-                    <span className="text-muted-foreground ml-2">
-                       Zástupci: {substituteTeachers.join(', ')}
-                    </span>
-                )}
+                <div className="flex flex-col gap-1">
+                    {teacher && <span className="font-semibold text-destructive">{teacher?.name} (Třídní)</span>}
+                    {substituteTeachers.length > 0 && (
+                        <span className="text-muted-foreground text-sm">
+                           <span className="text-destructive font-semibold">Zástupci:</span> {substituteTeachers.join(', ')}
+                        </span>
+                    )}
+                    {assistants.length > 0 && (
+                        <span className="text-muted-foreground text-sm">
+                           <span className="text-blue-600 font-semibold">Asistenti:</span> {assistants.join(', ')}
+                        </span>
+                    )}
+                </div>
             </TableCell>
             <TableCell>{classData.ziaciIds?.length || 0}</TableCell>
             <TableCell className="text-right">
@@ -247,6 +283,16 @@ function AdminClassManagement() {
   const teachersQuery = useMemoFirebase(() => (firestore) ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore]);
   const { data: teachers, isLoading: teachersLoading, error: teachersError } = useCollection<User>(teachersQuery);
 
+  const assistantsQuery = useMemoFirebase(() => (firestore) ? query(collection(firestore, "users"), where("roles", "array-contains", "asistent pedagoga")) : null, [firestore]);
+  const { data: assistants, isLoading: assistantsLoading, error: assistantsError } = useCollection<User>(assistantsQuery);
+
+  const allStaffQuery = useMemoFirebase(() => {
+      if (!firestore) return null;
+      return query(collection(firestore, "users"), where("roles", "array-contains-any", ["ucitel", "asistent pedagoga"]));
+  }, [firestore]);
+  const { data: allStaff, isLoading: allStaffLoading } = useCollection<User>(allStaffQuery);
+
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<Class | null>(null);
   const [deletingClass, setDeletingClass] = useState<Class | null>(null);
@@ -259,6 +305,7 @@ function AdminClassManagement() {
         nazev: formData.nazev,
         ucitelId: formData.ucitelId,
         zastupciIds: formData.zastupciIds || [],
+        asistentiIds: formData.asistentiIds || [],
     }
 
     if (editingClass) {
@@ -330,7 +377,8 @@ function AdminClassManagement() {
   useEffect(() => {
     if(classesError) console.error("Error loading classes: ", classesError);
     if(teachersError) console.error("Error loading teachers: ", teachersError);
-  }, [classesError, teachersError])
+    if(assistantsError) console.error("Error loading assistants: ", assistantsError);
+  }, [classesError, teachersError, assistantsError])
     
   return (
     <>
@@ -346,7 +394,7 @@ function AdminClassManagement() {
                 Celkem {classes?.length ?? 0} tříd v databázi.
               </CardDescription>
             </div>
-            <Button onClick={() => openDialog(null)} disabled={teachersLoading}>
+            <Button onClick={() => openDialog(null)} disabled={teachersLoading || assistantsLoading}>
               <PlusCircle className="mr-2 h-4 w-4" />
               Přidat třídu
             </Button>
@@ -356,7 +404,7 @@ function AdminClassManagement() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Název třídy</TableHead>
-                  <TableHead>Učitelé</TableHead>
+                  <TableHead>Učitelé a Asistenti</TableHead>
                   <TableHead>Počet žáků</TableHead>
                   <TableHead>
                     <span className="sr-only">Akce</span>
@@ -364,15 +412,15 @@ function AdminClassManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(classesLoading || teachersLoading) && (
+                {(classesLoading || teachersLoading || assistantsLoading || allStaffLoading) && (
                   <TableRow>
                     <TableCell colSpan={4} className="h-24 text-center">
                       Načítání dat...
                     </TableCell>
                   </TableRow>
                 )}
-                {!(classesLoading || teachersLoading) && classes?.map((cls) => (
-                    <ClassRow key={cls.id} classData={cls} teachers={teachers || []} onEdit={openDialog} onDelete={setDeletingClass} />
+                {!(classesLoading || teachersLoading || assistantsLoading || allStaffLoading) && classes?.map((cls) => (
+                    <ClassRow key={cls.id} classData={cls} allUsers={allStaff || []} onEdit={openDialog} onDelete={setDeletingClass} />
                 ))}
               </TableBody>
             </Table>
@@ -388,6 +436,7 @@ function AdminClassManagement() {
              <ClassForm
                 classData={editingClass}
                 teachers={teachers || []}
+                assistants={assistants || []}
                 onSave={handleSaveClass}
                 closeDialog={() => setIsDialogOpen(false)}
             />
