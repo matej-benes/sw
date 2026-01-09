@@ -187,11 +187,11 @@ function EventBlock({ event }: { event: Udalost }) {
     )
 }
 
-export function TimetableWidget({ schedule, eventsData, isTeacher }: { schedule: Rozvrh | null, eventsData: Udalost[], isTeacher: boolean }) {
+export function TimetableWidget({ schedules, eventsData, isTeacher, userId }: { schedules: Rozvrh[], eventsData: Udalost[], isTeacher: boolean, userId: string }) {
     
-    const timeSlots = schedule?.timeSlots || defaultTimeSlots;
-    const scheduleData = schedule?.scheduleData;
-
+    // Use the timeslots from the first schedule as a reference, or default.
+    const timeSlots = schedules[0]?.timeSlots || defaultTimeSlots;
+    
     const findEvent = (day: string, time: string) => {
         const dayIndex = dayMapping[day]?.dayIndex;
         if (dayIndex === undefined) return null;
@@ -208,6 +208,27 @@ export function TimetableWidget({ schedule, eventsData, isTeacher }: { schedule:
             return isSameDay && event.cas.startsWith(timeStart.trim());
         });
     }
+
+    const getLessonForCell = (day: string, periodIndex: number) => {
+        if (!schedules) return null;
+
+        for (const schedule of schedules) {
+            const lesson = schedule.scheduleData?.[day]?.[periodIndex];
+            if (lesson) {
+                 if (isTeacher) {
+                    // For teachers, only return the lesson if they are the teacher
+                    if (lesson.teacherId === userId) {
+                        return lesson;
+                    }
+                } else {
+                    // For students, return the lesson of their class
+                    return lesson;
+                }
+            }
+        }
+        return null;
+    }
+
 
     return (
         <div>
@@ -231,7 +252,7 @@ export function TimetableWidget({ schedule, eventsData, isTeacher }: { schedule:
                            <div className="text-xs text-muted-foreground">{dayMapping[day]?.date || ''}</div>
                         </div>
                         {timeSlots.map((time, periodIndex) => {
-                            const lesson = scheduleData?.[day]?.[periodIndex];
+                            const lesson = getLessonForCell(day, periodIndex);
                             const event = findEvent(day, time);
 
                             return (

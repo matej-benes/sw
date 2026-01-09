@@ -25,13 +25,25 @@ export default function DashboardPage() {
   const router = useRouter();
   const firestore = useFirestore();
 
-  // Fetch schedule for the user's class
-  const scheduleRef = useMemoFirebase(() => {
-    if (!firestore || !user?.tridaId) return null;
-    return doc(firestore, 'rozvrhy', user.tridaId);
-  }, [firestore, user?.tridaId]);
+  const isTeacher = hasRole('ucitel');
 
-  const { data: scheduleData } = useDoc<Rozvrh>(scheduleRef);
+  // For students, fetch only their class schedule. For teachers, fetch all schedules.
+  const schedulesCollectionRef = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'rozvrhy');
+  }, [firestore]);
+
+  const studentScheduleRef = useMemoFirebase(() => {
+    if (!firestore || isTeacher || !user?.tridaId) return null;
+    return doc(firestore, 'rozvrhy', user.tridaId);
+  }, [firestore, user?.tridaId, isTeacher]);
+
+  const { data: allSchedules } = useCollection<Rozvrh>(isTeacher ? schedulesCollectionRef : null);
+  const { data: studentScheduleData } = useDoc<Rozvrh>(studentScheduleRef);
+
+  // Combine schedule data based on role
+  const scheduleData = isTeacher ? allSchedules : (studentScheduleData ? [studentScheduleData] : []);
+
 
   // Fetch events
   const eventsQuery = useMemoFirebase(() => {
@@ -58,7 +70,6 @@ export default function DashboardPage() {
 
   if (!user) return null;
 
-  const isTeacher = hasRole('ucitel');
 
   return (
     <div className="flex-1 space-y-8">
@@ -80,9 +91,10 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                     <TimetableWidget 
-                        schedule={scheduleData} 
+                        schedules={scheduleData || []} 
                         eventsData={udalosti || []}
                         isTeacher={isTeacher} 
+                        userId={user.id}
                     />
                 </CardContent>
             </Card>
