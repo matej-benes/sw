@@ -4,10 +4,14 @@ import { UserNav } from '@/components/layout/user-nav';
 import { Logo } from '@/components/logo';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Menu } from 'lucide-react';
+import { Menu, ChevronDown, BookCopy, Settings, Users, School, Book } from 'lucide-react';
 import Link from 'next/link';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { cn } from '@/lib/utils';
+import { usePathname } from 'next/navigation';
+
 
 const navLinks = [
     { name: "Třídní kniha", href: "/dashboard/tridy" },
@@ -16,13 +20,27 @@ const navLinks = [
     { name: "Komunikace", href: "/dashboard/zpravy" },
 ];
 
+const adminNavLinks = [
+    { name: "Rozvrhy a suplování", href: "/dashboard/rozvrhy-suplovani", icon: BookCopy },
+];
+
+const spravaSystemuLinks = [
+     { name: "Evidence osob", href: "/dashboard/sprava-systemu/evidence-osob", icon: Users },
+     { name: "Třídy", href: "/dashboard/sprava-systemu/tridy", icon: School },
+     { name: "Předměty", href: "/dashboard/sprava-systemu/predmety", icon: Book },
+]
+
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading } = useAuth();
+  const { user, loading, hasRole } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const isAdministrator = hasRole('administrator');
+
 
   useEffect(() => {
     if (!loading && !user) {
@@ -38,34 +56,93 @@ export default function DashboardLayout({
     );
   }
 
+  const renderNavLinks = (links: {name: string, href: string, icon?: any}[], isSubMenu = false) => (
+    links.map(link => {
+        const isActive = pathname === link.href;
+        const LinkIcon = link.icon;
+        return (
+            <Link 
+                key={link.name} 
+                href={link.href} 
+                className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary",
+                    isActive && "text-primary bg-muted",
+                    isSubMenu && "text-sm"
+                )}
+            >
+                {LinkIcon && <LinkIcon className="h-4 w-4" />}
+                {link.name}
+            </Link>
+        )
+    })
+  )
+
+  const sidebarContent = (
+    <div className="flex h-full max-h-screen flex-col gap-2">
+        <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
+            <Link href="/dashboard" className="flex items-center gap-2 font-semibold text-primary">
+                <Logo className="h-8 w-8" />
+                <span className="text-lg font-bold uppercase tracking-wider text-foreground">Škola Online</span>
+            </Link>
+        </div>
+        <div className="flex-1">
+            <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
+                {renderNavLinks(navLinks)}
+                {isAdministrator && (
+                    <>
+                        <div className='my-2 border-t border-border -mx-2'></div>
+                        {renderNavLinks(adminNavLinks)}
+                         <Accordion type="single" collapsible className="w-full" defaultValue={pathname.includes('/dashboard/sprava-systemu') ? 'sprava-systemu' : undefined}>
+                            <AccordionItem value="sprava-systemu" className="border-b-0">
+                                <AccordionTrigger className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary hover:no-underline [&[data-state=open]>svg]:rotate-180">
+                                     <Settings className="h-4 w-4" />
+                                    Správa systému
+                                </AccordionTrigger>
+                                <AccordionContent className="pl-8 pb-0">
+                                    <nav className='grid gap-1'>
+                                        {renderNavLinks(spravaSystemuLinks, true)}
+                                    </nav>
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
+                    </>
+                )}
+            </nav>
+        </div>
+    </div>
+  );
+
   return (
-    <div className="flex min-h-screen w-full flex-col bg-background">
-      <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-card px-4 md:px-6 z-10">
-        <div className="flex items-center gap-2 font-semibold text-primary">
-            <Logo className="h-8 w-8" />
-            <span className="text-lg font-bold uppercase tracking-wider text-foreground">Škola Online</span>
-        </div>
-        <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
-            {navLinks.map(link => (
-                <Link key={link.name} href={link.href} className="text-muted-foreground transition-colors hover:text-foreground">
-                    {link.name}
-                </Link>
-            ))}
-        </nav>
-        <div className="flex w-full items-center justify-end gap-4 md:ml-auto md:gap-2 lg:gap-4">
+    <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
+       <div className="hidden border-r bg-muted/40 md:block">
+            {sidebarContent}
+       </div>
+      <div className="flex flex-col">
+        <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
+           <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0 md:hidden"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            >
+                <Menu className="h-5 w-5" />
+                <span className="sr-only">Toggle navigation menu</span>
+            </Button>
+            {/* Mobile Sheet */}
+            {isMobileMenuOpen && (
+                 <div className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
+                    <div className="fixed inset-y-0 left-0 z-50 w-[280px] bg-card" onClick={(e) => e.stopPropagation()}>
+                        {sidebarContent}
+                    </div>
+                </div>
+            )}
+           
+          <div className="w-full flex-1">
+            {/* Can add search bar here if needed */}
+          </div>
           <UserNav />
-        </div>
-        <Button
-          variant="outline"
-          size="icon"
-          className="shrink-0 md:hidden"
-        >
-          <Menu className="h-5 w-5" />
-          <span className="sr-only">Toggle navigation menu</span>
-        </Button>
-      </header>
-      <div className="flex flex-1">
-        <main className="flex-1 p-4 md:p-6 lg:p-8">
+        </header>
+        <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 bg-background">
             {children}
         </main>
       </div>
