@@ -81,7 +81,7 @@ const userSchema = z.object({
   email: z.string().email('Neplatný formát emailu'),
   roles: z.array(z.string()).min(1, 'Uživatel musí mít alespoň jednu roli'),
   pin: z.string().optional(),
-  tridaId: z.string().optional(),
+  tridaId: z.string().optional().nullable(),
 });
 
 type UserFormData = z.infer<typeof userSchema>;
@@ -113,7 +113,7 @@ function UserForm({
       email: user?.email || '',
       roles: user?.roles || [],
       pin: user?.pin || '',
-      tridaId: user?.tridaId || '',
+      tridaId: user?.tridaId || null,
     },
   });
 
@@ -133,7 +133,7 @@ function UserForm({
 
   useEffect(() => {
     if (!isZiak) {
-      setValue('tridaId', undefined);
+      setValue('tridaId', null);
     }
   }, [isZiak, setValue]);
 
@@ -193,7 +193,7 @@ function UserForm({
                 name="tridaId"
                 control={control}
                 render={({ field }) => (
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value || ''}>
                         <SelectTrigger>
                             <SelectValue placeholder="Vyberte třídu" />
                         </SelectTrigger>
@@ -294,18 +294,23 @@ function AdminUserManagement() {
     const handleSaveUser = async (formData: Partial<User>) => {
       if (!firestore) return;
       
+      const dataToSave = {
+          ...formData,
+          tridaId: formData.tridaId || null,
+      };
+
       try {
         if (editingUser) {
             const userRef = doc(firestore, 'users', editingUser.id);
             const originalUserDoc = await getDoc(userRef);
             const originalUserData = originalUserDoc.data() as User | undefined;
 
-            await updateDoc(userRef, formData);
+            await updateDoc(userRef, dataToSave);
 
             // If class changed for a student, update the ziaciIds in both old and new class
-            if (formData.roles?.includes('ziak')) {
+            if (dataToSave.roles?.includes('ziak')) {
                 const originalTridaId = originalUserData?.tridaId;
-                const newTridaId = formData.tridaId;
+                const newTridaId = dataToSave.tridaId;
 
                 if (originalTridaId !== newTridaId) {
                     // Remove from old class
@@ -323,13 +328,13 @@ function AdminUserManagement() {
 
             toast({
               title: 'Uživatel aktualizován',
-              description: `Uživatel ${formData.name} byl úspěšně aktualizován.`,
+              description: `Uživatel ${dataToSave.name} byl úspěšně aktualizován.`,
             });
         } else {
             // This is a new user (pre-registration)
             const newUserDocRef = doc(collection(firestore, 'users'));
             const newUserForDb = {
-                ...formData,
+                ...dataToSave,
                 id: newUserDocRef.id,
                 avatarUrl: `https://picsum.photos/seed/${newUserDocRef.id}/100/100`,
             };
@@ -343,7 +348,7 @@ function AdminUserManagement() {
 
             toast({
               title: 'Uživatel přidán',
-              description: `Uživatel ${formData.name} byl úspěšně přidán s PINem pro registraci.`,
+              description: `Uživatel ${dataToSave.name} byl úspěšně přidán s PINem pro registraci.`,
             });
         }
       } catch(e) {
