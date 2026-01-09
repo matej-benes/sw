@@ -13,9 +13,10 @@ import { useEffect, useState } from 'react';
 import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-import { useFirestore } from '@/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { useFirestore, addDocumentNonBlocking } from '@/firebase';
+import { collection, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
 import type { User } from '@/lib/types';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 
 
 const loginSchema = z.object({
@@ -33,7 +34,7 @@ const registrationSchema = z.object({
 });
 
 function LoginForm() {
-  const { user, signIn } = useAuth();
+  const { user, signIn, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -103,8 +104,8 @@ function LoginForm() {
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full bg-accent hover:bg-accent/90" disabled={isLoading}>
-                {isLoading ? <Loader2 className="animate-spin" /> : 'Přihlásit se'}
+              <Button type="submit" className="w-full bg-accent hover:bg-accent/90" disabled={isLoading || authLoading}>
+                {isLoading || authLoading ? <Loader2 className="animate-spin" /> : 'Přihlásit se'}
               </Button>
             </form>
           </Form>
@@ -114,6 +115,7 @@ function LoginForm() {
 }
 
 function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
+    const { signIn } = useAuth();
     const [step, setStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
     const [registrationData, setRegistrationData] = useState<{ user: User, tridaName: string | null } | null>(null);
@@ -156,6 +158,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             const tridaName = "4.C";
 
             setRegistrationData({ user: userData, tridaName });
+            registrationForm.setValue('email', userData.email);
             setStep(2);
             toast({ title: 'PIN ověřen', description: 'Nyní si můžete vytvořit účet.' });
 
@@ -167,16 +170,49 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
         }
     };
 
-    const handleRegistrationSubmit = (values: z.infer<typeof registrationSchema>) => {
+    const handleRegistrationSubmit = async (values: z.infer<typeof registrationSchema>) => {
         setIsLoading(true);
-        // Here would be Firebase Auth registration logic.
-        // For now, we simulate it.
-        setTimeout(() => {
-            console.log('Registrace s daty:', values, registrationData?.user);
+        if (!firestore || !registrationData) {
+            toast({ variant: 'destructive', title: 'Chyba', description: 'Došlo k neočekávané chybě.' });
+            setIsLoading(false);
+            return;
+        }
+
+        const { auth } = await import('@/firebase');
+
+        try {
+            // Step 1: Create user in Firebase Auth
+            const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
+            const firebaseUser = userCredential.user;
+
+            // Step 2: Update the user document in Firestore with the new Auth UID and remove the PIN
+            const userRef = doc(firestore, 'users', registrationData.user.id);
+            const userDataToUpdate = {
+                ...registrationData.user,
+                id: firebaseUser.uid, // This is crucial. Overwriting mock ID with real Auth UID
+                email: values.email, // Update email from the form
+                pin: '', // Clear the PIN after registration
+            };
+            
+            // We use setDoc here to create a new document with the Auth UID as the ID
+            const newDocRef = doc(firestore, 'users', firebaseUser.uid);
+            await setDoc(newDocRef, userDataToUpdate);
+            
+            // Optionally, delete the old document if the ID was different, but here we overwrite
+            // For this logic, we assume the user.id from PIN check is the one to be updated/replaced
+
             toast({ title: 'Registrace úspěšná', description: 'Váš účet byl vytvořen, nyní se můžete přihlásit.' });
             onLoginClick(); // Switch back to login form
+        } catch (error: any) {
+            console.error("Registration error:", error);
+            let description = 'Při registraci došlo k chybě.';
+            if (error.code === 'auth/email-already-in-use') {
+                description = 'Tento e-mail je již používán jiným účtem.';
+            }
+            toast({ variant: 'destructive', title: 'Chyba registrace', description });
+        } finally {
             setIsLoading(false);
-        }, 1500);
+        }
     };
 
     return (
@@ -231,7 +267,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                                         <FormItem>
                                             <FormLabel>Email</FormLabel>
                                             <FormControl>
-                                                <Input type="email" placeholder="vas@email.cz" {...field} defaultValue={registrationData.user.email} />
+                                                <Input type="email" placeholder="vas@email.cz" {...field} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
