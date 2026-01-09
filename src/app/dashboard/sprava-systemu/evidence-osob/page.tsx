@@ -183,7 +183,6 @@ export default function EvidenceOsobPage() {
     if (!firestore) return;
     try {
       if (editingUser) {
-        // Update existing user
         const userRef = doc(firestore, 'users', editingUser.id);
         await updateDoc(userRef, formData);
         toast({
@@ -191,9 +190,9 @@ export default function EvidenceOsobPage() {
           description: `Uživatel ${formData.name} byl úspěšně aktualizován.`,
         });
       } else {
-        // Create new user
         await addDoc(collection(firestore, 'users'), {
           ...formData,
+          id: `user-${Date.now()}`,
           avatarUrl: `https://picsum.photos/seed/${Date.now()}/100/100`, // Placeholder avatar
         });
         toast({
@@ -201,6 +200,7 @@ export default function EvidenceOsobPage() {
           description: `Uživatel ${formData.name} byl úspěšně přidán.`,
         });
       }
+      setIsDialogOpen(false);
     } catch (error) {
       console.error('Error saving user:', error);
       toast({
@@ -286,9 +286,9 @@ export default function EvidenceOsobPage() {
                     <TableCell>{user.email}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
-                        {user.roles.map((role) => (
+                        {(user.roles || []).map((role) => (
                           <Badge key={role} variant="secondary">
-                            {roleTranslations[role] || role}
+                            {roleTranslations[role as Role] || role}
                           </Badge>
                         ))}
                       </div>

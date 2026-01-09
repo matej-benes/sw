@@ -21,10 +21,10 @@
  *   classes via the `proTridu` field.
  *
  * Key Security Decisions:
- * - User Listing: Listing the `/users` collection is disabled to protect PII.
+ * - User Listing: Listing the `/users` collection is disabled to protect PII, except for administrators.
  * - Role Management: Only users with the 'administrator' role can change other users' roles.
- * - Class Listing: Listing the `/tridy` collection is disabled for performance
- *   and security. The app should fetch the user's single class via a direct `get` call.
+ * - Class Listing: Listing the `/tridy` collection is disabled for most users for performance
+ *   and security. The app should fetch the user's single class via a direct `get` call. Administrators are an exception.
  * - Teacher Authority: A user with the 'ucitel' role can manage grades and
  *   schedules, but only for the specific class they are assigned to.
  * - Student/Parent Access: Students and parents can only view their own grades and
@@ -40,7 +40,7 @@
  * Structural Segregation:
  * User-specific, private data (grades) is stored in a subcollection
  * (`/users/{userId}/znamky`). This path-based structure provides a strong, simple,
- * and performant security boundary, ensuring a user can only ever access their own grades.
+ * and performant security boundary, ensuring a user can only ever access their own/child's subcollections.
  */
 rules_version = '2';
 service cloud.firestore {
@@ -114,12 +114,12 @@ service cloud.firestore {
      * @allow (get) A teacher reading the profile of a student in their class.
      * @allow (update) A user updating their own profile (but not roles).
      * @allow (update) An administrator updating any user's profile (including roles).
-     * @deny (list) Any user trying to list all users in the database.
+     * @allow (list) An administrator listing all users.
      * @principle Restricts access to a user's own data tree and grants supervisory access to teachers and administrators.
      */
     match /users/{userId} {
       allow get: if isOwner(userId) || isTeacherOfStudent(userId) || isAdministrator();
-      allow list: if false;
+      allow list: if isAdministrator();
       allow create: if isOwner(userId) && request.resource.data.id == userId;
       allow update: if (isExistingOwner(userId) && request.resource.data.roles == resource.data.roles) || isAdministrator();
       allow delete: if isExistingOwner(userId) || isAdministrator();
@@ -130,13 +130,13 @@ service cloud.firestore {
      * @path /tridy/{tridaId}
      * @allow (get) A student or teacher reading the details of their own class.
      * @allow (create) A teacher or admin creating a new class.
-     * @deny (list) Any user trying to list all classes.
+     * @allow (list) An administrator listing all classes.
      * @deny (update) A student trying to change class details.
      * @principle Enforces membership for reads and teacher/admin-only access for writes.
      */
     match /tridy/{tridaId} {
       allow get: if isMemberOfClass(tridaId) || isAdministrator();
-      allow list: if false;
+      allow list: if isAdministrator();
       allow create: if isTeacher() && request.resource.data.ucitelId == request.auth.uid || isAdministrator();
       allow update: if isTeacherOfClass(tridaId) || isAdministrator() && resource != null;
       allow delete: if isTeacherOfClass(tridaId) || isAdministrator() && resource != null;
@@ -172,6 +172,18 @@ service cloud.firestore {
       allow create: if isTeacherOfStudent(userId) && request.resource.data.studentId == userId && request.resource.data.ucitelId == request.auth.uid;
       allow update: if isTeacherOfStudent(userId) && resource != null;
       allow delete: if isTeacherOfStudent(userId) && resource != null;
+    }
+    
+    /**
+     * @description Controls access to school subjects.
+     * @path /predmety/{predmetId}
+     * @allow (get, list) Any signed-in user can read subjects.
+     * @allow (create, update, delete) Only administrators can manage subjects.
+     * @principle Public read access for core data, restricted writes for administration.
+     */
+    match /predmety/{predmetId} {
+      allow get, list: if isAdministrator();
+      allow create, update, delete: if isAdministrator();
     }
 
     /**

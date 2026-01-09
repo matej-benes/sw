@@ -43,7 +43,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -170,6 +170,7 @@ export default function SpravaTridyPage() {
           description: `Třída ${formData.name} byla úspěšně přidána.`,
         });
       }
+      setIsDialogOpen(false);
     } catch (error) {
       console.error('Error saving class:', error);
       toast({
@@ -266,7 +267,6 @@ export default function SpravaTridyPage() {
                             <Pencil className="mr-2 h-4 w-4" />
                             Upravit
                           </DropdownMenuItem>
-                          <DropdownMenuItem>Zobrazit žáky</DropdownMenuItem>
                           <DropdownMenuItem
                             onSelect={() => openDeleteDialog(cls)}
                             className="text-destructive"
