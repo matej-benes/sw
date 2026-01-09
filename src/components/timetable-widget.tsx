@@ -1,7 +1,14 @@
 'use client';
 import React from 'react';
 import { cn } from "@/lib/utils";
-import type { Timetable } from "@/lib/types";
+import type { Timetable, Lesson } from "@/lib/types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 
 const timeSlots = [
     "07:55 - 08:40", "08:55 - 09:40", "09:55 - 10:40", "10:45 - 11:30",
@@ -17,9 +24,62 @@ const dayMapping: { [key: string]: { short: string; date: string } } = {
     'Pátek': { short: 'Pá', date: '3.9.' },
 };
 
+
+function LessonContextMenu({ children, lesson }: { children: React.ReactNode, lesson: Lesson }) {
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild onContextMenu={(e) => e.preventDefault()}>
+                {children}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+                <DropdownMenuItem>Zapsat do třídní knihy</DropdownMenuItem>
+                <DropdownMenuItem>Nové hodnocení</DropdownMenuItem>
+                <DropdownMenuItem>Probrané učivo</DropdownMenuItem>
+                <DropdownMenuItem>Poznámka dítěte/žáka/studenta do třídní knihy</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>Informace k výuce</DropdownMenuItem>
+                <DropdownMenuItem>Přiložit výukový zdroj</DropdownMenuItem>
+                <DropdownMenuItem>Odeslat zprávu</DropdownMenuItem>
+                <DropdownMenuItem>Nový domácí úkol</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>Vytvořit online schůzku</DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+}
+
+
+function LessonBlock({ lesson, isTeacher }: { lesson: Lesson; isTeacher: boolean }) {
+    const getSubjectColor = (subject: string) => {
+        let hash = 0;
+        for (let i = 0; i < subject.length; i++) {
+            hash = subject.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const h = hash % 360;
+        return `hsl(${h}, 60%, 85%)`;
+    };
+
+    const blockContent = (
+         <div 
+            className="h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer"
+            style={{ backgroundColor: getSubjectColor(lesson.subject) }}
+        >
+            <div className="font-bold">{lesson.subject}</div>
+            <div>{isTeacher ? lesson.class : lesson.teacher}</div>
+            <div className="text-muted-foreground">{lesson.room}</div>
+        </div>
+    );
+
+    if (isTeacher) {
+        return <LessonContextMenu lesson={lesson}>{blockContent}</LessonContextMenu>
+    }
+
+    return blockContent;
+}
+
 export function TimetableWidget({ timetableData, isTeacher, studentName, teacherName, className }: { timetableData: Timetable, isTeacher: boolean, studentName: string, teacherName: string, className: string }) {
     
-    const days = ['Středa', 'Čtvrtek'];
+    const days = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek'];
 
     const findLesson = (day: string, time: string) => {
         const lessons = timetableData[day];
@@ -27,7 +87,7 @@ export function TimetableWidget({ timetableData, isTeacher, studentName, teacher
         
         const [start] = time.split(' - ');
 
-        return lessons.find(lesson => lesson.time.startsWith(start));
+        return lessons.find(lesson => lesson.time.startsWith(start.trim()));
     }
 
     return (
@@ -46,12 +106,14 @@ export function TimetableWidget({ timetableData, isTeacher, studentName, teacher
                 {days.map(day => (
                     <React.Fragment key={day}>
                         <div className="flex flex-col items-center justify-center p-2 bg-muted/50 border-b border-r border-border">
-                           <div className="font-bold">{dayMapping[day]?.short || ''}</div>
+                           <div className="font-bold">{dayMapping[day]?.short || day.substring(0,2)}</div>
                            <div className="text-xs text-muted-foreground">{dayMapping[day]?.date || ''}</div>
                         </div>
                         {timeSlots.map((time, index) => {
+                            const lesson = findLesson(day, time);
                             return (
-                                <div key={index} className="p-1 border-b border-r border-border min-h-[60px]">
+                                <div key={index} className="p-0.5 border-b border-r border-border min-h-[60px]">
+                                    {lesson && <LessonBlock lesson={lesson} isTeacher={isTeacher} />}
                                 </div>
                             )
                         })}
