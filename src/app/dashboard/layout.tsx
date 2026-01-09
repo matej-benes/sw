@@ -6,22 +6,15 @@ import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Menu, ChevronDown, BookCopy, Settings, Users, School, Book } from 'lucide-react';
+import { Menu, ChevronDown, BookCopy, Settings, Users, School, Book, FileQuestion } from 'lucide-react';
 import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
 
-
-const navLinks = [
-    { name: "Třídní kniha", href: "/dashboard/tridy" },
-    { name: "Hodnocení", href: "/dashboard/znamky" },
-    { name: "Výuka", href: "/dashboard/rozvrh" },
-    { name: "Komunikace", href: "/dashboard/zpravy" },
-];
-
 const adminNavLinks = [
     { name: "Rozvrhy a suplování", href: "/dashboard/rozvrhy-suplovani", icon: BookCopy },
+    { name: 'Studijní materiály', href: '/dashboard/materialy', icon: FileQuestion },
 ];
 
 const spravaSystemuLinks = [
@@ -87,10 +80,9 @@ export default function DashboardLayout({
         </div>
         <div className="flex-1">
             <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
-                {renderNavLinks(navLinks)}
                 {isAdministrator && (
                     <>
-                        <div className='my-2 border-t border-border -mx-2'></div>
+                        <div className='my-2'></div>
                         {renderNavLinks(adminNavLinks)}
                          <Accordion type="single" collapsible className="w-full" defaultValue={pathname.includes('/dashboard/sprava-systemu') ? 'sprava-systemu' : undefined}>
                             <AccordionItem value="sprava-systemu" className="border-b-0">
