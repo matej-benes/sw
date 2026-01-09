@@ -228,6 +228,22 @@
         "datumPodpisu": { "type": "string", "format": "date-time", "description": "Date the note was signed by a parent." }
       },
       "required": ["id", "studentId", "tridaId", "datum", "druh", "text", "ucitelId"]
+    },
+    "Udalost": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "Udalost",
+        "type": "object",
+        "description": "Represents a general event in the school calendar.",
+        "properties": {
+            "id": { "type": "string", "description": "Unique identifier for the event." },
+            "nazev": { "type": "string", "description": "The name of the event." },
+            "typ": { "type": "string", "description": "The type of event (e.g., Školní akce, Porada)." },
+            "datum": { "type": "string", "format": "date", "description": "The date of the event." },
+            "cas": { "type": "string", "format": "time", "description": "The time of the event." },
+            "tridyIds": { "type": "array", "items": { "type": "string" }, "description": "List of class IDs involved in the event." },
+            "uciteleIds": { "type": "array", "items": { "type": "string" }, "description": "List of teacher IDs involved in the event." }
+        },
+        "required": ["id", "nazev", "typ", "datum", "cas"]
     }
   },
   "auth": {
@@ -350,6 +366,17 @@
             "description": "Stores notes related to students.",
             "params": [
                 { "name": "poznamkaId", "description": "The unique ID of the student note." }
+            ]
+        }
+      },
+      {
+        "path": "/udalosti/{udalostId}",
+        "definition": {
+            "entityName": "Udalost",
+            "schema": { "$ref": "#/backend/entities/Udalost" },
+            "description": "Stores general calendar events for classes and teachers.",
+            "params": [
+                { "name": "udalostId", "description": "The unique ID of the event." }
             ]
         }
       }

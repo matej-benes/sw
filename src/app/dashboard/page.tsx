@@ -3,12 +3,13 @@
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { getStudentById } from '@/lib/mock-data';
 import { GraduationCap, BookOpenCheck, CalendarDays, BookUser, MessageSquarePlus, Settings2 } from 'lucide-react';
-import type { Timetable } from '@/lib/types';
+import type { Timetable, Udalost } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { TimetableWidget } from '@/components/timetable-widget';
 import { CalendarIcon } from 'lucide-react';
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, where } from 'firebase/firestore';
 
 const actionCards = [
     { title: "Zapsat hodnocení", icon: GraduationCap, href: "/dashboard/studenti", description: "Přidejte nové známky." },
@@ -22,14 +23,34 @@ const actionCards = [
 export default function DashboardPage() {
   const { user, hasRole } = useAuth();
   const router = useRouter();
+  const firestore = useFirestore();
+
+  // Fetch events
+  const eventsQuery = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    const queries = [];
+    // Query for events where the user is one of the teachers
+    queries.push(where('uciteleIds', 'array-contains', user.id));
+    // Query for events for the user's class (if they are a student)
+    if (user.tridaId) {
+      queries.push(where('tridyIds', 'array-contains', user.tridaId));
+    }
+    // Since firestore does not support OR queries on different fields, we would need to run multiple queries and merge.
+    // For simplicity, we'll just fetch based on teacher id for now if the user is a teacher, or class id if a student.
+    if (hasRole('ucitel')) {
+        return query(collection(firestore, 'udalosti'), where('uciteleIds', 'array-contains', user.id));
+    }
+    if (hasRole('ziak') && user.tridaId) {
+        return query(collection(firestore, 'udalosti'), where('tridyIds', 'array-contains', user.tridaId));
+    }
+    return null; // or a query that returns nothing
+  }, [firestore, user, hasRole]);
+
+  const { data: udalosti } = useCollection<Udalost>(eventsQuery);
 
   if (!user) return null;
 
   const isTeacher = hasRole('ucitel');
-  const student = hasRole('ziak') ? getStudentById(`student-${user.id.split('-')[1]}`) : null;
-  const parentStudent = hasRole('rodic') && user.studentId ? getStudentById(`student-${user.studentId.split('-')[1]}`) : null;
-  const displayStudent = student || parentStudent || getStudentById('student-1');
-  const teacher = isTeacher ? user : { name: 'Byrtusová Linda' };
   const timetable: Timetable = {}; // Empty timetable
 
   return (
@@ -53,10 +74,8 @@ export default function DashboardPage() {
                 <CardContent>
                     <TimetableWidget 
                         timetableData={timetable} 
+                        eventsData={udalosti || []}
                         isTeacher={isTeacher} 
-                        studentName={displayStudent?.name || ''}
-                        teacherName={teacher.name}
-                        className="VII.A"
                     />
                 </CardContent>
             </Card>

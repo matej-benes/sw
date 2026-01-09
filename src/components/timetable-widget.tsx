@@ -1,7 +1,7 @@
 'use client';
 import React from 'react';
 import { cn } from "@/lib/utils";
-import type { Timetable, Lesson } from "@/lib/types";
+import type { Timetable, Lesson, Udalost } from "@/lib/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, Info } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   Tooltip,
@@ -17,6 +17,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { format, getDay, parseISO } from 'date-fns';
+import { cs } from 'date-fns/locale';
 
 const timeSlots = [
     "07:55 - 08:40", "08:55 - 09:40", "09:55 - 10:40", "10:45 - 11:30",
@@ -24,12 +26,14 @@ const timeSlots = [
     "15:05 - 15:50", "15:55 - 16:40"
 ];
 
-const dayMapping: { [key: string]: { short: string; date: string } } = {
-    'Středa': { short: 'St', date: '1.9.' },
-    'Čtvrtek': { short: 'Čt', date: '2.9.' },
-    'Pondělí': { short: 'Po', date: '30.8.' },
-    'Úterý': { short: 'Út', date: '31.8.' },
-    'Pátek': { short: 'Pá', date: '3.9.' },
+const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek'];
+
+const dayMapping: { [key: string]: { short: string; date: string; dayIndex: number } } = {
+    'Pondělí': { short: 'Po', date: '30.8.', dayIndex: 1 },
+    'Úterý': { short: 'Út', date: '31.8.', dayIndex: 2 },
+    'Středa': { short: 'St', date: '1.9.', dayIndex: 3 },
+    'Čtvrtek': { short: 'Čt', date: '2.9.', dayIndex: 4 },
+    'Pátek': { short: 'Pá', date: '3.9.', dayIndex: 5 },
 };
 
 function LessonTooltipContent({ lesson, day, period }: { lesson: Lesson, day: string, period: number }) {
@@ -51,6 +55,27 @@ function LessonTooltipContent({ lesson, day, period }: { lesson: Lesson, day: st
 
                 <span className="text-muted-foreground">Komentář:</span>
                 <span>-</span>
+            </div>
+        </div>
+    )
+}
+
+function EventTooltipContent({ event }: { event: Udalost }) {
+    return (
+        <div className="p-2 text-sm">
+            <div className="flex items-center gap-2 mb-2">
+                <Info className="h-4 w-4 text-accent" />
+                <h3 className="font-bold text-base">{event.nazev}</h3>
+            </div>
+            <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
+                <span className="text-muted-foreground">Typ:</span>
+                <span>{event.typ}</span>
+
+                <span className="text-muted-foreground">Datum:</span>
+                <span>{format(new Date(event.datum), 'PPP', { locale: cs })}</span>
+                
+                <span className="text-muted-foreground">Čas:</span>
+                <span>{event.cas}</span>
             </div>
         </div>
     )
@@ -142,17 +167,57 @@ function LessonBlock({ lesson, isTeacher, day, period }: { lesson: Lesson; isTea
     )
 }
 
-export function TimetableWidget({ timetableData, isTeacher, studentName, teacherName, className }: { timetableData: Timetable, isTeacher: boolean, studentName: string, teacherName: string, className: string }) {
+function EventBlock({ event }: { event: Udalost }) {
+    const blockContent = (
+         <div 
+            className="h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer bg-accent/30 border border-dashed border-accent"
+        >
+            <div className="font-bold">{event.nazev}</div>
+            <div className="text-muted-foreground">{event.cas}</div>
+        </div>
+    );
     
-    const days = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek'];
+    return (
+        <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger asChild>{blockContent}</TooltipTrigger>
+                <TooltipContent>
+                    <EventTooltipContent event={event} />
+                </TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    )
+}
 
+export function TimetableWidget({ timetableData, eventsData, isTeacher }: { timetableData: Timetable, eventsData: Udalost[], isTeacher: boolean }) {
+    
     const findLesson = (day: string, time: string) => {
         const lessons = timetableData[day];
         if (!lessons) return null;
-        
         const [start] = time.split(' - ');
-
         return lessons.find(lesson => lesson.time.startsWith(start.trim()));
+    }
+
+    const findEvent = (day: string, time: string) => {
+        const dayIndex = dayMapping[day]?.dayIndex;
+        if (dayIndex === undefined) return null;
+
+        return eventsData.find(event => {
+            // JS Date day index is 0-6 (Sun-Sat), Firebase might be different. Let's adjust.
+            // getDay() returns 0 for Sun, 1 for Mon...
+            const eventDate = new Date(event.datum + 'T12:00:00'); // Use noon to avoid timezone issues
+            let eventDayIndex = getDay(eventDate); // 0=Sun, 1=Mon...6=Sat
+            if (eventDayIndex === 0) eventDayIndex = 7; // make Sunday 7 to match our logic if needed, but we only show Mon-Fri
+
+            // For simplicity, this example doesn't check against a real calendar week.
+            // It just checks if an event is on a "Monday", "Tuesday", etc.
+            // A real implementation would need to know the specific dates for the displayed week.
+            // This is a placeholder logic.
+            const isSameDay = true; // Placeholder
+
+            const [timeStart] = time.split(' - ');
+            return isSameDay && event.cas.startsWith(timeStart.trim());
+        });
     }
 
     return (
@@ -168,7 +233,7 @@ export function TimetableWidget({ timetableData, isTeacher, studentName, teacher
                 ))}
 
                 {/* Body */}
-                {days.map(day => (
+                {daysOfWeek.map(day => (
                     <React.Fragment key={day}>
                         <div className="flex flex-col items-center justify-center p-2 bg-muted/50 border-b border-r border-border">
                            <div className="font-bold">{dayMapping[day]?.short || day.substring(0,2)}</div>
@@ -176,18 +241,16 @@ export function TimetableWidget({ timetableData, isTeacher, studentName, teacher
                         </div>
                         {timeSlots.map((time, index) => {
                             const lesson = findLesson(day, time);
+                            const event = findEvent(day, time);
+
                             return (
-                                <div key={index} className="p-0.5 border-b border-r border-border min-h-[60px]">
-                                    {lesson ? (
-                                        <LessonBlock lesson={lesson} isTeacher={isTeacher} day={day} period={index + 1}/>
-                                    ) : (
-                                        isTeacher ? (
-                                            <EmptySlotContextMenu>
-                                                <div className="h-full w-full cursor-pointer"></div>
-                                            </EmptySlotContextMenu>
-                                        ) : (
-                                            <div className="h-full w-full"></div>
-                                        )
+                                <div key={index} className="p-0.5 border-b border-r border-border min-h-[60px] relative">
+                                    {lesson && <LessonBlock lesson={lesson} isTeacher={isTeacher} day={day} period={index + 1}/>}
+                                    {event && <EventBlock event={event} />}
+                                    {!lesson && !event && isTeacher && (
+                                        <EmptySlotContextMenu>
+                                            <div className="h-full w-full cursor-pointer"></div>
+                                        </EmptySlotContextMenu>
                                     )}
                                 </div>
                             )

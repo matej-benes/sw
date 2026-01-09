@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -9,19 +9,36 @@ import { Calendar } from '@/components/ui/calendar';
 import { Calendar as CalendarIcon, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
 import { collection, query, where } from 'firebase/firestore';
 import type { Trida, User } from '@/lib/types';
+import { Input } from '@/components/ui/input';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { useToast } from '@/hooks/use-toast';
+import { MultiSelect } from '@/components/ui/multi-select';
 
+const eventSchema = z.object({
+  nazev: z.string().min(1, 'Název je povinný'),
+  typ: z.string().min(1, 'Druh události je povinný'),
+  datum: z.date({ required_error: 'Datum je povinné' }),
+  cas: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Neplatný formát času (HH:MM)'),
+  tridyIds: z.array(z.string()).min(1, 'Vyberte alespoň jednu třídu'),
+  uciteleIds: z.array(z.string()).min(1, 'Vyberte alespoň jednoho učitele'),
+});
 
-// Mock data for demonstration purposes
-const periods = ['1. pololetí', '2. pololetí'];
-const eventTypes = ['Školní akce', 'Porada', 'Exkurze'];
-const classrooms = ['Učebna 1', 'Učebna 2', 'Tělocvična'];
+type EventFormData = z.infer<typeof eventSchema>;
+
+const eventTypes = ['Školní akce', 'Porada', 'Exkurze', 'Prázdniny', 'Ředitelské volno'];
 
 export default function ObecnaUdalostPage() {
-  const [date, setDate] = useState<Date | undefined>();
   const firestore = useFirestore();
+  const { toast } = useToast();
+  
+  const { control, handleSubmit, reset, formState: { errors } } = useForm<EventFormData>({
+    resolver: zodResolver(eventSchema)
+  });
 
   const tridyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]);
   const { data: classes } = useCollection<Trida>(tridyCollection);
@@ -29,100 +46,144 @@ export default function ObecnaUdalostPage() {
   const uciteleQuery = useMemoFirebase(() => firestore ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore]);
   const { data: teachers } = useCollection<User>(uciteleQuery);
 
+  const classOptions = classes?.map(c => ({ value: c.id, label: c.nazev })) || [];
+  const teacherOptions = teachers?.map(t => ({ value: t.id, label: t.name })) || [];
+
+  const handleSaveEvent = (data: EventFormData) => {
+    if (!firestore) return;
+
+    const newEvent = {
+        ...data,
+        datum: format(data.datum, 'yyyy-MM-dd')
+    };
+
+    addDocumentNonBlocking(collection(firestore, 'udalosti'), newEvent);
+    toast({
+        title: 'Událost vytvořena',
+        description: `Událost "${data.nazev}" byla úspěšně vytvořena.`,
+    });
+    reset({ nazev: '', typ: '', cas: '', tridyIds: [], uciteleIds: [] });
+  };
+
+
   return (
-    <div className="space-y-6">
+    <form onSubmit={handleSubmit(handleSaveEvent)} className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Obecná událost</h1>
+        <p className="text-muted-foreground">Vytvořte novou událost pro třídy a učitele.</p>
       </div>
       <Card>
+        <CardHeader>
+            <CardTitle>Vytvořit novou událost</CardTitle>
+            <CardDescription>Zadejte podrobnosti o nové události.</CardDescription>
+        </CardHeader>
         <CardContent className="p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-end">
-            {/* Row 1 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            
             <div className="grid gap-1.5">
-              <label htmlFor="period-select" className="text-sm font-medium">Období:</label>
-              <Select defaultValue={periods[0]}>
-                <SelectTrigger id="period-select">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {periods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-1.5">
-              <label htmlFor="class-select" className="text-sm font-medium">Třída:</label>
-              <Select>
-                <SelectTrigger id="class-select">
-                  <SelectValue placeholder="Vyberte třídu" />
-                </SelectTrigger>
-                <SelectContent>
-                  {classes?.map(c => <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-1.5">
-              <label htmlFor="event-type-select" className="text-sm font-medium">Druh události:</label>
-              <Select>
-                <SelectTrigger id="event-type-select">
-                  <SelectValue placeholder="Vyberte druh" />
-                </SelectTrigger>
-                <SelectContent>
-                  {eventTypes.map(et => <SelectItem key={et} value={et}>{et}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <label className="text-sm font-medium">Název události</label>
+              <Controller
+                name="nazev"
+                control={control}
+                render={({ field }) => <Input {...field} placeholder="Např. Vánoční besídka" />}
+              />
+              {errors.nazev && <p className="text-sm text-destructive">{errors.nazev.message}</p>}
             </div>
 
-            {/* Row 2 */}
             <div className="grid gap-1.5">
-              <label htmlFor="teacher-select" className="text-sm font-medium">Učitel:</label>
-              <Select>
-                <SelectTrigger id="teacher-select">
-                  <SelectValue placeholder="Vyberte učitele" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teachers?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <label className="text-sm font-medium">Druh události:</label>
+               <Controller
+                name="typ"
+                control={control}
+                render={({ field }) => (
+                    <Select onValueChange={field.onChange} value={field.value}>
+                        <SelectTrigger><SelectValue placeholder="Vyberte druh" /></SelectTrigger>
+                        <SelectContent>
+                            {eventTypes.map(et => <SelectItem key={et} value={et}>{et}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                )}
+              />
+              {errors.typ && <p className="text-sm text-destructive">{errors.typ.message}</p>}
             </div>
+
             <div className="grid gap-1.5">
-              <label htmlFor="classroom-select" className="text-sm font-medium">Učebna:</label>
-              <Select>
-                <SelectTrigger id="classroom-select">
-                  <SelectValue placeholder="Vyberte učebnu" />
-                </SelectTrigger>
-                <SelectContent>
-                  {classrooms.map(cr => <SelectItem key={cr} value={cr}>{cr}</SelectItem>)}
-                </SelectContent>
-              </Select>
+                <label className="text-sm font-medium">Datum konání:</label>
+                <Controller
+                    name="datum"
+                    control={control}
+                    render={({ field }) => (
+                        <Popover>
+                            <PopoverTrigger asChild>
+                            <Button
+                                variant={"outline"}
+                                className="w-full justify-start text-left font-normal"
+                            >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {field.value ? format(field.value, 'PPP', { locale: cs }) : <span>Vyberte datum</span>}
+                            </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                                <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
+                            </PopoverContent>
+                        </Popover>
+                    )}
+                />
+                {errors.datum && <p className="text-sm text-destructive">{errors.datum.message}</p>}
             </div>
-            <div className="grid gap-1.5">
-              <label htmlFor="date-picker" className="text-sm font-medium">Datum konání:</label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    id="date-picker"
-                    variant={"outline"}
-                    className="w-full justify-start text-left font-normal"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date ? format(date, 'PPP', { locale: cs }) : <span>Vyberte datum</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar mode="single" selected={date} onSelect={setDate} initialFocus />
-                </PopoverContent>
-              </Popover>
+
+             <div className="grid gap-1.5">
+              <label className="text-sm font-medium">Čas (HH:MM)</label>
+              <Controller
+                name="cas"
+                control={control}
+                render={({ field }) => <Input {...field} placeholder="Např. 10:00" />}
+              />
+              {errors.cas && <p className="text-sm text-destructive">{errors.cas.message}</p>}
+            </div>
+
+            <div className="grid gap-1.5 md:col-span-2">
+              <label className="text-sm font-medium">Třídy</label>
+               <Controller
+                    name="tridyIds"
+                    control={control}
+                    render={({ field }) => (
+                        <MultiSelect
+                            options={classOptions}
+                            onValueChange={field.onChange}
+                            defaultValue={field.value}
+                            placeholder="Vyberte třídy..."
+                        />
+                    )}
+                />
+              {errors.tridyIds && <p className="text-sm text-destructive">{errors.tridyIds.message}</p>}
+            </div>
+
+            <div className="grid gap-1.5 md:col-span-2">
+              <label className="text-sm font-medium">Učitelé</label>
+               <Controller
+                    name="uciteleIds"
+                    control={control}
+                    render={({ field }) => (
+                        <MultiSelect
+                            options={teacherOptions}
+                            onValueChange={field.onChange}
+                            defaultValue={field.value}
+                            placeholder="Vyberte učitele..."
+                        />
+                    )}
+                />
+              {errors.uciteleIds && <p className="text-sm text-destructive">{errors.uciteleIds.message}</p>}
             </div>
           </div>
           <div className="flex gap-4 pt-4 border-t">
-            <Button>Zobrazit</Button>
-            <Button>
+            <Button type="submit">
                 <Plus className="mr-2 h-4 w-4" />
-                Nová hodina
+                Vytvořit událost
             </Button>
           </div>
         </CardContent>
       </Card>
-    </div>
+    </form>
   );
 }

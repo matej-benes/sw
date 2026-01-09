@@ -84,3 +84,13 @@ export interface PoznamkaZaka {
   ucitelId: string;
   datumPodpisu?: string;
 }
+
+export interface Udalost {
+  id: string;
+  nazev: string;
+  typ: string;
+  datum: string; // YYYY-MM-DD
+  cas: string; // HH:MM
+  tridyIds: string[];
+  uciteleIds: string[];
+}
