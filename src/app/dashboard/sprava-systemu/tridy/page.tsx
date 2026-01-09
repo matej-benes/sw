@@ -90,16 +90,23 @@ export default function SpravaTridyPage() {
     const { toast } = useToast();
 
     const handleSaveClass = (classData: Class) => {
-        if (classes.some(c => c.id === classData.id)) {
-            setClasses(classes.map(c => c.id === classData.id ? classData : c));
-        } else {
-            setClasses([classData, ...classes]);
-        }
+        setClasses(prevClasses => {
+            if (prevClasses.some(c => c.id === classData.id)) {
+                return prevClasses.map(c => c.id === classData.id ? classData : c);
+            } else {
+                return [classData, ...prevClasses];
+            }
+        });
     };
 
     const handleDeleteClass = (classId: string) => {
-        setClasses(classes.filter(c => c.id !== classId));
+        setClasses(prevClasses => prevClasses.filter(c => c.id !== classId));
         toast({ title: "Třída smazána", description: "Třída byla úspěšně odstraněna." });
+    };
+    
+    const openDialog = (classData: Class | null) => {
+        setEditingClass(classData);
+        setIsDialogOpen(true);
     };
 
     return (
@@ -116,12 +123,10 @@ export default function SpravaTridyPage() {
                             <CardTitle>Seznam tříd</CardTitle>
                             <CardDescription>Celkem {classes.length} tříd v databázi.</CardDescription>
                         </div>
-                         <DialogTrigger asChild>
-                            <Button onClick={() => setEditingClass(null)}>
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                Přidat třídu
-                            </Button>
-                        </DialogTrigger>
+                        <Button onClick={() => openDialog(null)}>
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Přidat třídu
+                        </Button>
                     </CardHeader>
                     <CardContent>
                     <Table>
@@ -147,7 +152,7 @@ export default function SpravaTridyPage() {
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent>
-                                                    <DropdownMenuItem onSelect={() => { setEditingClass(cls); setIsDialogOpen(true); }}>
+                                                    <DropdownMenuItem onSelect={() => openDialog(cls)}>
                                                         <Pencil className="mr-2 h-4 w-4" />
                                                         Upravit
                                                     </DropdownMenuItem>

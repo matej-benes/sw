@@ -92,17 +92,24 @@ export default function PredmetyPage() {
     const { toast } = useToast();
 
     const handleSaveSubject = (subject: Subject) => {
-        if (subjects.some(s => s.id === subject.id)) {
-            setSubjects(subjects.map(s => s.id === subject.id ? subject : s));
-        } else {
-            setSubjects([subject, ...subjects]);
-        }
+        setSubjects(prevSubjects => {
+            if (prevSubjects.some(s => s.id === subject.id)) {
+                return prevSubjects.map(s => s.id === subject.id ? subject : s);
+            } else {
+                return [subject, ...prevSubjects];
+            }
+        });
     };
 
     const handleDeleteSubject = (subjectId: string) => {
-        setSubjects(subjects.filter(s => s.id !== subjectId));
+        setSubjects(prevSubjects => prevSubjects.filter(s => s.id !== subjectId));
         toast({ title: "Předmět smazán", description: "Předmět byl úspěšně odstraněn." });
     };
+    
+    const openDialog = (subject: Subject | null) => {
+        setEditingSubject(subject);
+        setIsDialogOpen(true);
+    }
 
     return (
         <div className="space-y-6">
@@ -118,12 +125,10 @@ export default function PredmetyPage() {
                             <CardTitle>Seznam předmětů</CardTitle>
                             <CardDescription>Celkem {subjects.length} předmětů v databázi.</CardDescription>
                         </div>
-                        <DialogTrigger asChild>
-                            <Button onClick={() => setEditingSubject(null)}>
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                Přidat předmět
-                            </Button>
-                        </DialogTrigger>
+                        <Button onClick={() => openDialog(null)}>
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Přidat předmět
+                        </Button>
                     </CardHeader>
                     <CardContent>
                     <Table>
@@ -149,7 +154,7 @@ export default function PredmetyPage() {
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent>
-                                                    <DropdownMenuItem onSelect={() => { setEditingSubject(subject); setIsDialogOpen(true); }}>
+                                                    <DropdownMenuItem onSelect={() => openDialog(subject)}>
                                                         <Pencil className="mr-2 h-4 w-4" />
                                                         Upravit
                                                     </DropdownMenuItem>

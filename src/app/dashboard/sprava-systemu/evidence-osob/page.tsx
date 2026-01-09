@@ -114,17 +114,24 @@ export default function EvidenceOsobPage() {
     const { toast } = useToast();
 
     const handleSaveUser = (user: User) => {
-        if (users.some(u => u.id === user.id)) {
-            setUsers(users.map(u => u.id === user.id ? user : u));
-        } else {
-            setUsers([user, ...users]);
-        }
+        setUsers(prevUsers => {
+            if (prevUsers.some(u => u.id === user.id)) {
+                return prevUsers.map(u => u.id === user.id ? user : u);
+            } else {
+                return [user, ...prevUsers];
+            }
+        });
     };
 
     const handleDeleteUser = (userId: string) => {
-        setUsers(users.filter(u => u.id !== userId));
+        setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
         toast({ title: "Uživatel smazán", description: "Uživatel byl úspěšně odstraněn ze systému." });
     };
+    
+    const openDialog = (user: User | null) => {
+        setEditingUser(user);
+        setIsDialogOpen(true);
+    }
 
     return (
         <div className="space-y-6">
@@ -140,12 +147,10 @@ export default function EvidenceOsobPage() {
                             <CardTitle>Seznam uživatelů</CardTitle>
                             <CardDescription>Celkem {users.length} uživatelů v databázi.</CardDescription>
                         </div>
-                         <DialogTrigger asChild>
-                            <Button onClick={() => setEditingUser(null)}>
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                Přidat uživatele
-                            </Button>
-                        </DialogTrigger>
+                         <Button onClick={() => openDialog(null)}>
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Přidat uživatele
+                        </Button>
                     </CardHeader>
                     <CardContent>
                     <Table>
@@ -179,7 +184,7 @@ export default function EvidenceOsobPage() {
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent>
-                                                    <DropdownMenuItem onSelect={() => { setEditingUser(user); setIsDialogOpen(true); }}>
+                                                    <DropdownMenuItem onSelect={() => openDialog(user)}>
                                                         <Pencil className="mr-2 h-4 w-4" />
                                                         Upravit
                                                     </DropdownMenuItem>
