@@ -16,7 +16,6 @@ import { useIsMobile } from '@/hooks/use-mobile';
 
 
 const adminNavLinks = [
-    { name: "Rozvrhy a suplování", href: "/dashboard/rozvrhy-suplovani", icon: BookCopy },
     { name: 'Studijní materiály', href: '/dashboard/materialy', icon: FileQuestion },
 ];
 
