@@ -10,38 +10,6 @@ import { GraduationCap, BookOpenCheck, CalendarDays, BookUser, MessageSquarePlus
 import type { Timetable } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 
-function TimetableCard({ timetable }: { timetable: Timetable }) {
-    const today = new Date();
-    const dayOfWeek = today.toLocaleString('cs-CZ', { weekday: 'long' });
-    const capitalizedDay = dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1);
-    const lessons = timetable[capitalizedDay] || [];
-
-    return (
-        <Card className="col-span-1 lg:col-span-3">
-            <CardHeader>
-                <CardTitle>Dnešní rozvrh - {capitalizedDay}</CardTitle>
-            </CardHeader>
-            <CardContent>
-                {lessons.length > 0 ? (
-                    <div className="space-y-4">
-                        {lessons.map((lesson, index) => (
-                            <div key={index} className="flex items-center justify-between rounded-lg border bg-card p-3">
-                                <div>
-                                    <p className="font-semibold">{lesson.subject}</p>
-                                    <p className="text-sm text-muted-foreground">{lesson.time} | {lesson.class || lesson.teacher} | Místnost: {lesson.room}</p>
-                                </div>
-                                <Badge variant="secondary">{lesson.class ? 'Vyučujete' : 'Máte hodinu'}</Badge>
-                            </div>
-                        ))}
-                    </div>
-                ) : (
-                    <p className="text-muted-foreground">Dnes není žádná výuka.</p>
-                )}
-            </CardContent>
-        </Card>
-    );
-}
-
 const actionCards = [
     { title: "Zapsat hodnocení", icon: GraduationCap, href: "/dashboard/studenti", description: "Přidejte nové známky." },
     { title: "Třídní kniha", icon: BookOpenCheck, href: "/dashboard/tridy", description: "Spravujte docházku." },
@@ -67,7 +35,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-            <Card className="col-span-1">
+            <Card className="col-span-1 lg:col-span-4">
                 <CardHeader>
                     <CardTitle>Kalendář</CardTitle>
                 </CardHeader>
@@ -75,12 +43,10 @@ export default function DashboardPage() {
                    <Calendar
                         mode="single"
                         selected={new Date()}
-                        className="rounded-md border-none"
+                        className="rounded-md border-none w-full"
                     />
                 </CardContent>
             </Card>
-
-            <TimetableCard timetable={timetable} />
         </div>
 
         <div className="mt-6">
