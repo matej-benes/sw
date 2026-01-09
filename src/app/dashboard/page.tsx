@@ -11,15 +11,6 @@ import { CalendarIcon } from 'lucide-react';
 import { useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
 import { collection, query, where, doc, or } from 'firebase/firestore';
 
-const actionCards = [
-    { title: "Zapsat hodnocení", icon: GraduationCap, href: "/dashboard/studenti", description: "Přidejte nové známky." },
-    { title: "Třídní kniha", icon: BookOpenCheck, href: "/dashboard/tridy", description: "Spravujte docházku." },
-    { title: "Zobrazit rozvrh", icon: CalendarDays, href: "/dashboard/rozvrh", description: "Celý týdenní přehled." },
-    { title: "Správa žáků", icon: BookUser, href: "/dashboard/studenti", description: "Seznam a detaily žáků." },
-    { title: "Komunikace", icon: MessageSquarePlus, href: "/dashboard/zpravy", description: "Posílejte zprávy." },
-    { title: "Nastavení", icon: Settings2, href: "#", description: "Upravte si profil." },
-]
-
 export default function DashboardPage() {
   const { user, hasRole } = useAuth();
   const router = useRouter();
@@ -102,25 +93,6 @@ export default function DashboardPage() {
                 </CardContent>
             </Card>
         </div>
-
-        <div className="mt-6">
-            <h2 className="text-2xl font-bold tracking-tight mb-4">Rychlé akce</h2>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                {actionCards.map(card => (
-                     <Card key={card.title} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push(card.href)}>
-                        <CardHeader className="flex flex-row items-center justify-between pb-2">
-                            <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
-                            <card.icon className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-xs text-muted-foreground">{card.description}</p>
-                        </CardContent>
-                    </Card>
-                ))}
-            </div>
-        </div>
     </div>
   );
 }
-
-    
