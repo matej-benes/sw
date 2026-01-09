@@ -55,7 +55,7 @@ import {
   updateDoc,
   deleteDoc,
 } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
 
 type Subject = {
@@ -143,7 +143,8 @@ function SubjectForm({
 
 function AdminSubjectManagement() {
   const firestore = useFirestore();
-  const subjectsCollection = useMemoFirebase(() => collection(firestore, 'predmety'), [firestore]);
+  const { hasRole } = useAuth();
+  const subjectsCollection = useMemoFirebase(() => hasRole('administrator') ? collection(firestore, 'predmety') : null, [firestore, hasRole]);
   const { data: subjects, isLoading: subjectsLoading } = useCollection<Subject>(subjectsCollection);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -181,14 +182,15 @@ function AdminSubjectManagement() {
     }
   };
 
-  const handleDeleteSubject = async (subjectId: string) => {
-    if (!firestore) return;
+  const handleDeleteSubject = async () => {
+    if (!firestore || !deletingSubject) return;
     try {
-      await deleteDoc(doc(firestore, 'predmety', subjectId));
+      await deleteDoc(doc(firestore, 'predmety', deletingSubject.id));
       toast({
         title: 'Předmět smazán',
         description: 'Předmět byl úspěšně odstraněn.',
       });
+      setDeletingSubject(null);
     } catch (error) {
       console.error('Error deleting subject:', error);
       toast({
@@ -196,8 +198,8 @@ function AdminSubjectManagement() {
         title: 'Chyba',
         description: 'Při mazání předmětu došlo k chybě.',
       });
+      setDeletingSubject(null);
     }
-    setDeletingSubject(null);
   };
 
   const openDialog = (subject: Subject | null) => {
@@ -293,7 +295,7 @@ function AdminSubjectManagement() {
         </DialogContent>
       </Dialog>
 
-       <AlertDialog open={!!deletingSubject} onOpenChange={() => setDeletingSubject(null)}>
+       <AlertDialog open={!!deletingSubject} onOpenChange={setDeletingSubject}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
@@ -304,9 +306,9 @@ function AdminSubjectManagement() {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setDeletingSubject(null)}>Zrušit</AlertDialogCancel>
+              <AlertDialogCancel>Zrušit</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => deletingSubject && handleDeleteSubject(deletingSubject.id)}
+                onClick={handleDeleteSubject}
                 className="bg-destructive hover:bg-destructive/90"
               >
                 Smazat
@@ -319,7 +321,8 @@ function AdminSubjectManagement() {
 }
 
 export default function PredmetyPage() {
-  const { hasRole, loading: authLoading } = useAuth();
+  const { hasRole } = useAuth();
+  const { isUserLoading } = useUser();
   
   return (
     <div className="space-y-6">
@@ -330,7 +333,7 @@ export default function PredmetyPage() {
         </p>
       </div>
 
-       {authLoading ? (
+       {isUserLoading ? (
          <Card>
             <CardHeader>
               <CardTitle>Načítání...</CardTitle>

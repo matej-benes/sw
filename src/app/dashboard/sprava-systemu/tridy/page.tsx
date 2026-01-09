@@ -55,7 +55,7 @@ import {
   updateDoc,
   deleteDoc,
 } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
 
 type Class = {
@@ -143,7 +143,8 @@ function ClassForm({
 
 function AdminClassManagement() {
   const firestore = useFirestore();
-  const classesCollection = useMemoFirebase(() => collection(firestore, 'tridy'), [firestore]);
+  const { hasRole } = useAuth();
+  const classesCollection = useMemoFirebase(() => hasRole('administrator') ? collection(firestore, 'tridy') : null, [firestore, hasRole]);
   const { data: classes, isLoading: classesLoading } = useCollection<Class>(classesCollection);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -181,14 +182,15 @@ function AdminClassManagement() {
     }
   };
 
-  const handleDeleteClass = async (classId: string) => {
-    if (!firestore) return;
+  const handleDeleteClass = async () => {
+    if (!firestore || !deletingClass) return;
     try {
-      await deleteDoc(doc(firestore, 'tridy', classId));
+      await deleteDoc(doc(firestore, 'tridy', deletingClass.id));
       toast({
         title: 'Třída smazána',
         description: 'Třída byla úspěšně odstraněna.',
       });
+      setDeletingClass(null);
     } catch (error) {
       console.error('Error deleting class:', error);
       toast({
@@ -196,8 +198,8 @@ function AdminClassManagement() {
         title: 'Chyba',
         description: 'Při mazání třídy došlo k chybě.',
       });
+      setDeletingClass(null);
     }
-    setDeletingClass(null);
   };
 
   const openDialog = (classData: Class | null) => {
@@ -293,7 +295,7 @@ function AdminClassManagement() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deletingClass} onOpenChange={() => setDeletingClass(null)}>
+      <AlertDialog open={!!deletingClass} onOpenChange={setDeletingClass}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Opravdu chcete smazat třídu?</AlertDialogTitle>
@@ -302,9 +304,9 @@ function AdminClassManagement() {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setDeletingClass(null)}>Zrušit</AlertDialogCancel>
+              <AlertDialogCancel>Zrušit</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => deletingClass && handleDeleteClass(deletingClass.id)}
+                onClick={handleDeleteClass}
                 className="bg-destructive hover:bg-destructive/90"
               >
                 Smazat
@@ -317,7 +319,8 @@ function AdminClassManagement() {
 }
 
 export default function SpravaTridyPage() {
-  const { hasRole, loading: authLoading } = useAuth();
+  const { hasRole } = useAuth();
+  const { isUserLoading } = useUser();
   
   return (
     <div className="space-y-6">
@@ -326,7 +329,7 @@ export default function SpravaTridyPage() {
         <p className="text-muted-foreground">Správa všech tříd v systému.</p>
       </div>
 
-      {authLoading ? (
+      {isUserLoading ? (
         <Card>
             <CardHeader>
               <CardTitle>Načítání...</CardTitle>

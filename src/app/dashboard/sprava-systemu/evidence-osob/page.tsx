@@ -57,9 +57,10 @@ import {
   updateDoc,
   deleteDoc,
 } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import type { User } from '@/lib/types';
+import { Checkbox } from '@/components/ui/checkbox';
 
 
 const roleTranslations: { [key in Role]: string } = {
@@ -169,14 +170,11 @@ function UserForm({
 
 function AdminUserManagement() {
     const firestore = useFirestore();
-    const { hasRole, loading: authLoading } = useAuth();
+    const { hasRole } = useAuth();
     
     const usersCollection = useMemoFirebase(
-      () =>
-        !authLoading && hasRole('administrator')
-          ? collection(firestore, 'users')
-          : null,
-      [firestore, authLoading, hasRole]
+      () => hasRole('administrator') ? collection(firestore, 'users') : null,
+      [firestore, hasRole]
     );
 
     const { data: users, isLoading: usersLoading } = useCollection<User>(usersCollection);
@@ -228,6 +226,7 @@ function AdminUserManagement() {
             title: 'Uživatel smazán',
             description: 'Uživatel byl úspěšně odstraněn ze systému.',
           });
+          setDeletingUser(null);
         } catch (error) {
           console.error('Error deleting user:', error);
           toast({
@@ -235,8 +234,8 @@ function AdminUserManagement() {
             title: 'Chyba',
             description: 'Při mazání uživatele došlo k chybě.',
           });
+          setDeletingUser(null);
         }
-        setDeletingUser(null);
       };
 
     const openDialog = (user: User | null) => {
@@ -280,14 +279,14 @@ function AdminUserManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(usersLoading || authLoading) && (
+                {usersLoading && (
                   <TableRow>
                     <TableCell colSpan={4} className="h-24 text-center">
                       Načítání dat...
                     </TableCell>
                   </TableRow>
                 )}
-                {!usersLoading && !authLoading && users?.map((user) => (
+                {!usersLoading && users?.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.name}</TableCell>
                     <TableCell>{user.email}</TableCell>
@@ -301,7 +300,7 @@ function AdminUserManagement() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <DropdownMenu>
+                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon">
                             <MoreHorizontal className="h-4 w-4" />
@@ -344,7 +343,7 @@ function AdminUserManagement() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deletingUser} onOpenChange={() => setDeletingUser(null)}>
+      <AlertDialog open={!!deletingUser} onOpenChange={setDeletingUser}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
@@ -371,9 +370,10 @@ function AdminUserManagement() {
 
 
 export default function EvidenceOsobPage() {
-  const { hasRole, loading: authLoading } = useAuth();
+  const { hasRole } = useAuth();
+  const { isUserLoading } = useUser();
   
-  if (authLoading) {
+  if (isUserLoading) {
     return (
        <div className="space-y-6">
         <div>
