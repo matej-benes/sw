@@ -50,12 +50,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useToast } from '@/hooks/use-toast';
 import {
   collection,
-  doc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
+  doc
 } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
 
 type Subject = {
@@ -184,53 +181,35 @@ function AdminSubjectManagement() {
   const [deletingSubject, setDeletingSubject] = useState<Subject | null>(null);
   const { toast } = useToast();
 
-  const handleSaveSubject = async (formData: SubjectFormData) => {
+  const handleSaveSubject = (formData: SubjectFormData) => {
     if (!firestore) return;
-    try {
-      if (editingSubject) {
-        const subjectRef = doc(firestore, 'predmety', editingSubject.id);
-        await updateDoc(subjectRef, formData);
-        toast({
-          title: 'Předmět uložen',
-          description: `Předmět ${formData.name} byl úspěšně uložen.`,
-        });
-      } else {
-        await addDoc(collection(firestore, 'predmety'), formData);
-        toast({
-          title: 'Předmět přidán',
-          description: `Předmět ${formData.name} byl úspěšně přidán.`,
-        });
-      }
-      setIsDialogOpen(false);
-      setEditingSubject(null);
-    } catch (error) {
-      console.error('Error saving subject:', error);
+    
+    if (editingSubject) {
+      const subjectRef = doc(firestore, 'predmety', editingSubject.id);
+      updateDocumentNonBlocking(subjectRef, formData);
       toast({
-        variant: 'destructive',
-        title: 'Chyba',
-        description: 'Při ukládání předmětu došlo k chybě.',
+        title: 'Předmět uložen',
+        description: `Předmět ${formData.name} byl úspěšně uložen.`,
+      });
+    } else {
+      addDocumentNonBlocking(collection(firestore, 'predmety'), formData);
+      toast({
+        title: 'Předmět přidán',
+        description: `Předmět ${formData.name} byl úspěšně přidán.`,
       });
     }
+    setIsDialogOpen(false);
+    setEditingSubject(null);
   };
 
-  const handleDeleteSubject = async () => {
+  const handleDeleteSubject = () => {
     if (!firestore || !deletingSubject) return;
-    try {
-      await deleteDoc(doc(firestore, 'predmety', deletingSubject.id));
-      toast({
-        title: 'Předmět smazán',
-        description: 'Předmět byl úspěšně odstraněn.',
-      });
-    } catch (error) {
-      console.error('Error deleting subject:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Chyba',
-        description: 'Při mazání předmětu došlo k chybě.',
-      });
-    } finally {
-        setDeletingSubject(null);
-    }
+    deleteDocumentNonBlocking(doc(firestore, 'predmety', deletingSubject.id));
+    toast({
+      title: 'Předmět smazán',
+      description: 'Předmět byl úspěšně odstraněn.',
+    });
+    setDeletingSubject(null);
   };
 
   const openDialog = (subject: Subject | null) => {

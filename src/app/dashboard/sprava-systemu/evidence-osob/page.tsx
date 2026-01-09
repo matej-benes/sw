@@ -52,12 +52,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useToast } from '@/hooks/use-toast';
 import {
   collection,
-  doc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
+  doc
 } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import type { User } from '@/lib/types';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -248,58 +245,39 @@ function AdminUserManagement() {
     const [deletingUser, setDeletingUser] = useState<User | null>(null);
     const { toast } = useToast();
 
-    const handleSaveUser = async (formData: Partial<User>) => {
+    const handleSaveUser = (formData: Partial<User>) => {
       if (!firestore) return;
-      try {
-        if (editingUser) {
-          const userRef = doc(firestore, 'users', editingUser.id);
-          await updateDoc(userRef, formData);
-          toast({
-            title: 'Uživatel aktualizován',
-            description: `Uživatel ${formData.name} byl úspěšně aktualizován.`,
-          });
-        } else {
-          const newUser = {
-            ...formData,
-            avatarUrl: `https://picsum.photos/seed/${Date.now()}/100/100`,
-          };
-          await addDoc(collection(firestore, 'users'), newUser);
-          toast({
-            title: 'Uživatel přidán',
-            description: `Uživatel ${formData.name} byl úspěšně přidán.`,
-          });
-        }
-        setIsDialogOpen(false);
-        setEditingUser(null);
-      } catch (error) {
-        console.error('Error saving user:', error);
+      
+      if (editingUser) {
+        const userRef = doc(firestore, 'users', editingUser.id);
+        updateDocumentNonBlocking(userRef, formData);
         toast({
-          variant: 'destructive',
-          title: 'Chyba',
-          description: 'Při ukládání uživatele došlo k chybě.',
+          title: 'Uživatel aktualizován',
+          description: `Uživatel ${formData.name} byl úspěšně aktualizován.`,
+        });
+      } else {
+        const newUser = {
+          ...formData,
+          avatarUrl: `https://picsum.photos/seed/${Date.now()}/100/100`,
+        };
+        addDocumentNonBlocking(collection(firestore, 'users'), newUser);
+        toast({
+          title: 'Uživatel přidán',
+          description: `Uživatel ${formData.name} byl úspěšně přidán.`,
         });
       }
+      setIsDialogOpen(false);
+      setEditingUser(null);
     };
 
-    const handleDeleteUser = async () => {
+    const handleDeleteUser = () => {
         if (!deletingUser || !firestore) return;
-        try {
-          await deleteDoc(doc(firestore, 'users', deletingUser.id));
-          toast({
-            title: 'Uživatel smazán',
-            description: 'Uživatel byl úspěšně odstraněn ze systému.',
-          });
-          setDeletingUser(null);
-        } catch (error) {
-          console.error('Error deleting user:', error);
-          toast({
-            variant: 'destructive',
-            title: 'Chyba',
-            description: 'Při mazání uživatele došlo k chybě.',
-          });
-        } finally {
-            setDeletingUser(null);
-        }
+        deleteDocumentNonBlocking(doc(firestore, 'users', deletingUser.id));
+        toast({
+          title: 'Uživatel smazán',
+          description: 'Uživatel byl úspěšně odstraněn ze systému.',
+        });
+        setDeletingUser(null);
       };
 
     const openDialog = (user: User | null) => {

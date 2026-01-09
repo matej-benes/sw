@@ -51,13 +51,10 @@ import { useToast } from '@/hooks/use-toast';
 import {
   collection,
   doc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
   query,
   where
 } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import type { User, Trida as Class } from '@/lib/types';
 import {
@@ -218,7 +215,7 @@ function AdminClassManagement() {
   const [deletingClass, setDeletingClass] = useState<Class | null>(null);
   const { toast } = useToast();
 
-  const handleSaveClass = async (formData: ClassFormData) => {
+  const handleSaveClass = (formData: ClassFormData) => {
     if (!firestore) return;
     
     const dataToSave = {
@@ -226,54 +223,35 @@ function AdminClassManagement() {
         ucitelId: formData.ucitelId,
     }
 
-    try {
-      if (editingClass) {
-        const classRef = doc(firestore, 'tridy', editingClass.id);
-        await updateDoc(classRef, dataToSave);
-        toast({
-          title: 'Třída uložena',
-          description: `Třída ${formData.nazev} byla úspěšně uložena.`,
-        });
-      } else {
-        await addDoc(collection(firestore, 'tridy'), {
-            ...dataToSave,
-            ziaciIds: [], // initialize with empty students array
-        });
-        toast({
-          title: 'Třída přidána',
-          description: `Třída ${formData.nazev} byla úspěšně přidána.`,
-        });
-      }
-      setIsDialogOpen(false);
-      setEditingClass(null);
-    } catch (error) {
-      console.error('Error saving class:', error);
+    if (editingClass) {
+      const classRef = doc(firestore, 'tridy', editingClass.id);
+      updateDocumentNonBlocking(classRef, dataToSave);
       toast({
-        variant: 'destructive',
-        title: 'Chyba',
-        description: 'Při ukládání třídy došlo k chybě.',
+        title: 'Třída uložena',
+        description: `Třída ${formData.nazev} byla úspěšně uložena.`,
+      });
+    } else {
+      addDocumentNonBlocking(collection(firestore, 'tridy'), {
+          ...dataToSave,
+          ziaciIds: [], // initialize with empty students array
+      });
+      toast({
+        title: 'Třída přidána',
+        description: `Třída ${formData.nazev} byla úspěšně přidána.`,
       });
     }
+    setIsDialogOpen(false);
+    setEditingClass(null);
   };
 
-  const handleDeleteClass = async () => {
+  const handleDeleteClass = () => {
     if (!firestore || !deletingClass) return;
-    try {
-      await deleteDoc(doc(firestore, 'tridy', deletingClass.id));
-      toast({
-        title: 'Třída smazána',
-        description: 'Třída byla úspěšně odstraněna.',
-      });
-    } catch (error) {
-      console.error('Error deleting class:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Chyba',
-        description: 'Při mazání třídy došlo k chybě.',
-      });
-    } finally {
-        setDeletingClass(null);
-    }
+    deleteDocumentNonBlocking(doc(firestore, 'tridy', deletingClass.id));
+    toast({
+      title: 'Třída smazána',
+      description: 'Třída byla úspěšně odstraněna.',
+    });
+    setDeletingClass(null);
   };
 
   const openDialog = (classData: Class | null) => {
