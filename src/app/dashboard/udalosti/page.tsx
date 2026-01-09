@@ -18,6 +18,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { MultiSelect } from '@/components/ui/multi-select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 
 const eventSchema = z.object({
   nazev: z.string().min(1, 'Název je povinný'),
@@ -26,6 +28,7 @@ const eventSchema = z.object({
   cas: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Neplatný formát času (HH:MM)'),
   tridyIds: z.array(z.string()).min(1, 'Vyberte alespoň jednu třídu'),
   uciteleIds: z.array(z.string()).min(1, 'Vyberte alespoň jednoho učitele'),
+  nahrazujeHodiny: z.boolean().default(false),
 });
 
 type EventFormData = z.infer<typeof eventSchema>;
@@ -37,7 +40,12 @@ export default function ObecnaUdalostPage() {
   const { toast } = useToast();
   
   const { control, handleSubmit, reset, formState: { errors } } = useForm<EventFormData>({
-    resolver: zodResolver(eventSchema)
+    resolver: zodResolver(eventSchema),
+    defaultValues: {
+      nahrazujeHodiny: false,
+      tridyIds: [],
+      uciteleIds: [],
+    }
   });
 
   const tridyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]);
@@ -62,7 +70,7 @@ export default function ObecnaUdalostPage() {
         title: 'Událost vytvořena',
         description: `Událost "${data.nazev}" byla úspěšně vytvořena.`,
     });
-    reset({ nazev: '', typ: '', cas: '', tridyIds: [], uciteleIds: [] });
+    reset({ nazev: '', typ: '', cas: '', tridyIds: [], uciteleIds: [], nahrazujeHodiny: false });
   };
 
 
@@ -175,6 +183,22 @@ export default function ObecnaUdalostPage() {
                 />
               {errors.uciteleIds && <p className="text-sm text-destructive">{errors.uciteleIds.message}</p>}
             </div>
+            <div className="grid gap-1.5 md:col-span-2">
+                <Controller
+                    name="nahrazujeHodiny"
+                    control={control}
+                    render={({ field }) => (
+                        <div className="flex items-center space-x-2">
+                            <Checkbox 
+                                id="replaces-lessons"
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                            />
+                            <Label htmlFor="replaces-lessons">Událost nahrazuje vyučování v daném čase</Label>
+                        </div>
+                    )}
+                />
+            </div>
           </div>
           <div className="flex gap-4 pt-4 border-t">
             <Button type="submit">
@@ -187,3 +211,5 @@ export default function ObecnaUdalostPage() {
     </form>
   );
 }
+
+    

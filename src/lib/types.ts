@@ -122,6 +122,7 @@ export interface Udalost {
   cas: string; // HH:MM
   tridyIds: string[];
   uciteleIds: string[];
+  nahrazujeHodiny?: boolean;
 }
 
 export type SubstitutionType = 'zmena-ucitele' | 'zmena-ucebny' | 'zruseno' | 'spojeno';
@@ -143,3 +144,5 @@ export interface Substitution {
         type: SubstitutionType | SubstitutionType[];
     };
 }
+
+    

@@ -1,7 +1,7 @@
 'use client';
 import React from 'react';
 import { cn } from "@/lib/utils";
-import type { LessonBlock, Udalost, Rozvrh } from "@/lib/types";
+import type { LessonBlock, Udalost, Rozvrh, Substitution } from "@/lib/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +17,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { format, getDay, parseISO, startOfWeek, addDays } from 'date-fns';
+import { format, getDay, parse, parseISO, startOfWeek, addDays, isSameDay } from 'date-fns';
 import { cs } from 'date-fns/locale';
 
 const defaultTimeSlots = [
@@ -29,7 +29,7 @@ const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek'];
 const generateDayMapping = () => {
     const today = new Date();
     const monday = startOfWeek(today, { weekStartsOn: 1 });
-    const mapping: { [key: string]: { short: string; date: string; dayIndex: number, fullDate: string } } = {};
+    const mapping: { [key: string]: { short: string; date: string; dayIndex: number, fullDate: Date } } = {};
 
     daysOfWeek.forEach((day, index) => {
         const date = addDays(monday, index);
@@ -37,7 +37,7 @@ const generateDayMapping = () => {
             short: format(date, 'E', { locale: cs }),
             date: format(date, 'd.M.'),
             dayIndex: index + 1,
-            fullDate: format(date, 'yyyy-MM-dd'),
+            fullDate: date,
         };
     });
     return mapping;
@@ -47,6 +47,7 @@ const dayMapping = generateDayMapping();
 
 
 function LessonTooltipContent({ lesson, day, period }: { lesson: LessonBlock, day: string, period: number }) {
+    const dayInfo = Object.values(dayMapping).find(d => d.short === day.substring(0,2));
     return (
         <div className="p-2 text-sm">
             <h3 className="font-bold text-base mb-2">{lesson.subjectName}</h3>
@@ -61,7 +62,7 @@ function LessonTooltipContent({ lesson, day, period }: { lesson: LessonBlock, da
                 <span>{lesson.className}</span>
 
                 <span className="text-muted-foreground">Den (vyuč. hodina):</span>
-                <span>{day.substring(0,2)} {dayMapping[day]?.date || ''} ({period})</span>
+                <span>{day.substring(0,2)} {dayInfo?.date || ''} ({period})</span>
 
                 <span className="text-muted-foreground">Komentář:</span>
                 <span>-</span>
@@ -82,7 +83,7 @@ function EventTooltipContent({ event }: { event: Udalost }) {
                 <span>{event.typ}</span>
 
                 <span className="text-muted-foreground">Datum:</span>
-                <span>{format(new Date(event.datum), 'PPP', { locale: cs })}</span>
+                <span>{format(parseISO(event.datum), 'PPP', { locale: cs })}</span>
                 
                 <span className="text-muted-foreground">Čas:</span>
                 <span>{event.cas}</span>
@@ -93,13 +94,13 @@ function EventTooltipContent({ event }: { event: Udalost }) {
 
 function LessonContextMenu({ children, lesson, day, period }: { children: React.ReactNode, lesson: LessonBlock, day: string, period: number }) {
     const router = useRouter();
-    const dayInfo = dayMapping[day];
+    const dayInfo = Object.values(dayMapping).find(d => d.short === day.substring(0,2));
 
     const handleClassBookEntry = () => {
         if (!dayInfo) return;
         const query = new URLSearchParams({
             tridaId: lesson.classId,
-            datum: dayInfo.fullDate,
+            datum: format(dayInfo.fullDate, 'yyyy-MM-dd'),
             hodina: (period).toString(),
             predmetId: lesson.subjectId,
         }).toString();
@@ -111,7 +112,7 @@ function LessonContextMenu({ children, lesson, day, period }: { children: React.
         const query = new URLSearchParams({
             tridaId: lesson.classId,
             predmetId: lesson.subjectId,
-            datum: dayInfo.fullDate,
+            datum: format(dayInfo.fullDate, 'yyyy-MM-dd'),
             hodina: period.toString()
         }).toString();
         router.push(`/dashboard/hodnoceni/nove?${query}`);
@@ -157,7 +158,7 @@ function EmptySlotContextMenu({ children }: { children: React.ReactNode }) {
 }
 
 
-function LessonBlock({ lesson, isTeacher, day, period }: { lesson: LessonBlock; isTeacher: boolean, day: string, period: number }) {
+function LessonBlockCmp({ lesson, isTeacher, day, period, isSubstituted = false }: { lesson: LessonBlock; isTeacher: boolean, day: string, period: number, isSubstituted?: boolean }) {
     const getSubjectColor = (subjectId: string) => {
         if (!subjectId) return `hsl(0, 0%, 85%)`;
         let hash = 0;
@@ -170,7 +171,7 @@ function LessonBlock({ lesson, isTeacher, day, period }: { lesson: LessonBlock; 
 
     const blockContent = (
          <div 
-            className="h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer"
+            className={cn("h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer", isSubstituted && 'opacity-50')}
             style={{ backgroundColor: getSubjectColor(lesson.subjectId) }}
         >
             <div className="font-bold">{lesson.subjectShortcut}</div>
@@ -217,27 +218,37 @@ function EventBlock({ event }: { event: Udalost }) {
     )
 }
 
-export function TimetableWidget({ schedules, eventsData, isTeacher, userId }: { schedules: Rozvrh[], eventsData: Udalost[], isTeacher: boolean, userId: string }) {
+export function TimetableWidget({ schedules, eventsData, substitutionsData, isTeacher, userId }: { schedules: Rozvrh[], eventsData: Udalost[], substitutionsData: Substitution[], isTeacher: boolean, userId: string }) {
     
-    // Use the timeslots from the first schedule as a reference, or default.
     const timeSlots = schedules[0]?.timeSlots || defaultTimeSlots;
     
-    const findEvent = (day: string, time: string) => {
-        const dayIndex = dayMapping[day]?.dayIndex;
-        if (dayIndex === undefined) return null;
+    const findEventForCell = (day: string, periodIndex: number) => {
+        const dayInfo = dayMapping[day];
+        if (!dayInfo) return null;
 
         return eventsData.find(event => {
-            const eventDate = new Date(event.datum + 'T12:00:00');
-            let eventDayIndex = getDay(eventDate); 
-            if (eventDayIndex === 0) eventDayIndex = 7; 
-
-            // This is still placeholder logic and needs a real calendar to be accurate
-            const isSameDay = true; 
-
-            const [timeStart] = time.split(' - ');
-            return isSameDay && event.cas.startsWith(timeStart.trim());
+            const eventDate = parseISO(event.datum);
+            const isSame = isSameDay(eventDate, dayInfo.fullDate);
+            if (!isSame) return false;
+            
+            // This is a simplification. It checks if the event time falls within the lesson slot.
+            // A more robust solution would parse times properly.
+            const lessonStartTime = timeSlots[periodIndex]?.split('-')[0];
+            return event.cas === lessonStartTime;
         });
-    }
+    };
+    
+    const findSubstitutionForCell = (day: string, periodIndex: number, classId: string) => {
+        const dayInfo = dayMapping[day];
+        if (!dayInfo) return null;
+
+        return substitutionsData.find(sub => {
+             const subDate = parseISO(sub.date);
+             const isSame = isSameDay(subDate, dayInfo.fullDate);
+             return isSame && sub.originalLesson.day === day && sub.originalLesson.period === periodIndex && sub.originalLesson.classId === classId;
+        })
+    };
+
 
     const getLessonForCell = (day: string, periodIndex: number) => {
         if (!schedules) return null;
@@ -246,18 +257,14 @@ export function TimetableWidget({ schedules, eventsData, isTeacher, userId }: { 
             const lesson = schedule.scheduleData?.[day]?.[periodIndex];
             if (lesson) {
                  if (isTeacher) {
-                    // For teachers, only return the lesson if they are the teacher
-                    if (lesson.teacherId === userId) {
-                        return lesson;
-                    }
+                    if (lesson.teacherId === userId) return { lesson, classId: schedule.id };
                 } else {
-                    // For students, return the lesson of their class
-                    return lesson;
+                    return { lesson, classId: schedule.id };
                 }
             }
         }
         return null;
-    }
+    };
 
 
     return (
@@ -281,18 +288,49 @@ export function TimetableWidget({ schedules, eventsData, isTeacher, userId }: { 
                            <div className="font-bold">{dayMapping[day]?.short || day.substring(0,2)}</div>
                            <div className="text-xs text-muted-foreground">{dayMapping[day]?.date || ''}</div>
                         </div>
-                        {timeSlots.map((time, periodIndex) => {
-                            const lesson = getLessonForCell(day, periodIndex);
-                            const event = findEvent(day, time);
+                        {timeSlots.map((_, periodIndex) => {
+                            const lessonInfo = getLessonForCell(day, periodIndex);
+                            const lesson = lessonInfo?.lesson;
+                            
+                            const event = findEventForCell(day, periodIndex);
+                            const substitution = lesson ? findSubstitutionForCell(day, periodIndex, lesson.classId) : null;
+                            
+                            const isCancelledByEvent = event && event.nahrazujeHodiny;
+
+                            const isSubstituted = !!substitution;
+                            const isCancelledBySub = substitution?.changes.type.includes('zruseno');
+
+                            let substitutedLesson: LessonBlock | null = null;
+                            if (isSubstituted && !isCancelledBySub) {
+                                // This is a simplified representation. A full implementation would fetch new teacher/subject names.
+                                substitutedLesson = { ...lesson!, ...substitution!.changes };
+                                if (substitution!.changes.teacherId) substitutedLesson.teacherName = "Zástup"; // Placeholder
+                            }
+
 
                             return (
                                 <div key={periodIndex} className="p-0.5 border-b border-r border-border min-h-[70px] relative">
-                                    {lesson && <LessonBlock lesson={lesson} isTeacher={isTeacher} day={day} period={periodIndex + 1}/>}
-                                    {event && <EventBlock event={event} />}
-                                    {!lesson && !event && isTeacher && (
-                                        <EmptySlotContextMenu>
-                                            <div className="h-full w-full cursor-pointer"></div>
-                                        </EmptySlotContextMenu>
+                                    {isCancelledByEvent ? (
+                                         <EventBlock event={event!} />
+                                    ) : (
+                                        <>
+                                            {lesson && (
+                                                <LessonBlockCmp lesson={lesson} isTeacher={isTeacher} day={day} period={periodIndex + 1} isSubstituted={isSubstituted}/>
+                                            )}
+                                            {substitutedLesson && (
+                                                <div className="absolute inset-0.5">
+                                                    <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} day={day} period={periodIndex + 1} />
+                                                </div>
+                                            )}
+                                            {isCancelledBySub && (
+                                                 <div className="absolute inset-0 flex items-center justify-center text-destructive font-bold text-xs bg-destructive/10">Odpadá</div>
+                                            )}
+                                            {!lesson && !event && isTeacher && (
+                                                <EmptySlotContextMenu>
+                                                    <div className="h-full w-full cursor-pointer"></div>
+                                                </EmptySlotContextMenu>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             )
@@ -303,3 +341,5 @@ export function TimetableWidget({ schedules, eventsData, isTeacher, userId }: { 
         </div>
     );
 }
+
+    

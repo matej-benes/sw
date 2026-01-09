@@ -4,12 +4,12 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { GraduationCap, BookOpenCheck, CalendarDays, BookUser, MessageSquarePlus, Settings2 } from 'lucide-react';
-import type { Udalost, Rozvrh } from '@/lib/types';
+import type { Udalost, Rozvrh, Substitution } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { TimetableWidget } from '@/components/timetable-widget';
 import { CalendarIcon } from 'lucide-react';
 import { useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
-import { collection, query, where, doc } from 'firebase/firestore';
+import { collection, query, where, doc, or } from 'firebase/firestore';
 
 const actionCards = [
     { title: "Zapsat hodnocení", icon: GraduationCap, href: "/dashboard/studenti", description: "Přidejte nové známky." },
@@ -48,25 +48,27 @@ export default function DashboardPage() {
   // Fetch events
   const eventsQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
-    const queries = [];
-    // Query for events where the user is one of the teachers
-    queries.push(where('uciteleIds', 'array-contains', user.id));
-    // Query for events for the user's class (if they are a student)
-    if (user.tridaId) {
-      queries.push(where('tridyIds', 'array-contains', user.tridaId));
-    }
-    // Since firestore does not support OR queries on different fields, we would need to run multiple queries and merge.
-    // For simplicity, we'll just fetch based on teacher id for now if the user is a teacher, or class id if a student.
-    if (hasRole('ucitel')) {
-        return query(collection(firestore, 'udalosti'), where('uciteleIds', 'array-contains', user.id));
-    }
-    if (hasRole('ziak') && user.tridaId) {
-        return query(collection(firestore, 'udalosti'), where('tridyIds', 'array-contains', user.tridaId));
-    }
-    return null; // or a query that returns nothing
-  }, [firestore, user, hasRole]);
+    const classOrClauses = user.tridaId ? [where('tridyIds', 'array-contains', user.tridaId)] : [];
+    
+    return query(
+        collection(firestore, 'udalosti'), 
+        or(
+            where('uciteleIds', 'array-contains', user.id),
+            ...classOrClauses
+        )
+    );
+  }, [firestore, user]);
 
   const { data: udalosti } = useCollection<Udalost>(eventsQuery);
+  
+  // Fetch substitutions - for simplicity, fetch all for now
+  const substitutionsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'suplovani');
+  }, [firestore]);
+
+  const { data: substitutions } = useCollection<Substitution>(substitutionsQuery);
+
 
   if (!user) return null;
 
@@ -93,6 +95,7 @@ export default function DashboardPage() {
                     <TimetableWidget 
                         schedules={scheduleData || []} 
                         eventsData={udalosti || []}
+                        substitutionsData={substitutions || []}
                         isTeacher={isTeacher} 
                         userId={user.id}
                     />
@@ -119,3 +122,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
