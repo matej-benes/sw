@@ -26,9 +26,9 @@ export default function ZpravyPage() {
 
   // Fetch all teachers
   const teachersQuery = useMemoFirebase(() => {
-    if (!firestore || !isStudent) return null;
+    if (!firestore) return null;
     return query(collection(firestore, "users"), where("roles", "array-contains", "ucitel"));
-  }, [firestore, isStudent]);
+  }, [firestore]);
   const { data: teachers } = useCollection<User>(teachersQuery);
 
   // Fetch student's class to find the class teacher
@@ -87,6 +87,27 @@ export default function ZpravyPage() {
     setMessage('');
   };
 
+  const sortedTeachers = useMemo(() => {
+    if (!teachers) return [];
+    if (!isStudent || !tridaData) return teachers;
+
+    const { ucitelId, zastupciIds = [] } = tridaData;
+    
+    return [...teachers].sort((a, b) => {
+        const isAClassTeacher = a.id === ucitelId;
+        const isBClassTeacher = b.id === ucitelId;
+        const isASubstitute = zastupciIds.includes(a.id);
+        const isBSubstitute = zastupciIds.includes(b.id);
+
+        if (isAClassTeacher) return -1;
+        if (isBClassTeacher) return 1;
+        if (isASubstitute && !isBSubstitute) return -1;
+        if (!isASubstitute && isBSubstitute) return 1;
+        
+        return a.name.localeCompare(b.name);
+    });
+}, [teachers, tridaData, isStudent]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -139,12 +160,15 @@ export default function ZpravyPage() {
                       <SelectValue placeholder="Vyberte učitele" />
                     </SelectTrigger>
                     <SelectContent>
-                      {teachers?.map((t) => {
+                      {sortedTeachers?.map((t) => {
                         const isClassTeacher = t.id === tridaData?.ucitelId;
+                        const isSubstitute = tridaData?.zastupciIds?.includes(t.id);
+                        const isSpecial = isClassTeacher || isSubstitute;
+
                         return (
                             <SelectItem key={t.id} value={t.id}>
-                               <span className={cn(isClassTeacher && "text-destructive")}>
-                                    {t.name} {isClassTeacher && "(třídní učitel)"}
+                               <span className={cn(isSpecial && "text-destructive")}>
+                                    {t.name} {isClassTeacher && "(třídní učitel)"} {isSubstitute && !isClassTeacher && "(zástupce)"}
                                </span>
                             </SelectItem>
                         )

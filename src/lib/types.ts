@@ -46,6 +46,7 @@ export interface Trida {
     id: string;
     nazev: string;
     ucitelId: string;
+    zastupciIds?: string[];
     ziaciIds: string[];
 }
 
@@ -152,5 +153,3 @@ export interface Substitution {
         type: SubstitutionType | SubstitutionType[];
     };
 }
-
-    

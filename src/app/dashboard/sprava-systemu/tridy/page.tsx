@@ -66,11 +66,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { MultiSelect } from '@/components/ui/multi-select';
 
 
 const classSchema = z.object({
   nazev: z.string().min(1, 'Název je povinný'),
   ucitelId: z.string().min(1, 'Je nutné vybrat třídního učitele'),
+  zastupciIds: z.array(z.string()).optional(),
 });
 
 type ClassFormData = z.infer<typeof classSchema>;
@@ -90,12 +92,14 @@ function ClassForm({
     register,
     handleSubmit,
     control,
+    watch,
     formState: { errors },
   } = useForm<ClassFormData>({
     resolver: zodResolver(classSchema),
     defaultValues: {
       nazev: classData?.nazev || '',
       ucitelId: classData?.ucitelId || '',
+      zastupciIds: classData?.zastupciIds || [],
     },
   });
 
@@ -103,6 +107,17 @@ function ClassForm({
     onSave(data);
     closeDialog();
   };
+
+  const teacherOptions = useMemo(() => 
+    teachers.map(t => ({ value: t.id, label: t.name })),
+  [teachers]);
+
+  const selectedClassTeacherId = watch('ucitelId');
+
+  const substituteTeacherOptions = useMemo(() =>
+    teacherOptions.filter(option => option.value !== selectedClassTeacherId),
+  [teacherOptions, selectedClassTeacherId]);
+
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
@@ -139,6 +154,26 @@ function ClassForm({
           </p>
         )}
       </div>
+       <div className="space-y-1">
+        <Label htmlFor="substitutes">Zástupci třídního učitele</Label>
+        <Controller
+            name="zastupciIds"
+            control={control}
+            render={({ field }) => (
+                <MultiSelect
+                    options={substituteTeacherOptions}
+                    onValueChange={field.onChange}
+                    defaultValue={field.value || []}
+                    placeholder="Vyberte zástupce..."
+                />
+            )}
+        />
+         {errors.zastupciIds && (
+          <p className="text-sm text-destructive">
+            {errors.zastupciIds.message}
+          </p>
+        )}
+      </div>
       <div className="space-y-1">
         <Label htmlFor="studentCount">Počet žáků</Label>
         <Input
@@ -162,11 +197,19 @@ function ClassForm({
 
 function ClassRow({ classData, teachers, onEdit, onDelete }: { classData: Class, teachers: User[], onEdit: (classData: Class) => void, onDelete: (classData: Class) => void }) {
     const teacher = teachers.find(t => t.id === classData.ucitelId);
+    const substituteTeachers = classData.zastupciIds?.map(id => teachers.find(t => t.id === id)?.name).filter(Boolean) || [];
     
     return (
         <TableRow>
             <TableCell className="font-medium">{classData.nazev}</TableCell>
-            <TableCell>{teacher?.name || 'Neznámý'}</TableCell>
+            <TableCell>
+                <span className="font-semibold text-destructive">{teacher?.name || 'Neznámý'} (Třídní)</span>
+                {substituteTeachers.length > 0 && (
+                    <span className="text-muted-foreground ml-2">
+                       Zástupci: {substituteTeachers.join(', ')}
+                    </span>
+                )}
+            </TableCell>
             <TableCell>{classData.ziaciIds?.length || 0}</TableCell>
             <TableCell className="text-right">
                 <DropdownMenu>
@@ -215,6 +258,7 @@ function AdminClassManagement() {
     const dataToSave = {
         nazev: formData.nazev,
         ucitelId: formData.ucitelId,
+        zastupciIds: formData.zastupciIds || [],
     }
 
     if (editingClass) {
@@ -312,7 +356,7 @@ function AdminClassManagement() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Název třídy</TableHead>
-                  <TableHead>Třídní učitel</TableHead>
+                  <TableHead>Učitelé</TableHead>
                   <TableHead>Počet žáků</TableHead>
                   <TableHead>
                     <span className="sr-only">Akce</span>
