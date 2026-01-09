@@ -79,6 +79,13 @@ export type ScheduleGrid = {
   };
 };
 
+export interface Rozvrh {
+    id: string;
+    scheduleData: ScheduleGrid;
+    timeSlots: string[];
+}
+
+
 export interface PoznamkaZaka {
   id: string;
   studentId: string;

@@ -1,7 +1,7 @@
 'use client';
 import React from 'react';
 import { cn } from "@/lib/utils";
-import type { Timetable, Lesson, Udalost } from "@/lib/types";
+import type { LessonBlock, Udalost, Rozvrh } from "@/lib/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,12 +20,10 @@ import {
 import { format, getDay, parseISO } from 'date-fns';
 import { cs } from 'date-fns/locale';
 
-const timeSlots = [
-    "07:55 - 08:40", "08:55 - 09:40", "09:55 - 10:40", "10:45 - 11:30",
-    "11:35 - 12:20", "12:30 - 13:15", "13:20 - 14:05", "14:15 - 15:00",
-    "15:05 - 15:50", "15:55 - 16:40"
+const defaultTimeSlots = [
+    "07:55-08:40", "08:55-09:40", "09:55-10:40", "10:45-11:30",
+    "11:35-12:20", "12:30-13:15", "13:20-14:05", "14:15-15:00",
 ];
-
 const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek'];
 
 const dayMapping: { [key: string]: { short: string; date: string; dayIndex: number } } = {
@@ -36,19 +34,19 @@ const dayMapping: { [key: string]: { short: string; date: string; dayIndex: numb
     'Pátek': { short: 'Pá', date: '3.9.', dayIndex: 5 },
 };
 
-function LessonTooltipContent({ lesson, day, period }: { lesson: Lesson, day: string, period: number }) {
+function LessonTooltipContent({ lesson, day, period }: { lesson: LessonBlock, day: string, period: number }) {
     return (
         <div className="p-2 text-sm">
-            <h3 className="font-bold text-base mb-2">{lesson.subject}</h3>
+            <h3 className="font-bold text-base mb-2">{lesson.subjectName}</h3>
             <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
                 <span className="text-muted-foreground">Předmět:</span>
-                <span>{lesson.subject}</span>
+                <span>{lesson.subjectName} ({lesson.subjectShortcut})</span>
 
                 <span className="text-muted-foreground">Učitel:</span>
-                <span>{lesson.teacher || 'N/A'}</span>
+                <span>{lesson.teacherName || 'N/A'}</span>
 
-                <span className="text-muted-foreground">Učebna:</span>
-                <span>{lesson.room}</span>
+                <span className="text-muted-foreground">Třída:</span>
+                <span>{lesson.className}</span>
 
                 <span className="text-muted-foreground">Den (vyuč. hodina):</span>
                 <span>{day.substring(0,2)} {dayMapping[day]?.date || ''} ({period})</span>
@@ -81,12 +79,11 @@ function EventTooltipContent({ event }: { event: Udalost }) {
     )
 }
 
-function LessonContextMenu({ children, lesson }: { children: React.ReactNode, lesson: Lesson }) {
+function LessonContextMenu({ children, lesson }: { children: React.ReactNode, lesson: LessonBlock }) {
     const router = useRouter();
 
     const handleClassBookEntry = () => {
-        // Assuming lesson has a unique ID. If not, we might need to generate one.
-        const lessonId = `${lesson.class}-${lesson.subject}-${lesson.time}`.replace(/[^a-zA-Z0-9]/g, '-');
+        const lessonId = `${lesson.classId}-${lesson.subjectId}-${lesson.id}`.replace(/[^a-zA-Z0-9]/g, '-');
         router.push(`/dashboard/tridni-kniha/${lessonId}`);
     }
 
@@ -130,11 +127,12 @@ function EmptySlotContextMenu({ children }: { children: React.ReactNode }) {
 }
 
 
-function LessonBlock({ lesson, isTeacher, day, period }: { lesson: Lesson; isTeacher: boolean, day: string, period: number }) {
-    const getSubjectColor = (subject: string) => {
+function LessonBlock({ lesson, isTeacher, day, period }: { lesson: LessonBlock; isTeacher: boolean, day: string, period: number }) {
+    const getSubjectColor = (subjectId: string) => {
+        if (!subjectId) return `hsl(0, 0%, 85%)`;
         let hash = 0;
-        for (let i = 0; i < subject.length; i++) {
-            hash = subject.charCodeAt(i) + ((hash << 5) - hash);
+        for (let i = 0; i < subjectId.length; i++) {
+            hash = subjectId.charCodeAt(i) + ((hash << 5) - hash);
         }
         const h = hash % 360;
         return `hsl(${h}, 60%, 85%)`;
@@ -143,11 +141,11 @@ function LessonBlock({ lesson, isTeacher, day, period }: { lesson: Lesson; isTea
     const blockContent = (
          <div 
             className="h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer"
-            style={{ backgroundColor: getSubjectColor(lesson.subject) }}
+            style={{ backgroundColor: getSubjectColor(lesson.subjectId) }}
         >
-            <div className="font-bold">{lesson.subject}</div>
-            <div>{isTeacher ? lesson.class : lesson.teacher}</div>
-            <div className="text-muted-foreground">{lesson.room}</div>
+            <div className="font-bold">{lesson.subjectShortcut}</div>
+            <div>{isTeacher ? lesson.className : lesson.teacherName}</div>
+            <div className="text-muted-foreground">{lesson.className}</div>
         </div>
     );
     
@@ -189,31 +187,22 @@ function EventBlock({ event }: { event: Udalost }) {
     )
 }
 
-export function TimetableWidget({ timetableData, eventsData, isTeacher }: { timetableData: Timetable, eventsData: Udalost[], isTeacher: boolean }) {
+export function TimetableWidget({ schedule, eventsData, isTeacher }: { schedule: Rozvrh | null, eventsData: Udalost[], isTeacher: boolean }) {
     
-    const findLesson = (day: string, time: string) => {
-        const lessons = timetableData[day];
-        if (!lessons) return null;
-        const [start] = time.split(' - ');
-        return lessons.find(lesson => lesson.time.startsWith(start.trim()));
-    }
+    const timeSlots = schedule?.timeSlots || defaultTimeSlots;
+    const scheduleData = schedule?.scheduleData;
 
     const findEvent = (day: string, time: string) => {
         const dayIndex = dayMapping[day]?.dayIndex;
         if (dayIndex === undefined) return null;
 
         return eventsData.find(event => {
-            // JS Date day index is 0-6 (Sun-Sat), Firebase might be different. Let's adjust.
-            // getDay() returns 0 for Sun, 1 for Mon...
-            const eventDate = new Date(event.datum + 'T12:00:00'); // Use noon to avoid timezone issues
-            let eventDayIndex = getDay(eventDate); // 0=Sun, 1=Mon...6=Sat
-            if (eventDayIndex === 0) eventDayIndex = 7; // make Sunday 7 to match our logic if needed, but we only show Mon-Fri
+            const eventDate = new Date(event.datum + 'T12:00:00');
+            let eventDayIndex = getDay(eventDate); 
+            if (eventDayIndex === 0) eventDayIndex = 7; 
 
-            // For simplicity, this example doesn't check against a real calendar week.
-            // It just checks if an event is on a "Monday", "Tuesday", etc.
-            // A real implementation would need to know the specific dates for the displayed week.
-            // This is a placeholder logic.
-            const isSameDay = true; // Placeholder
+            // This is still placeholder logic and needs a real calendar to be accurate
+            const isSameDay = true; 
 
             const [timeStart] = time.split(' - ');
             return isSameDay && event.cas.startsWith(timeStart.trim());
@@ -222,7 +211,9 @@ export function TimetableWidget({ timetableData, eventsData, isTeacher }: { time
 
     return (
         <div>
-            <div className="grid grid-cols-[auto_repeat(10,1fr)] border-t border-l border-border">
+            <div className={cn("grid border-t border-l border-border", `grid-cols-[auto_repeat(${timeSlots.length},1fr)]`)}
+              style={{ gridTemplateColumns: `auto repeat(${timeSlots.length}, 1fr)`}}
+            >
                 {/* Header */}
                 <div className="border-b border-r border-border"></div>
                 {timeSlots.map((time, index) => (
@@ -239,13 +230,13 @@ export function TimetableWidget({ timetableData, eventsData, isTeacher }: { time
                            <div className="font-bold">{dayMapping[day]?.short || day.substring(0,2)}</div>
                            <div className="text-xs text-muted-foreground">{dayMapping[day]?.date || ''}</div>
                         </div>
-                        {timeSlots.map((time, index) => {
-                            const lesson = findLesson(day, time);
+                        {timeSlots.map((time, periodIndex) => {
+                            const lesson = scheduleData?.[day]?.[periodIndex];
                             const event = findEvent(day, time);
 
                             return (
-                                <div key={index} className="p-0.5 border-b border-r border-border min-h-[60px] relative">
-                                    {lesson && <LessonBlock lesson={lesson} isTeacher={isTeacher} day={day} period={index + 1}/>}
+                                <div key={periodIndex} className="p-0.5 border-b border-r border-border min-h-[70px] relative">
+                                    {lesson && <LessonBlock lesson={lesson} isTeacher={isTeacher} day={day} period={periodIndex + 1}/>}
                                     {event && <EventBlock event={event} />}
                                     {!lesson && !event && isTeacher && (
                                         <EmptySlotContextMenu>

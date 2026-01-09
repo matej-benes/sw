@@ -4,12 +4,12 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { GraduationCap, BookOpenCheck, CalendarDays, BookUser, MessageSquarePlus, Settings2 } from 'lucide-react';
-import type { Timetable, Udalost } from '@/lib/types';
+import type { Udalost, Rozvrh } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { TimetableWidget } from '@/components/timetable-widget';
 import { CalendarIcon } from 'lucide-react';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import { useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
+import { collection, query, where, doc } from 'firebase/firestore';
 
 const actionCards = [
     { title: "Zapsat hodnocení", icon: GraduationCap, href: "/dashboard/studenti", description: "Přidejte nové známky." },
@@ -24,6 +24,14 @@ export default function DashboardPage() {
   const { user, hasRole } = useAuth();
   const router = useRouter();
   const firestore = useFirestore();
+
+  // Fetch schedule for the user's class
+  const scheduleRef = useMemoFirebase(() => {
+    if (!firestore || !user?.tridaId) return null;
+    return doc(firestore, 'rozvrhy', user.tridaId);
+  }, [firestore, user?.tridaId]);
+
+  const { data: scheduleData } = useDoc<Rozvrh>(scheduleRef);
 
   // Fetch events
   const eventsQuery = useMemoFirebase(() => {
@@ -51,7 +59,6 @@ export default function DashboardPage() {
   if (!user) return null;
 
   const isTeacher = hasRole('ucitel');
-  const timetable: Timetable = {}; // Empty timetable
 
   return (
     <div className="flex-1 space-y-8">
@@ -73,7 +80,7 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                     <TimetableWidget 
-                        timetableData={timetable} 
+                        schedule={scheduleData} 
                         eventsData={udalosti || []}
                         isTeacher={isTeacher} 
                     />
