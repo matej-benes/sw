@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Trash2, Save, Edit, Plus, Minus, Copy, ArrowLeft, ArrowRight } from "lucide-react";
+import { PlusCircle, Trash2, Save, Copy, ArrowLeft, ArrowRight } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -12,11 +12,10 @@ import type { Trida, User, Predmet, Ucebna, LessonBlock, Rozvrh } from '@/lib/ty
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { CalendarIcon } from 'lucide-react';
-import { format, startOfWeek, addDays, eachDayOfInterval, isSameDay, getDay } from 'date-fns';
+import { format, startOfWeek, addDays, eachDayOfInterval, isSameDay } from 'date-fns';
 import { cs } from 'date-fns/locale';
 
 const lessonSchema = z.object({
@@ -78,6 +77,14 @@ export default function RozvrhySuplovaniPage() {
     });
     
     const { subjectId, teacherId, classId, ucebnaId } = watch();
+
+    const handleClassChange = useCallback((classId: string) => {
+        setSelectedClassId(classId);
+    }, []);
+
+    const tridyOptions = useMemo(() => 
+        tridy?.map(t => ({value: t.id, label: t.nazev})) || [],
+    [tridy]);
     
     useEffect(() => {
         if (!selectedClassId || !firestore) {
@@ -261,15 +268,6 @@ export default function RozvrhySuplovaniPage() {
         const h = hash % 360;
         return `hsl(${h}, 70%, 80%)`;
     };
-    
-    const handleClassChange = useCallback((value: string) => {
-        setSelectedClassId(value);
-    }, []);
-
-    const tridyOptions = useMemo(() => 
-        tridy?.map(t => ({value: t.id, label: t.nazev})) || [],
-    [tridy]);
-
 
     return (
         <div className="space-y-6">
