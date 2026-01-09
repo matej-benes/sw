@@ -4,6 +4,7 @@ import { getMockUserByEmail } from '@/lib/mock-data';
 import type { User } from '@/lib/types';
 import { useRouter, usePathname } from 'next/navigation';
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
+import { useUser as useFirebaseUser } from '@/firebase';
 
 interface AuthContextType {
   user: User | null;
@@ -16,13 +17,13 @@ interface AuthContextType {
 export const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { user: firebaseUser, isUserLoading } = useFirebaseUser();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    // Simulate checking for a logged-in user in session storage
     const storedUser = sessionStorage.getItem('skolaweb-user');
     if (storedUser) {
       setUser(JSON.parse(storedUser));
@@ -44,11 +45,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, pass: string): Promise<void> => {
-    // This is a mock sign-in. In a real app, you'd call Firebase.
+    setLoading(true);
     return new Promise((resolve, reject) => {
       setTimeout(() => {
         const foundUser = getMockUserByEmail(email);
-        
+
         let isValid = false;
         if (foundUser?.email === 'matej.romana@seznam.cz' && pass === 'MikMat2008_') {
           isValid = true;
@@ -56,11 +57,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isValid = true;
         }
 
-        if (foundUser && isValid) { 
+        if (foundUser && isValid) {
           setUser(foundUser);
           sessionStorage.setItem('skolaweb-user', JSON.stringify(foundUser));
+          setLoading(false);
           resolve();
         } else {
+          setLoading(false);
           reject(new Error('Nesprávný email nebo heslo.'));
         }
       }, 1000);
