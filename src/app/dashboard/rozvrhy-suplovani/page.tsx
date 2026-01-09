@@ -722,7 +722,7 @@ export default function RozvrhySuplovaniPage() {
                     <p className="text-muted-foreground">Vytvářejte a upravujte týdenní rozvrhy pro třídy a spravujte suplování.</p>
                 </div>
                  <div className="flex gap-2">
-                     <Select onValueChange={setSelectedClassForSchedule} value={selectedClassForSchedule}>
+                     <Select onValueChange={setSelectedClassForSchedule} value={selectedClassForSchedule || undefined}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="Vyberte třídu" />
                         </SelectTrigger>
