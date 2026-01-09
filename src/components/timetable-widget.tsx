@@ -32,11 +32,6 @@ export function TimetableWidget({ timetableData, isTeacher, studentName, teacher
 
     return (
         <div>
-            <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
-                <span><span className="font-semibold text-foreground">Třída:</span> {className}</span>
-                {!isTeacher && <span><span className="font-semibold text-foreground">Žák/Student:</span> {studentName}</span>}
-                <span><span className="font-semibold text-foreground">Třídní učitel:</span> {teacherName}</span>
-            </div>
             <div className="grid grid-cols-[auto_repeat(10,1fr)] border-t border-l border-border">
                 {/* Header */}
                 <div className="border-b border-r border-border"></div>
@@ -55,16 +50,8 @@ export function TimetableWidget({ timetableData, isTeacher, studentName, teacher
                            <div className="text-xs text-muted-foreground">{dayMapping[day]?.date || ''}</div>
                         </div>
                         {timeSlots.map((time, index) => {
-                            const lesson = findLesson(day, time);
                             return (
                                 <div key={index} className="p-1 border-b border-r border-border min-h-[60px]">
-                                    {lesson && (
-                                        <div className="flex flex-col h-full items-center justify-center text-center rounded-md p-1 bg-accent/20 border border-accent text-accent-foreground text-xs">
-                                            <span className="font-bold text-sm">{lesson.subject}</span>
-                                            <span>{isTeacher ? lesson.class : lesson.teacher}</span>
-                                            <span className="text-muted-foreground/80">{lesson.room}</span>
-                                        </div>
-                                    )}
                                 </div>
                             )
                         })}
