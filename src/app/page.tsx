@@ -14,7 +14,7 @@ import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, getDocs, doc, setDoc, addDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, addDoc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import type { User } from '@/lib/types';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 
@@ -57,7 +57,6 @@ const createInitialAdminIfNeeded = async (firestore: any) => {
     // If admin exists, just update the PIN
     const adminDoc = querySnapshot.docs[0];
     await updateDoc(doc(firestore, 'users', adminDoc.id), { pin: newPin });
-    console.log("Updated admin user PIN to:", newPin);
   }
 };
 
@@ -70,7 +69,9 @@ function LoginForm() {
   const firestore = useFirestore();
 
   useEffect(() => {
-    createInitialAdminIfNeeded(firestore);
+    if (firestore) {
+      createInitialAdminIfNeeded(firestore);
+    }
   },[firestore]);
 
   const form = useForm<z.infer<typeof loginSchema>>({
@@ -138,7 +139,7 @@ function LoginForm() {
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full bg-accent hover:bg-accent/90" disabled={isLoading || authLoading}>
+              <Button type="submit" className="w-full" disabled={isLoading || authLoading}>
                 {isLoading || authLoading ? <Loader2 className="animate-spin" /> : 'Přihlásit se'}
               </Button>
             </form>
@@ -149,7 +150,6 @@ function LoginForm() {
 }
 
 function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
-    const { signIn } = useAuth();
     const [step, setStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
     const [registrationData, setRegistrationData] = useState<{ user: User, tridaName: string | null } | null>(null);
@@ -189,7 +189,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             const userDoc = querySnapshot.docs[0];
             const userData = { ...userDoc.data(), id: userDoc.id } as User;
             
-            let tridaName: string | null = null;
+            let tridaName: string | null = "N/A";
             if (userData.tridaId) {
                 const tridaRef = doc(firestore, 'tridy', userData.tridaId);
                 const tridaDoc = await getDoc(tridaRef);
@@ -224,8 +224,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
             const firebaseUser = userCredential.user;
 
-            // 2. Create the user document in Firestore with the data from the pre-seeded document,
-            // using the new Firebase Auth UID as the document ID.
+            // 2. Create the new user document in Firestore with the Firebase Auth UID.
             const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
             await setDoc(newUserDocRef, {
                 name: registrationData.user.name,
@@ -236,11 +235,9 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 studentId: registrationData.user.studentId || null,
             });
 
-            // 3. Invalidate the PIN on the original document to prevent re-use
+            // 3. Delete the original pre-seeded document to prevent duplication.
             const originalUserDocRef = doc(firestore, 'users', registrationData.user.id);
-            await updateDoc(originalUserDocRef, {
-                pin: `USED_${new Date().toISOString()}_${Math.random()}`, 
-            });
+            await deleteDoc(originalUserDocRef);
 
 
             toast({ title: 'Registrace úspěšná', description: 'Váš účet byl vytvořen, nyní se můžete přihlásit.' });
@@ -298,7 +295,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                     <CardContent>
                         <div className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm">
                             <p><strong>Jméno:</strong> {registrationData.user.name}</p>
-                            {registrationData.tridaName ? <p><strong>Třída:</strong> {registrationData.tridaName}</p> : <p><strong>Role:</strong> Zaměstnanec školy</p>}
+                            <p><strong>{registrationData.user.tridaId ? 'Třída' : 'Role'}:</strong> {registrationData.user.tridaId ? registrationData.tridaName : "Zaměstnanec školy"}</p>
                         </div>
                         <Form {...registrationForm}>
                             <form onSubmit={registrationForm.handleSubmit(handleRegistrationSubmit)} className="space-y-4">
