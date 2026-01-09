@@ -56,6 +56,7 @@ import {
   deleteDoc,
 } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useAuth } from '@/hooks/use-auth';
 
 type Class = {
   id: string;
@@ -141,10 +142,12 @@ function ClassForm({
 }
 
 export default function SpravaTridyPage() {
+  const { user, hasRole } = useAuth();
   const firestore = useFirestore();
+  const isAdmin = hasRole('administrator');
   const classesCollection = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'tridy') : null),
-    [firestore]
+    () => (firestore && isAdmin ? collection(firestore, 'tridy') : null),
+    [firestore, isAdmin]
   );
   const { data: classes, isLoading } = useCollection<Class>(classesCollection);
 
@@ -158,7 +161,7 @@ export default function SpravaTridyPage() {
     try {
       if (editingClass) {
         const classRef = doc(firestore, 'tridy', editingClass.id);
-        await updateDoc(classRef, formData);
+        await updateDoc(classRef, formData as any);
         toast({
           title: 'Třída uložena',
           description: `Třída ${formData.name} byla úspěšně uložena.`,
@@ -171,6 +174,7 @@ export default function SpravaTridyPage() {
         });
       }
       setIsDialogOpen(false);
+      setEditingClass(null);
     } catch (error) {
       console.error('Error saving class:', error);
       toast({
@@ -205,9 +209,14 @@ export default function SpravaTridyPage() {
     setIsDialogOpen(true);
   };
 
-  const openDeleteDialog = (classData: Class) => {
-    setDeletingClass(classData);
-  };
+  if (!isAdmin) {
+    return (
+        <div className="space-y-6">
+            <h1 className="text-3xl font-bold tracking-tight">Přístup odepřen</h1>
+            <p className="text-muted-foreground">Pro přístup k této stránce nemáte oprávnění.</p>
+        </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -216,7 +225,10 @@ export default function SpravaTridyPage() {
         <p className="text-muted-foreground">Správa všech tříd v systému.</p>
       </div>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={(isOpen) => {
+        setIsDialogOpen(isOpen);
+        if (!isOpen) setEditingClass(null);
+      }}>
         <Card>
           <CardHeader className="flex-row items-center justify-between">
             <div>
@@ -256,7 +268,7 @@ export default function SpravaTridyPage() {
                     <TableCell>{cls.teacher}</TableCell>
                     <TableCell>{cls.studentCount}</TableCell>
                     <TableCell className="text-right">
-                      <DropdownMenu>
+                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon">
                             <MoreHorizontal className="h-4 w-4" />
@@ -268,7 +280,7 @@ export default function SpravaTridyPage() {
                             Upravit
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onSelect={() => openDeleteDialog(cls)}
+                            onSelect={() => setDeletingClass(cls)}
                             className="text-destructive"
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
@@ -289,27 +301,28 @@ export default function SpravaTridyPage() {
               {editingClass ? 'Upravit třídu' : 'Přidat novou třídu'}
             </DialogTitle>
           </DialogHeader>
-          <ClassForm
-            classData={editingClass}
-            onSave={handleSaveClass}
-            closeDialog={() => setIsDialogOpen(false)}
-          />
+          {isDialogOpen && (
+             <ClassForm
+                classData={editingClass}
+                onSave={handleSaveClass}
+                closeDialog={() => setIsDialogOpen(false)}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
-      {deletingClass && (
-        <AlertDialog open={!!deletingClass} onOpenChange={() => setDeletingClass(null)}>
+      <AlertDialog open={!!deletingClass} onOpenChange={() => setDeletingClass(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Opravdu chcete smazat třídu?</AlertDialogTitle>
               <AlertDialogDescription>
-                Tato akce je nevratná a trvale smaže třídu "{deletingClass.name}".
+                Tato akce je nevratná a trvale smaže třídu "{deletingClass?.name}".
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => setDeletingClass(null)}>Zrušit</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => handleDeleteClass(deletingClass.id)}
+                onClick={() => deletingClass && handleDeleteClass(deletingClass.id)}
                 className="bg-destructive hover:bg-destructive/90"
               >
                 Smazat
@@ -317,7 +330,6 @@ export default function SpravaTridyPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      )}
     </div>
   );
 }

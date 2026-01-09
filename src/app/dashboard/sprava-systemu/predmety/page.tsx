@@ -56,6 +56,7 @@ import {
   deleteDoc,
 } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useAuth } from '@/hooks/use-auth';
 
 type Subject = {
   id: string;
@@ -141,10 +142,12 @@ function SubjectForm({
 }
 
 export default function PredmetyPage() {
+  const { user, hasRole } = useAuth();
   const firestore = useFirestore();
+  const isAdmin = hasRole('administrator');
   const subjectsCollection = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'predmety') : null),
-    [firestore]
+    () => (firestore && isAdmin ? collection(firestore, 'predmety') : null),
+    [firestore, isAdmin]
   );
   const { data: subjects, isLoading } = useCollection<Subject>(subjectsCollection);
 
@@ -171,6 +174,7 @@ export default function PredmetyPage() {
         });
       }
       setIsDialogOpen(false);
+      setEditingSubject(null);
     } catch (error) {
       console.error('Error saving subject:', error);
       toast({
@@ -205,9 +209,14 @@ export default function PredmetyPage() {
     setIsDialogOpen(true);
   };
 
-  const openDeleteDialog = (subject: Subject) => {
-    setDeletingSubject(subject);
-  };
+  if (!isAdmin) {
+    return (
+        <div className="space-y-6">
+            <h1 className="text-3xl font-bold tracking-tight">Přístup odepřen</h1>
+            <p className="text-muted-foreground">Pro přístup k této stránce nemáte oprávnění.</p>
+        </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -218,7 +227,10 @@ export default function PredmetyPage() {
         </p>
       </div>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={(isOpen) => {
+        setIsDialogOpen(isOpen);
+        if (!isOpen) setEditingSubject(null);
+      }}>
         <Card>
           <CardHeader className="flex-row items-center justify-between">
             <div>
@@ -258,7 +270,7 @@ export default function PredmetyPage() {
                     <TableCell>{subject.shortcut}</TableCell>
                     <TableCell>{subject.teacherCount}</TableCell>
                     <TableCell className="text-right">
-                      <DropdownMenu>
+                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon">
                             <MoreHorizontal className="h-4 w-4" />
@@ -270,7 +282,7 @@ export default function PredmetyPage() {
                             Upravit
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onSelect={() => openDeleteDialog(subject)}
+                            onSelect={() => setDeletingSubject(subject)}
                             className="text-destructive"
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
@@ -291,29 +303,30 @@ export default function PredmetyPage() {
               {editingSubject ? 'Upravit předmět' : 'Přidat nový předmět'}
             </DialogTitle>
           </DialogHeader>
-          <SubjectForm
-            subject={editingSubject}
-            onSave={handleSaveSubject}
-            closeDialog={() => setIsDialogOpen(false)}
-          />
+           {isDialogOpen && (
+            <SubjectForm
+                subject={editingSubject}
+                onSave={handleSaveSubject}
+                closeDialog={() => setIsDialogOpen(false)}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
-      {deletingSubject && (
-        <AlertDialog open={!!deletingSubject} onOpenChange={() => setDeletingSubject(null)}>
+       <AlertDialog open={!!deletingSubject} onOpenChange={() => setDeletingSubject(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
                 Opravdu chcete smazat předmět?
               </AlertDialogTitle>
               <AlertDialogDescription>
-                Tato akce je nevratná a trvale smaže předmět "{deletingSubject.name}".
+                Tato akce je nevratná a trvale smaže předmět "{deletingSubject?.name}".
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => setDeletingSubject(null)}>Zrušit</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => handleDeleteSubject(deletingSubject.id)}
+                onClick={() => deletingSubject && handleDeleteSubject(deletingSubject.id)}
                 className="bg-destructive hover:bg-destructive/90"
               >
                 Smazat
@@ -321,7 +334,6 @@ export default function PredmetyPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      )}
     </div>
   );
 }
