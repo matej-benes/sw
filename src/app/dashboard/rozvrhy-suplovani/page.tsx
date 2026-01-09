@@ -53,7 +53,7 @@ const buildInitialWeekSchedule = (week: Date[]): DailySchedule[] => {
 export default function RozvrhySuplovaniPage() {
     const firestore = useFirestore();
     const { toast } = useToast();
-    const [selectedClassId, setSelectedClassId] = useState<string | undefined>();
+    const [selectedClassId, setSelectedClassId] = useState<string>();
     
     // Week navigation
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -85,7 +85,7 @@ export default function RozvrhySuplovaniPage() {
             return;
         }
 
-        const loadScheduleForWeek = async () => {
+        const loadSchedule = async () => {
             setIsLoading(true);
             const newWeekSchedule = buildInitialWeekSchedule(weekDays);
             const docIds = weekDays.map(day => `${selectedClassId}-${format(day, 'yyyy-MM-dd')}`);
@@ -96,10 +96,8 @@ export default function RozvrhySuplovaniPage() {
 
                 querySnapshot.forEach(docSnap => {
                     const data = docSnap.data() as Rozvrh;
-                    // Ensure data.datum is valid before creating a Date object
                     if (data.datum) {
                         const dayIndex = newWeekSchedule.findIndex(d => isSameDay(d.date, new Date(data.datum + 'T00:00:00')));
-                        
                         if (dayIndex !== -1) {
                             newWeekSchedule[dayIndex] = {
                                 ...newWeekSchedule[dayIndex],
@@ -118,7 +116,7 @@ export default function RozvrhySuplovaniPage() {
             }
         };
 
-        loadScheduleForWeek();
+        loadSchedule();
     }, [selectedClassId, weekDays, firestore, toast]);
 
 
