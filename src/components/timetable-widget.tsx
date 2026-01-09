@@ -45,7 +45,7 @@ function LessonContextMenu({ children, lesson }: { children: React.ReactNode, le
                 <DropdownMenuItem onClick={handleClassBookEntry}>Zapsat do třídní knihy</DropdownMenuItem>
                 <DropdownMenuItem>Nové hodnocení</DropdownMenuItem>
                 <DropdownMenuItem>Probrané učivo</DropdownMenuItem>
-                <DropdownMenuItem>Poznámka dítěte/žáka/studenta do třídní knihy</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push('/dashboard/poznamky-zaka')}>Poznámka dítěte/žáka/studenta do třídní knihy</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>Informace k výuce</DropdownMenuItem>
                 <DropdownMenuItem>Přiložit výukový zdroj</DropdownMenuItem>

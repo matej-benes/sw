@@ -210,6 +210,24 @@
         "name",
         "shortcut"
       ]
+    },
+    "PoznamkaZaka": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "PoznamkaZaka",
+      "type": "object",
+      "description": "Represents a note for a student.",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the note." },
+        "studentId": { "type": "string", "description": "Reference to the student (User)." },
+        "tridaId": { "type": "string", "description": "Reference to the class (Trida)." },
+        "predmet": { "type": "string", "description": "The subject related to the note." },
+        "datum": { "type": "string", "format": "date-time", "description": "Date the note was created." },
+        "druh": { "type": "string", "description": "Type of note (e.g., pochvala, zapomenuté pomůcky)." },
+        "text": { "type": "string", "description": "The content of the note." },
+        "ucitelId": { "type": "string", "description": "Reference to the teacher who wrote the note." },
+        "datumPodpisu": { "type": "string", "format": "date-time", "description": "Date the note was signed by a parent." }
+      },
+      "required": ["id", "studentId", "tridaId", "datum", "druh", "text", "ucitelId"]
     }
   },
   "auth": {
@@ -322,6 +340,17 @@
               "description": "The unique identifier of the announcement."
             }
           ]
+        }
+      },
+      {
+        "path": "/poznamky-zaku/{poznamkaId}",
+        "definition": {
+            "entityName": "PoznamkaZaka",
+            "schema": { "$ref": "#/backend/entities/PoznamkaZaka" },
+            "description": "Stores notes related to students.",
+            "params": [
+                { "name": "poznamkaId", "description": "The unique ID of the student note." }
+            ]
         }
       }
     ],

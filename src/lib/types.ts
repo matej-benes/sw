@@ -72,3 +72,15 @@ export type ScheduleGrid = {
     [period: number]: LessonBlock | null;
   };
 };
+
+export interface PoznamkaZaka {
+  id: string;
+  studentId: string;
+  tridaId: string;
+  predmet?: string;
+  datum: string;
+  druh: string;
+  text: string;
+  ucitelId: string;
+  datumPodpisu?: string;
+}
