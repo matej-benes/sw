@@ -46,7 +46,7 @@ function MobileDashboard({ user, scheduleData, udalosti, substitutions }: { user
 
     const todaysSchedule = useMemo(() => {
         if (!scheduleData) return [];
-        const scheduleForDay = scheduleData.find(s => isSameDay(parseISO(s.datum), selectedDay) && s.tridaId === user.tridaId);
+        const scheduleForDay = scheduleData.find(s => s.datum && isSameDay(parseISO(s.datum), selectedDay) && s.tridaId === user.tridaId);
         return scheduleForDay?.hodiny || [];
     }, [scheduleData, selectedDay, user.tridaId]);
 
