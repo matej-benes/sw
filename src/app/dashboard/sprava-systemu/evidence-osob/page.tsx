@@ -49,7 +49,6 @@ import { useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import {
   collection,
@@ -170,7 +169,16 @@ function UserForm({
 
 function AdminUserManagement() {
     const firestore = useFirestore();
-    const usersCollection = useMemoFirebase(() => collection(firestore, 'users'), [firestore]);
+    const { hasRole, loading: authLoading } = useAuth();
+    
+    const usersCollection = useMemoFirebase(
+      () =>
+        !authLoading && hasRole('administrator')
+          ? collection(firestore, 'users')
+          : null,
+      [firestore, authLoading, hasRole]
+    );
+
     const { data: users, isLoading: usersLoading } = useCollection<User>(usersCollection);
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -212,30 +220,34 @@ function AdminUserManagement() {
       }
     };
 
-    const handleDeleteUser = async (userId: string) => {
-      if (!firestore) return;
-      try {
-        await deleteDoc(doc(firestore, 'users', userId));
-        toast({
-          title: 'Uživatel smazán',
-          description: 'Uživatel byl úspěšně odstraněn ze systému.',
-        });
-      } catch (error) {
-        console.error('Error deleting user:', error);
-        toast({
-          variant: 'destructive',
-          title: 'Chyba',
-          description: 'Při mazání uživatele došlo k chybě.',
-        });
-      }
-      setDeletingUser(null);
-    };
+    const handleDeleteUser = async () => {
+        if (!deletingUser || !firestore) return;
+        try {
+          await deleteDoc(doc(firestore, 'users', deletingUser.id));
+          toast({
+            title: 'Uživatel smazán',
+            description: 'Uživatel byl úspěšně odstraněn ze systému.',
+          });
+        } catch (error) {
+          console.error('Error deleting user:', error);
+          toast({
+            variant: 'destructive',
+            title: 'Chyba',
+            description: 'Při mazání uživatele došlo k chybě.',
+          });
+        }
+        setDeletingUser(null);
+      };
 
     const openDialog = (user: User | null) => {
       setEditingUser(user);
       setIsDialogOpen(true);
     };
 
+    const openDeleteDialog = (user: User) => {
+      setDeletingUser(user);
+    }
+    
     return (
     <>
       <Dialog open={isDialogOpen} onOpenChange={(isOpen) => {
@@ -268,14 +280,14 @@ function AdminUserManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {usersLoading && (
+                {(usersLoading || authLoading) && (
                   <TableRow>
                     <TableCell colSpan={4} className="h-24 text-center">
                       Načítání dat...
                     </TableCell>
                   </TableRow>
                 )}
-                {!usersLoading && users?.map((user) => (
+                {!usersLoading && !authLoading && users?.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.name}</TableCell>
                     <TableCell>{user.email}</TableCell>
@@ -301,7 +313,7 @@ function AdminUserManagement() {
                             Upravit
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onSelect={() => setDeletingUser(user)}
+                            onSelect={() => openDeleteDialog(user)}
                             className="text-destructive"
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
@@ -343,9 +355,9 @@ function AdminUserManagement() {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setDeletingUser(null)}>Zrušit</AlertDialogCancel>
+              <AlertDialogCancel>Zrušit</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => deletingUser && handleDeleteUser(deletingUser.id)}
+                onClick={handleDeleteUser}
                 className="bg-destructive hover:bg-destructive/90"
               >
                 Smazat
@@ -361,14 +373,14 @@ function AdminUserManagement() {
 export default function EvidenceOsobPage() {
   const { hasRole, loading: authLoading } = useAuth();
   
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Evidence osob</h1>
-        <p className="text-muted-foreground">Správa všech uživatelů v systému.</p>
-      </div>
-      {authLoading ? (
-         <Card>
+  if (authLoading) {
+    return (
+       <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Evidence osob</h1>
+          <p className="text-muted-foreground">Správa všech uživatelů v systému.</p>
+        </div>
+        <Card>
             <CardHeader>
               <CardTitle>Načítání...</CardTitle>
               <CardDescription>Ověřování oprávnění.</CardDescription>
@@ -379,16 +391,34 @@ export default function EvidenceOsobPage() {
                 </div>
             </CardContent>
         </Card>
-      ) : hasRole('administrator') ? (
-        <AdminUserManagement />
-      ) : (
+      </div>
+    )
+  }
+
+  if (!hasRole('administrator')) {
+     return (
+       <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Evidence osob</h1>
+          <p className="text-muted-foreground">Správa všech uživatelů v systému.</p>
+        </div>
         <Card>
             <CardHeader>
               <CardTitle>Přístup odepřen</CardTitle>
               <CardDescription>Pro přístup k této stránce nemáte oprávnění.</CardDescription>
             </CardHeader>
         </Card>
-      )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Evidence osob</h1>
+        <p className="text-muted-foreground">Správa všech uživatelů v systému.</p>
+      </div>
+      <AdminUserManagement />
     </div>
   );
 }
