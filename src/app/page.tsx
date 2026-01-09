@@ -14,7 +14,7 @@ import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, getDocs, doc, setDoc, addDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, addDoc, getDoc, updateDoc } from 'firebase/firestore';
 import type { User } from '@/lib/types';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 
@@ -214,22 +214,26 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
         }
 
         try {
+            // 1. Create Firebase Auth user
             const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
             const firebaseUser = userCredential.user;
 
-            const userDataToUpdate = {
+            // 2. Create the user document in Firestore with the data from the pre-seeded document
+            const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
+            await setDoc(newUserDocRef, {
                 name: registrationData.user.name,
-                roles: registrationData.user.roles,
-                tridaId: registrationData.user.tridaId,
                 email: values.email,
+                roles: registrationData.user.roles,
                 avatarUrl: registrationData.user.avatarUrl || `https://picsum.photos/seed/${firebaseUser.uid}/100/100`,
-                pin: '', // Clear the PIN after registration
-            };
-            
-            await setDoc(doc(firestore, 'users', firebaseUser.uid), userDataToUpdate);
-            
-            // Invalidate the PIN on the original document
-             await setDoc(doc(firestore, 'users', registrationData.user.id), { pin: `USED_${firebaseUser.uid}` }, { merge: true });
+                tridaId: registrationData.user.tridaId || null,
+                studentId: registrationData.user.studentId || null,
+            });
+
+            // 3. Invalidate the PIN on the original document to prevent re-use
+            const originalUserDocRef = doc(firestore, 'users', registrationData.user.id);
+            await updateDoc(originalUserDocRef, {
+                pin: `USED_${new Date().toISOString()}`, 
+            });
 
 
             toast({ title: 'Registrace úspěšná', description: 'Váš účet byl vytvořen, nyní se můžete přihlásit.' });
