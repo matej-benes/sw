@@ -43,7 +43,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -141,22 +141,15 @@ function ClassForm({
   );
 }
 
-export default function SpravaTridyPage() {
-  const { user, hasRole, loading: authLoading } = useAuth();
+function AdminClassManagement() {
   const firestore = useFirestore();
-  
-  const classesCollection = useMemoFirebase(
-    () => (firestore && !authLoading && hasRole('administrator') ? collection(firestore, 'tridy') : null),
-    [firestore, authLoading, hasRole]
-  );
+  const classesCollection = useMemoFirebase(() => collection(firestore, 'tridy'), [firestore]);
   const { data: classes, isLoading: classesLoading } = useCollection<Class>(classesCollection);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<Class | null>(null);
   const [deletingClass, setDeletingClass] = useState<Class | null>(null);
   const { toast } = useToast();
-  
-  const isLoading = authLoading || (hasRole('administrator') && classesLoading);
 
   const handleSaveClass = async (formData: ClassFormData) => {
     if (!firestore) return;
@@ -211,32 +204,9 @@ export default function SpravaTridyPage() {
     setEditingClass(classData);
     setIsDialogOpen(true);
   };
-
-  if (authLoading) {
-    return (
-        <div className="space-y-6">
-            <h1 className="text-3xl font-bold tracking-tight">Načítání...</h1>
-            <p className="text-muted-foreground">Ověřování oprávnění.</p>
-        </div>
-    )
-  }
-
-  if (!hasRole('administrator')) {
-    return (
-        <div className="space-y-6">
-            <h1 className="text-3xl font-bold tracking-tight">Přístup odepřen</h1>
-            <p className="text-muted-foreground">Pro přístup k této stránce nemáte oprávnění.</p>
-        </div>
-    )
-  }
-
+    
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Správa tříd</h1>
-        <p className="text-muted-foreground">Správa všech tříd v systému.</p>
-      </div>
-
+    <>
       <Dialog open={isDialogOpen} onOpenChange={(isOpen) => {
         setIsDialogOpen(isOpen);
         if (!isOpen) setEditingClass(null);
@@ -267,14 +237,14 @@ export default function SpravaTridyPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading && (
+                {classesLoading && (
                   <TableRow>
                     <TableCell colSpan={4} className="h-24 text-center">
                       Načítání dat...
                     </TableCell>
                   </TableRow>
                 )}
-                {!isLoading && classes?.map((cls) => (
+                {!classesLoading && classes?.map((cls) => (
                   <TableRow key={cls.id}>
                     <TableCell className="font-medium">{cls.name}</TableCell>
                     <TableCell>{cls.teacher}</TableCell>
@@ -342,6 +312,42 @@ export default function SpravaTridyPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+    </>
+  );
+}
+
+export default function SpravaTridyPage() {
+  const { hasRole, loading: authLoading } = useAuth();
+  
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Správa tříd</h1>
+        <p className="text-muted-foreground">Správa všech tříd v systému.</p>
+      </div>
+
+      {authLoading ? (
+        <Card>
+            <CardHeader>
+              <CardTitle>Načítání...</CardTitle>
+              <CardDescription>Ověřování oprávnění.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="h-24 text-center flex items-center justify-center">
+                    Načítání dat...
+                </div>
+            </CardContent>
+        </Card>
+      ) : hasRole('administrator') ? (
+        <AdminClassManagement />
+      ) : (
+         <Card>
+            <CardHeader>
+              <CardTitle>Přístup odepřen</CardTitle>
+              <CardDescription>Pro přístup k této stránce nemáte oprávnění.</CardDescription>
+            </CardHeader>
+        </Card>
+      )}
     </div>
   );
 }

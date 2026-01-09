@@ -43,7 +43,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -141,22 +141,15 @@ function SubjectForm({
   );
 }
 
-export default function PredmetyPage() {
-  const { user, hasRole, loading: authLoading } = useAuth();
+function AdminSubjectManagement() {
   const firestore = useFirestore();
-
-  const subjectsCollection = useMemoFirebase(
-    () => (firestore && !authLoading && hasRole('administrator') ? collection(firestore, 'predmety') : null),
-    [firestore, authLoading, hasRole]
-  );
+  const subjectsCollection = useMemoFirebase(() => collection(firestore, 'predmety'), [firestore]);
   const { data: subjects, isLoading: subjectsLoading } = useCollection<Subject>(subjectsCollection);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [deletingSubject, setDeletingSubject] = useState<Subject | null>(null);
   const { toast } = useToast();
-  
-  const isLoading = authLoading || (hasRole('administrator') && subjectsLoading);
 
   const handleSaveSubject = async (formData: SubjectFormData) => {
     if (!firestore) return;
@@ -212,33 +205,8 @@ export default function PredmetyPage() {
     setIsDialogOpen(true);
   };
 
-  if (authLoading) {
-    return (
-        <div className="space-y-6">
-            <h1 className="text-3xl font-bold tracking-tight">Načítání...</h1>
-            <p className="text-muted-foreground">Ověřování oprávnění.</p>
-        </div>
-    )
-  }
-
-  if (!hasRole('administrator')) {
-    return (
-        <div className="space-y-6">
-            <h1 className="text-3xl font-bold tracking-tight">Přístup odepřen</h1>
-            <p className="text-muted-foreground">Pro přístup k této stránce nemáte oprávnění.</p>
-        </div>
-    )
-  }
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Správa předmětů</h1>
-        <p className="text-muted-foreground">
-          Správa všech vyučovaných předmětů v systému.
-        </p>
-      </div>
-
+    <>
       <Dialog open={isDialogOpen} onOpenChange={(isOpen) => {
         setIsDialogOpen(isOpen);
         if (!isOpen) setEditingSubject(null);
@@ -269,14 +237,14 @@ export default function PredmetyPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading && (
+                {subjectsLoading && (
                   <TableRow>
                     <TableCell colSpan={4} className="h-24 text-center">
                       Načítání dat...
                     </TableCell>
                   </TableRow>
                 )}
-                {!isLoading && subjects?.map((subject) => (
+                {!subjectsLoading && subjects?.map((subject) => (
                   <TableRow key={subject.id}>
                     <TableCell className="font-medium">{subject.name}</TableCell>
                     <TableCell>{subject.shortcut}</TableCell>
@@ -346,8 +314,44 @@ export default function PredmetyPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-    </div>
+    </>
   );
 }
 
-    
+export default function PredmetyPage() {
+  const { hasRole, loading: authLoading } = useAuth();
+  
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Správa předmětů</h1>
+        <p className="text-muted-foreground">
+          Správa všech vyučovaných předmětů v systému.
+        </p>
+      </div>
+
+       {authLoading ? (
+         <Card>
+            <CardHeader>
+              <CardTitle>Načítání...</CardTitle>
+              <CardDescription>Ověřování oprávnění.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="h-24 text-center flex items-center justify-center">
+                    Načítání dat...
+                </div>
+            </CardContent>
+        </Card>
+      ) : hasRole('administrator') ? (
+        <AdminSubjectManagement />
+      ) : (
+        <Card>
+            <CardHeader>
+              <CardTitle>Přístup odepřen</CardTitle>
+              <CardDescription>Pro přístup k této stránce nemáte oprávnění.</CardDescription>
+            </CardHeader>
+        </Card>
+      )}
+    </div>
+  );
+}

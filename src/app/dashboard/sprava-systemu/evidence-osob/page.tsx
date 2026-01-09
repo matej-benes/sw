@@ -45,7 +45,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -57,7 +57,6 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
-  serverTimestamp,
 } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
@@ -169,108 +168,76 @@ function UserForm({
   );
 }
 
-export default function EvidenceOsobPage() {
-  const { user, hasRole, loading: authLoading } = useAuth();
-  const firestore = useFirestore();
-  
-  const usersCollection = useMemoFirebase(
-    () => (firestore && !authLoading && hasRole('administrator') ? collection(firestore, 'users') : null),
-    [firestore, authLoading, hasRole]
-  );
-  const { data: users, isLoading: usersLoading } = useCollection<User>(usersCollection);
+function AdminUserManagement() {
+    const firestore = useFirestore();
+    const usersCollection = useMemoFirebase(() => collection(firestore, 'users'), [firestore]);
+    const { data: users, isLoading: usersLoading } = useCollection<User>(usersCollection);
 
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [deletingUser, setDeletingUser] = useState<User | null>(null);
-  const { toast } = useToast();
-  
-  const isLoading = authLoading || (hasRole('administrator') && usersLoading);
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [editingUser, setEditingUser] = useState<User | null>(null);
+    const [deletingUser, setDeletingUser] = useState<User | null>(null);
+    const { toast } = useToast();
 
-  const handleSaveUser = async (formData: Partial<User>) => {
-    if (!firestore) return;
-    try {
-      if (editingUser) {
-        const userRef = doc(firestore, 'users', editingUser.id);
-        await updateDoc(userRef, formData);
+    const handleSaveUser = async (formData: Partial<User>) => {
+      if (!firestore) return;
+      try {
+        if (editingUser) {
+          const userRef = doc(firestore, 'users', editingUser.id);
+          await updateDoc(userRef, formData);
+          toast({
+            title: 'Uživatel aktualizován',
+            description: `Uživatel ${formData.name} byl úspěšně aktualizován.`,
+          });
+        } else {
+          const newUser = {
+            ...formData,
+            avatarUrl: `https://picsum.photos/seed/${Date.now()}/100/100`,
+          };
+          const docRef = await addDoc(collection(firestore, 'users'), newUser);
+          await updateDoc(docRef, { id: docRef.id }); 
+          toast({
+            title: 'Uživatel přidán',
+            description: `Uživatel ${formData.name} byl úspěšně přidán.`,
+          });
+        }
+        setIsDialogOpen(false);
+        setEditingUser(null);
+      } catch (error) {
+        console.error('Error saving user:', error);
         toast({
-          title: 'Uživatel aktualizován',
-          description: `Uživatel ${formData.name} byl úspěšně aktualizován.`,
-        });
-      } else {
-        // In a real app, you would create a user in Firebase Auth first
-        // and use the UID as the document ID.
-        const newUser = {
-          ...formData,
-          avatarUrl: `https://picsum.photos/seed/${Date.now()}/100/100`,
-        };
-        const docRef = await addDoc(collection(firestore, 'users'), newUser);
-        await updateDoc(docRef, { id: docRef.id }); // Store the ID within the document
-        toast({
-          title: 'Uživatel přidán',
-          description: `Uživatel ${formData.name} byl úspěšně přidán.`,
+          variant: 'destructive',
+          title: 'Chyba',
+          description: 'Při ukládání uživatele došlo k chybě.',
         });
       }
-      setIsDialogOpen(false);
-      setEditingUser(null);
-    } catch (error) {
-      console.error('Error saving user:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Chyba',
-        description: 'Při ukládání uživatele došlo k chybě.',
-      });
-    }
-  };
+    };
 
-  const handleDeleteUser = async (userId: string) => {
-    if (!firestore) return;
-    try {
-      await deleteDoc(doc(firestore, 'users', userId));
-      toast({
-        title: 'Uživatel smazán',
-        description: 'Uživatel byl úspěšně odstraněn ze systému.',
-      });
-    } catch (error) {
-      console.error('Error deleting user:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Chyba',
-        description: 'Při mazání uživatele došlo k chybě.',
-      });
-    }
-    setDeletingUser(null);
-  };
+    const handleDeleteUser = async (userId: string) => {
+      if (!firestore) return;
+      try {
+        await deleteDoc(doc(firestore, 'users', userId));
+        toast({
+          title: 'Uživatel smazán',
+          description: 'Uživatel byl úspěšně odstraněn ze systému.',
+        });
+      } catch (error) {
+        console.error('Error deleting user:', error);
+        toast({
+          variant: 'destructive',
+          title: 'Chyba',
+          description: 'Při mazání uživatele došlo k chybě.',
+        });
+      }
+      setDeletingUser(null);
+    };
 
-  const openDialog = (user: User | null) => {
-    setEditingUser(user);
-    setIsDialogOpen(true);
-  };
+    const openDialog = (user: User | null) => {
+      setEditingUser(user);
+      setIsDialogOpen(true);
+    };
 
-  if (authLoading) {
     return (
-        <div className="space-y-6">
-            <h1 className="text-3xl font-bold tracking-tight">Načítání...</h1>
-            <p className="text-muted-foreground">Ověřování oprávnění.</p>
-        </div>
-    )
-  }
-
-  if (!hasRole('administrator')) {
-    return (
-        <div className="space-y-6">
-            <h1 className="text-3xl font-bold tracking-tight">Přístup odepřen</h1>
-            <p className="text-muted-foreground">Pro přístup k této stránce nemáte oprávnění.</p>
-        </div>
-    )
-  }
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Evidence osob</h1>
-        <p className="text-muted-foreground">Správa všech uživatelů v systému.</p>
-      </div>
-
+    <>
       <Dialog open={isDialogOpen} onOpenChange={(isOpen) => {
         setIsDialogOpen(isOpen);
         if (!isOpen) setEditingUser(null);
@@ -301,14 +268,14 @@ export default function EvidenceOsobPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading && (
+                {usersLoading && (
                   <TableRow>
                     <TableCell colSpan={4} className="h-24 text-center">
                       Načítání dat...
                     </TableCell>
                   </TableRow>
                 )}
-                {!isLoading && users?.map((user) => (
+                {!usersLoading && users?.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.name}</TableCell>
                     <TableCell>{user.email}</TableCell>
@@ -386,8 +353,42 @@ export default function EvidenceOsobPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+      </>
+    );
+}
+
+
+export default function EvidenceOsobPage() {
+  const { hasRole, loading: authLoading } = useAuth();
+  
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Evidence osob</h1>
+        <p className="text-muted-foreground">Správa všech uživatelů v systému.</p>
+      </div>
+      {authLoading ? (
+         <Card>
+            <CardHeader>
+              <CardTitle>Načítání...</CardTitle>
+              <CardDescription>Ověřování oprávnění.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="h-24 text-center flex items-center justify-center">
+                    Načítání dat...
+                </div>
+            </CardContent>
+        </Card>
+      ) : hasRole('administrator') ? (
+        <AdminUserManagement />
+      ) : (
+        <Card>
+            <CardHeader>
+              <CardTitle>Přístup odepřen</CardTitle>
+              <CardDescription>Pro přístup k této stránce nemáte oprávnění.</CardDescription>
+            </CardHeader>
+        </Card>
+      )}
     </div>
   );
 }
-    
-    
