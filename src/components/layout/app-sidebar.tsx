@@ -8,45 +8,76 @@ import {
   MessageCircle,
   Package,
   Users,
+  Shield,
 } from 'lucide-react';
 
 import { useAuth } from '@/hooks/use-auth';
 import { Logo } from '@/components/logo';
 import { cn } from '@/lib/utils';
 
-const teacherNav = [
+const commonNav = [
   { name: 'Nástěnka', href: '/dashboard', icon: Home },
-  { name: 'Studenti', href: '/dashboard/studenti', icon: Users },
   { name: 'Rozvrh', href: '/dashboard/rozvrh', icon: CalendarDays },
   { name: 'Zprávy', href: '/dashboard/zpravy', icon: MessageCircle },
 ];
 
-const parentNav = [
-  { name: 'Nástěnka', href: '/dashboard', icon: Home },
-  { name: 'Známky', href: '/dashboard/znamky', icon: GraduationCap },
-  { name: 'Rozvrh', href: '/dashboard/rozvrh', icon: CalendarDays },
-  { name: 'Zprávy', href: '/dashboard/zpravy', icon: MessageCircle },
-];
-
-const studentNav = [
-  { name: 'Nástěnka', href: '/dashboard', icon: Home },
-  { name: 'Známky', href: '/dashboard/znamky', icon: GraduationCap },
-  { name: 'Rozvrh', href: '/dashboard/rozvrh', icon: CalendarDays },
-  { name: 'Materiály', href: '/dashboard/materialy', icon: Package },
-  { name: 'Zprávy', href: '/dashboard/zpravy', icon: MessageCircle },
-];
-
-const navItemsByRole = {
-  ucitel: teacherNav,
-  rodic: parentNav,
-  ziak: studentNav,
+const navConfig = {
+  ucitel: [
+    ...commonNav,
+    { name: 'Studenti', href: '/dashboard/studenti', icon: Users },
+  ],
+  rodic: [
+    ...commonNav,
+    { name: 'Známky', href: '/dashboard/znamky', icon: GraduationCap },
+    { name: 'Materiály', href: '/dashboard/materialy', icon: Package },
+  ],
+  ziak: [
+    ...commonNav,
+    { name: 'Známky', href: '/dashboard/znamky', icon: GraduationCap },
+    { name: 'Materiály', href: '/dashboard/materialy', icon: Package },
+  ],
+  administrator: [
+    { name: 'Nástěnka', href: '/dashboard', icon: Home },
+    { name: 'Uživatelé', href: '/dashboard/uzivatele', icon: Users },
+    { name: 'Třídy', href: '/dashboard/tridy', icon: GraduationCap },
+    { name: 'Systém', href: '/dashboard/system', icon: Shield },
+  ],
 };
 
+
 export function AppSidebar() {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const pathname = usePathname();
 
-  const navItems = user ? navItemsByRole[user.role] : [];
+  let navItems: { name: string; href: string; icon: React.ElementType }[] = [];
+
+  if (user) {
+    if (hasRole('administrator')) {
+      // Admins see a special nav, plus teacher nav if they are also a teacher
+      navItems.push(...navConfig.administrator);
+      if (hasRole('ucitel')) {
+         navItems.push(...navConfig.ucitel.filter(item => !navItems.some(i => i.href === item.href)));
+      }
+    } else {
+        const userRoles = user.roles;
+        const seenHrefs = new Set();
+        userRoles.forEach(role => {
+            if (role in navConfig) {
+                navConfig[role as keyof typeof navConfig].forEach(item => {
+                    if(!seenHrefs.has(item.href)) {
+                        navItems.push(item);
+                        seenHrefs.add(item.href);
+                    }
+                })
+            }
+        });
+        // fallback to student nav if no specific role matches
+        if(navItems.length === 0) {
+            navItems = navConfig.ziak;
+        }
+    }
+  }
+
 
   return (
     <div className="hidden border-r bg-card md:block">

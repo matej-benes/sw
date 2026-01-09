@@ -1,11 +1,13 @@
-export type Role = 'ucitel' | 'rodic' | 'ziak';
+export type Role = 'ucitel' | 'rodic' | 'ziak' | 'administrator' | 'vedouci pracovnik';
 
 export interface User {
   id: string;
   name: string;
   email: string;
-  role: Role;
+  roles: Role[];
   avatarUrl: string;
+  tridaId?: string; // Class for student or teacher
+  studentId?: string; // For parent role
 }
 
 export interface Grade {
@@ -18,11 +20,12 @@ export interface Grade {
 
 export interface Student {
   id: string;
-  name: string;
+  name:string;
   avatarUrl: string;
   grades: Grade[];
   parentId: string;
   teacherId: string;
+  classId: string;
 }
 
 export interface Lesson {

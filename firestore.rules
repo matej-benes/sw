@@ -1,14 +1,14 @@
 /**
  * Core Philosophy:
  * This ruleset enforces a role-based security model for a school application.
- * Access is primarily determined by a user's role ('ucitel', 'ziak', 'rodic')
+ * Access is primarily determined by a user's roles ('ucitel', 'ziak', 'rodic', 'administrator')
  * and their association with a specific class ('Trida'). Teachers have elevated
  * permissions to manage class data and student grades, while students and parents
- * have read-only access to their own relevant information. The default posture
- * is deny-all, granting permissions explicitly.
+ * have read-only access to their own relevant information. Administrators have
+ * permissions to manage user roles. The default posture is deny-all, granting permissions explicitly.
  *
  * Data Structure:
- * - /users/{userId}: Contains core user data, including their role and a
+ * - /users/{userId}: Contains core user data, including their roles and a
  *   denormalized `tridaId` to link them to a class.
  * - /users/{userId}/znamky/{znamkaId}: A user's grades are stored in a private
  *   subcollection, enforcing ownership through the path.
@@ -22,6 +22,7 @@
  *
  * Key Security Decisions:
  * - User Listing: Listing the `/users` collection is disabled to protect PII.
+ * - Role Management: Only users with the 'administrator' role can change other users' roles.
  * - Class Listing: Listing the `/tridy` collection is disabled for performance
  *   and security. The app should fetch the user's single class via a direct `get` call.
  * - Teacher Authority: A user with the 'ucitel' role can manage grades and
@@ -68,10 +69,20 @@ service cloud.firestore {
     function getAuthUserData() {
       return getUserData(request.auth.uid);
     }
+    
+    // Checks if the authenticated user has a specific role.
+    function hasRole(role) {
+      return isSignedIn() && role in getAuthUserData().data.roles;
+    }
 
     // Checks if the authenticated user has the 'ucitel' (teacher) role.
     function isTeacher() {
-      return isSignedIn() && getAuthUserData().data.role == 'ucitel';
+      return hasRole('ucitel');
+    }
+    
+    // Checks if the authenticated user has the 'administrator' role.
+    function isAdministrator() {
+        return hasRole('administrator');
     }
 
     // Checks if the authenticated user is the designated teacher of a specific class.
@@ -83,6 +94,11 @@ service cloud.firestore {
     function isTeacherOfStudent(studentId) {
       let studentData = getUserData(studentId).data;
       return isTeacherOfClass(studentData.tridaId);
+    }
+    
+    // Checks if the authenticated user is the parent of a given student.
+    function isParentOfStudent(studentId) {
+      return hasRole('rodic') && getAuthUserData().data.studentId == studentId;
     }
 
     // Checks if the authenticated user is a member (student or teacher) of a specific class.
@@ -96,62 +112,63 @@ service cloud.firestore {
      * @path /users/{userId}
      * @allow (get) A user reading their own profile.
      * @allow (get) A teacher reading the profile of a student in their class.
+     * @allow (update) A user updating their own profile (but not roles).
+     * @allow (update) An administrator updating any user's profile (including roles).
      * @deny (list) Any user trying to list all users in the database.
-     * @deny (update) A user trying to change another user's profile.
-     * @principle Restricts access to a user's own data tree and grants supervisory access to teachers.
+     * @principle Restricts access to a user's own data tree and grants supervisory access to teachers and administrators.
      */
     match /users/{userId} {
-      allow get: if isOwner(userId) || isTeacherOfStudent(userId);
+      allow get: if isOwner(userId) || isTeacherOfStudent(userId) || isAdministrator();
       allow list: if false;
       allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-      allow delete: if isExistingOwner(userId);
+      allow update: if (isExistingOwner(userId) && request.resource.data.roles == resource.data.roles) || isAdministrator();
+      allow delete: if isExistingOwner(userId) || isAdministrator();
     }
 
     /**
      * @description Controls access to class information.
      * @path /tridy/{tridaId}
      * @allow (get) A student or teacher reading the details of their own class.
-     * @allow (create) A teacher creating a new class and assigning themself to it.
+     * @allow (create) A teacher or admin creating a new class.
      * @deny (list) Any user trying to list all classes.
      * @deny (update) A student trying to change class details.
-     * @principle Enforces membership for reads and teacher-only access for writes.
+     * @principle Enforces membership for reads and teacher/admin-only access for writes.
      */
     match /tridy/{tridaId} {
-      allow get: if isMemberOfClass(tridaId);
+      allow get: if isMemberOfClass(tridaId) || isAdministrator();
       allow list: if false;
-      allow create: if isTeacher() && request.resource.data.ucitelId == request.auth.uid;
-      allow update: if isTeacherOfClass(tridaId) && resource != null;
-      allow delete: if isTeacherOfClass(tridaId) && resource != null;
+      allow create: if isTeacher() && request.resource.data.ucitelId == request.auth.uid || isAdministrator();
+      allow update: if isTeacherOfClass(tridaId) || isAdministrator() && resource != null;
+      allow delete: if isTeacherOfClass(tridaId) || isAdministrator() && resource != null;
 
       /**
        * @description Controls access to daily class schedules.
        * @path /tridy/{tridaId}/rozvrhy/{den}
        * @allow (get, list) A student or teacher reading schedules for their class.
-       * @allow (create) The class teacher creating a new daily schedule.
+       * @allow (create) The class teacher or admin creating a new daily schedule.
        * @deny (get) A user trying to read schedules for a class they are not in.
        * @deny (update) A student trying to modify the class schedule.
        * @principle Inherits access rights from the parent class document.
        */
       match /rozvrhy/{den} {
-        allow get, list: if isMemberOfClass(tridaId);
-        allow create: if isTeacherOfClass(tridaId) && request.resource.data.tridaId == tridaId;
-        allow update: if isTeacherOfClass(tridaId) && resource != null;
-        allow delete: if isTeacherOfClass(tridaId) && resource != null;
+        allow get, list: if isMemberOfClass(tridaId) || isAdministrator();
+        allow create: if (isTeacherOfClass(tridaId) || isAdministrator()) && request.resource.data.tridaId == tridaId;
+        allow update: if (isTeacherOfClass(tridaId) || isAdministrator()) && resource != null;
+        allow delete: if (isTeacherOfClass(tridaId) || isAdministrator()) && resource != null;
       }
     }
 
     /**
      * @description Controls access to a student's grades.
      * @path /users/{userId}/znamky/{znamkaId}
-     * @allow (get, list) A user reading their own grades.
+     * @allow (get, list) A user reading their own grades, or a parent reading their child's grades.
      * @allow (create) The student's assigned teacher creating a new grade for them.
      * @deny (get) A student trying to read another student's grades.
      * @deny (create) A teacher from another class trying to add a grade.
-     * @principle Path-based security ensures users can only access their own subcollections.
+     * @principle Path-based security ensures users can only access their own/child's subcollections.
      */
     match /users/{userId}/znamky/{znamkaId} {
-      allow get, list: if isOwner(userId);
+      allow get, list: if isOwner(userId) || isParentOfStudent(userId);
       allow create: if isTeacherOfStudent(userId) && request.resource.data.studentId == userId && request.resource.data.ucitelId == request.auth.uid;
       allow update: if isTeacherOfStudent(userId) && resource != null;
       allow delete: if isTeacherOfStudent(userId) && resource != null;
@@ -162,17 +179,17 @@ service cloud.firestore {
      * @path /oznameni/{oznameniId}
      * @allow (get) A user reading an announcement for their own class.
      * @allow (list) A user listing announcements, but only for their specific class.
-     * @allow (create) The class teacher creating a new announcement for their class.
+     * @allow (create) The class teacher or admin creating a new announcement for their class.
      * @deny (get) A user trying to read an announcement for a different class.
      * @deny (list) A user trying to list all announcements across all classes.
-     * @principle Enforces query-based security for list operations and teacher-only writes.
+     * @principle Enforces query-based security for list operations and teacher/admin-only writes.
      */
     match /oznameni/{oznameniId} {
-      allow get: if getAuthUserData().data.tridaId == resource.data.proTridu;
-      allow list: if request.query.proTridu == getAuthUserData().data.tridaId;
-      allow create: if isTeacherOfClass(request.resource.data.proTridu);
-      allow update: if isTeacherOfClass(resource.data.proTridu) && resource != null;
-      allow delete: if isTeacherOfClass(resource.data.proTridu) && resource != null;
+      allow get: if getAuthUserData().data.tridaId == resource.data.proTridu || isAdministrator();
+      allow list: if request.query.proTridu == getAuthUserData().data.tridaId || isAdministrator();
+      allow create: if isTeacherOfClass(request.resource.data.proTridu) || isAdministrator();
+      allow update: if (isTeacherOfClass(resource.data.proTridu) || isAdministrator()) && resource != null;
+      allow delete: if (isTeacherOfClass(resource.data.proTridu) || isAdministrator()) && resource != null;
     }
   }
 }

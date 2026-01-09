@@ -13,13 +13,14 @@ import { mockStudents } from '@/lib/mock-data';
 import { Loader2, Send, Wand2 } from 'lucide-react';
 
 export default function ZpravyPage() {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const { toast } = useToast();
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const isTeacher = hasRole('ucitel');
 
   const handleGenerateMessage = async () => {
-    if (!user || user.role !== 'ucitel') return;
+    if (!user || !isTeacher) return;
 
     setIsLoading(true);
     try {
@@ -85,7 +86,7 @@ export default function ZpravyPage() {
               <CardDescription>Napište novou zprávu.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {user?.role === 'ucitel' && (
+              {isTeacher && (
                 <div className="space-y-2">
                   <Label htmlFor="student-select">Příjemce</Label>
                   <Select>
@@ -96,14 +97,17 @@ export default function ZpravyPage() {
                       {mockStudents.map((s) => (
                         <SelectItem key={s.id} value={s.id}>{s.name} (Žák)</SelectItem>
                       ))}
+                       {mockStudents.map((s) => (
+                        <SelectItem key={`${s.id}-rodic`} value={`${s.parentId}`}>Rodič - {s.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
               )}
-                {user?.role !== 'ucitel' && (
+                {!isTeacher && (
                 <div className="space-y-2">
                   <Label htmlFor="teacher-select">Příjemce</Label>
-                  <Input id="teacher-select" value="Mgr. Jana Nováková" readOnly />
+                  <Input id="teacher-select" value="Mgr. Robert Bartošek" readOnly />
                 </div>
                 )}
               <div className="space-y-2">
@@ -117,7 +121,7 @@ export default function ZpravyPage() {
                 />
               </div>
               <div className="flex justify-between items-center">
-                {user?.role === 'ucitel' && (
+                {isTeacher && (
                   <Button variant="outline" onClick={handleGenerateMessage} disabled={isLoading}>
                     {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
                     Vytvořit s AI

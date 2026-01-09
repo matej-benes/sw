@@ -8,20 +8,30 @@ import type { Grade, Student } from '@/lib/types';
 import { useEffect, useState } from 'react';
 
 export default function ZnamkyPage() {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const [student, setStudent] = useState<Student | null>(null);
 
   useEffect(() => {
     if (user) {
-      if (user.role === 'rodic') {
-        const child = getStudentForParent(user.id);
-        setStudent(child || null);
-      } else if (user.role === 'ziak') {
-        const self = getStudentById(user.id.replace('user-', 'student-')); // Mock logic to link user and student
+      if (hasRole('rodic') && user.studentId) {
+        // In a real app, user.studentId would probably be the student's user ID, not student-1
+        // but for mock data this works. We might need to adjust based on final user<->student link
+        const studentUser = getStudentById(`student-${user.studentId.split('-')[1]}`);
+        setStudent(studentUser || null);
+      } else if (hasRole('ziak')) {
+        const self = getStudentById(`student-${user.id.split('-')[1]}`); 
         setStudent(self || null);
       }
     }
-  }, [user]);
+  }, [user, hasRole]);
+  
+  // Use Adam Volný as default for parent view if their child is not found, for demo purposes
+  useEffect(()=> {
+    if(hasRole('rodic') && !student){
+        setStudent(getStudentById('student-1') || null)
+    }
+  },[hasRole, student])
+
 
   const grades = student?.grades || [];
   
@@ -41,7 +51,7 @@ export default function ZnamkyPage() {
       <Card>
         <CardHeader>
           <CardTitle>
-            {user?.role === 'rodic' ? `Známky pro ${student?.name || 'Vaše dítě'}` : 'Moje známky'}
+            {hasRole('rodic') ? `Známky pro ${student?.name || 'Vaše dítě'}` : 'Moje známky'}
           </CardTitle>
           <CardDescription>
             Průměrná známka: <span className="font-bold text-primary">{calculateAverage(grades)}</span>

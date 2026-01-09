@@ -31,7 +31,7 @@ function TimetableDisplay({ timetable, isTeacher }: { timetable: Timetable; isTe
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {timetable[day].length > 0 ? (
+                    {timetable[day]?.length > 0 ? (
                         timetable[day].map((lesson, index) => (
                             <TableRow key={index}>
                                 <TableCell className="font-medium">{lesson.time}</TableCell>
@@ -59,12 +59,13 @@ function TimetableDisplay({ timetable, isTeacher }: { timetable: Timetable; isTe
 
 
 export default function RozvrhPage() {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
 
-  const isTeacher = user?.role === 'ucitel';
+  const isTeacher = hasRole('ucitel');
+  const isParent = hasRole('rodic');
   const timetable = isTeacher ? mockTeacherTimetable : mockStudentTimetable;
   
-  const title = isTeacher ? 'Váš rozvrh' : (user?.role === 'rodic' ? 'Rozvrh dítěte' : 'Váš rozvrh');
+  const title = isTeacher ? 'Váš rozvrh' : (isParent ? 'Rozvrh dítěte' : 'Váš rozvrh');
   const description = isTeacher ? 'Přehled Vašich vyučovacích hodin.' : 'Přehled vyučovacích hodin.';
 
   return (

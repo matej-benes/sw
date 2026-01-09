@@ -1,7 +1,7 @@
 'use client';
 
-import { getMockUserByEmail, mockUsers } from '@/lib/mock-data';
-import type { Role, User } from '@/lib/types';
+import { getMockUserByEmail } from '@/lib/mock-data';
+import type { User } from '@/lib/types';
 import { useRouter, usePathname } from 'next/navigation';
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
 
@@ -10,6 +10,7 @@ interface AuthContextType {
   signIn: (email: string, pass: string) => Promise<void>;
   signOut: () => void;
   loading: boolean;
+  hasRole: (role: User['roles'][number]) => boolean;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -38,18 +39,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, loading, pathname, router]);
 
+  const hasRole = (role: User['roles'][number]) => {
+    return user?.roles.includes(role) ?? false;
+  };
 
   const signIn = async (email: string, pass: string): Promise<void> => {
     // This is a mock sign-in. In a real app, you'd call Firebase.
     return new Promise((resolve, reject) => {
       setTimeout(() => {
         const foundUser = getMockUserByEmail(email);
-        if (foundUser && pass === 'password') { // Mock password check
+        // Mock password check - use a more secure password for real users
+        const validPasswords = ['password', 'heslo'];
+        if (foundUser && validPasswords.includes(pass)) { 
           setUser(foundUser);
           sessionStorage.setItem('skolaweb-user', JSON.stringify(foundUser));
           resolve();
         } else {
-          reject(new Error('Nesprávný email nebo heslo. Zkuste "ucitel@skola.cz" a heslo "password".'));
+          reject(new Error('Nesprávný email nebo heslo. Zkuste "matej.romana@seznam.cz" a heslo "password".'));
         }
       }, 1000);
     });
@@ -61,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.push('/');
   };
 
-  const value = { user, signIn, signOut, loading };
+  const value = { user, signIn, signOut, loading, hasRole };
 
   if (loading) {
     return (

@@ -19,21 +19,27 @@
           "description": "The user's email address.",
           "format": "email"
         },
-        "role": {
-          "type": "string",
-          "description": "The user's role (e.g., ucitel, rodic, ziak)."
+        "roles": {
+          "type": "array",
+          "description": "The user's roles (e.g., ucitel, rodic, ziak, administrator, vedouci pracovnik).",
+          "items": {
+            "type": "string"
+          }
         },
         "tridaId": {
           "type": "string",
           "description": "Reference to Trida. (Relationship: User N:1 Trida) The class ID to which the user belongs."
+        },
+        "studentId": {
+          "type": "string",
+          "description": "For parents, the ID of their child student."
         }
       },
       "required": [
         "id",
         "name",
         "email",
-        "role",
-        "tridaId"
+        "roles"
       ]
     },
     "Trida": {
@@ -65,8 +71,7 @@
       "required": [
         "id",
         "nazev",
-        "ucitelId",
-        "ziaciIds"
+        "ucitelId"
       ]
     },
     "Znamka": {
@@ -128,37 +133,18 @@
           "type": "string",
           "description": "The day of the week for the schedule."
         },
-        "hodina1": {
-          "type": "string",
-          "description": "The subject for the first hour."
-        },
-        "hodina2": {
-          "type": "string",
-          "description": "The subject for the second hour."
-        },
-        "hodina3": {
-          "type": "string",
-          "description": "The subject for the third hour."
-        },
-        "hodina4": {
-          "type": "string",
-          "description": "The subject for the fourth hour."
-        },
-        "hodina5": {
-          "type": "string",
-          "description": "The subject for the fifth hour."
-        },
-        "hodina6": {
-          "type": "string",
-          "description": "The subject for the sixth hour."
+        "hodiny": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
         "id",
         "tridaId",
         "den",
-        "hodina1",
-        "hodina2"
+        "hodiny"
       ]
     },
     "Oznameni": {
@@ -290,6 +276,6 @@
         }
       }
     ],
-    "reasoning": "The Firestore structure is designed to provide a secure and scalable data model for the ŠkolaWeb application. It addresses the requirements for user management, class management, grade management, scheduling, and announcements. The structure is optimized for role-based access control (učitel, rodic, ziak) and aims to minimize the need for complex security rules. The key strategy for achieving authorization independence is denormalization. For example, the `tridaId` is included in the `users` collection to avoid `get()` calls in security rules to verify the `trida` of a given `user`. This approach enables atomic operations and simplifies security rule debugging.\n\nTo support the QAPs, the structure leverages structural segregation. User-specific data (grades) are stored in subcollections of the `users` collection, ensuring that only the authenticated user (or a teacher) can access their own (or their student's) data. Announcements are segregated by class, enabling efficient listing of announcements relevant to a specific class. Collaborative data (such as class schedules) resides under the `tridy` collection, using the document ID as the `tridaId`.\n\nMembership maps aren't explicitly used here, but the structure allows for easy extension with membership maps if collaborative features become more complex in the future. For instance, if a more granular role system within a class is needed (e.g., assigning students to groups), a `members` map could be added to the `tridy/{tridaId}` document."
+    "reasoning": "The Firestore structure is designed to provide a secure and scalable data model for the ŠkolaWeb application. It addresses the requirements for user management, class management, grade management, scheduling, and announcements. The structure is optimized for role-based access control (učitel, rodic, ziak, administrator) and aims to minimize the need for complex security rules. The key strategy for achieving authorization independence is denormalization. For example, the `tridaId` is included in the `users` collection to avoid `get()` calls in security rules to verify the `trida` of a given `user`. This approach enables atomic operations and simplifies security rule debugging.\n\nTo support the QAPs, the structure leverages structural segregation. User-specific data (grades) are stored in subcollections of the `users` collection, ensuring that only the authenticated user (or a teacher/parent) can access their own (or their child's) data. Announcements are segregated by class, enabling efficient listing of announcements relevant to a specific class. Collaborative data (such as class schedules) resides under the `tridy` collection, using the document ID as the `tridaId`.\n\nMembership maps aren't explicitly used here, but the structure allows for easy extension with membership maps if collaborative features become more complex in the future. For instance, if a more granular role system within a class is needed (e.g., assigning students to groups), a `members` map could be added to the `tridy/{tridaId}` document."
   }
 }
