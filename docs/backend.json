@@ -1,0 +1,295 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user in the system.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user."
+        },
+        "name": {
+          "type": "string",
+          "description": "The user's full name."
+        },
+        "email": {
+          "type": "string",
+          "description": "The user's email address.",
+          "format": "email"
+        },
+        "role": {
+          "type": "string",
+          "description": "The user's role (e.g., učitel, rodic, ziak)."
+        },
+        "tridaId": {
+          "type": "string",
+          "description": "Reference to Trida. (Relationship: User N:1 Trida) The class ID to which the user belongs."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "email",
+        "role",
+        "tridaId"
+      ]
+    },
+    "Trida": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Trida",
+      "type": "object",
+      "description": "Represents a class (trida) in the school.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the class."
+        },
+        "nazev": {
+          "type": "string",
+          "description": "The name of the class."
+        },
+        "ucitelId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N Trida) The ID of the teacher in charge of the class."
+        },
+        "ziaciIds": {
+          "type": "array",
+          "description": "References to Users. (Relationship: User N:N Trida) An array of student IDs belonging to this class.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "nazev",
+        "ucitelId",
+        "ziaciIds"
+      ]
+    },
+    "Znamka": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Znamka",
+      "type": "object",
+      "description": "Represents a grade (znamka) for a student.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the grade."
+        },
+        "studentId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N Znamka) The ID of the student who received the grade."
+        },
+        "predmet": {
+          "type": "string",
+          "description": "The subject for which the grade was given."
+        },
+        "hodnota": {
+          "type": "number",
+          "description": "The grade value."
+        },
+        "datum": {
+          "type": "string",
+          "description": "The date the grade was given.",
+          "format": "date-time"
+        },
+        "ucitelId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N Znamka) The ID of the teacher who gave the grade."
+        }
+      },
+      "required": [
+        "id",
+        "studentId",
+        "predmet",
+        "hodnota",
+        "datum",
+        "ucitelId"
+      ]
+    },
+    "Rozvrh": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Rozvrh",
+      "type": "object",
+      "description": "Represents a class schedule (rozvrh) for a specific day and class.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the schedule."
+        },
+        "tridaId": {
+          "type": "string",
+          "description": "Reference to Trida. (Relationship: Trida 1:N Rozvrh) The ID of the class for which the schedule is defined."
+        },
+        "den": {
+          "type": "string",
+          "description": "The day of the week for the schedule."
+        },
+        "hodina1": {
+          "type": "string",
+          "description": "The subject for the first hour."
+        },
+        "hodina2": {
+          "type": "string",
+          "description": "The subject for the second hour."
+        },
+        "hodina3": {
+          "type": "string",
+          "description": "The subject for the third hour."
+        },
+        "hodina4": {
+          "type": "string",
+          "description": "The subject for the fourth hour."
+        },
+        "hodina5": {
+          "type": "string",
+          "description": "The subject for the fifth hour."
+        },
+        "hodina6": {
+          "type": "string",
+          "description": "The subject for the sixth hour."
+        }
+      },
+      "required": [
+        "id",
+        "tridaId",
+        "den",
+        "hodina1",
+        "hodina2"
+      ]
+    },
+    "Oznameni": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Oznameni",
+      "type": "object",
+      "description": "Represents an announcement (oznameni) for a class.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the announcement."
+        },
+        "proTridu": {
+          "type": "string",
+          "description": "Reference to Trida. (Relationship: Trida 1:N Oznameni) The ID of the class for which the announcement is intended."
+        },
+        "text": {
+          "type": "string",
+          "description": "The text of the announcement."
+        },
+        "datum": {
+          "type": "string",
+          "description": "The date the announcement was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "proTridu",
+        "text",
+        "datum"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user information. Includes 'tridaId' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/tridy/{tridaId}",
+        "definition": {
+          "entityName": "Trida",
+          "schema": {
+            "$ref": "#/backend/entities/Trida"
+          },
+          "description": "Stores class information, including the teacher in charge ('ucitelId') and a list of student IDs ('ziaciIds').",
+          "params": [
+            {
+              "name": "tridaId",
+              "description": "The unique identifier of the class."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/znamky/{znamkaId}",
+        "definition": {
+          "entityName": "Znamka",
+          "schema": {
+            "$ref": "#/backend/entities/Znamka"
+          },
+          "description": "Stores grades for a specific user. Enables path-based access control.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user (student)."
+            },
+            {
+              "name": "znamkaId",
+              "description": "The unique identifier of the grade."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/tridy/{tridaId}/rozvrhy/{den}",
+        "definition": {
+          "entityName": "Rozvrh",
+          "schema": {
+            "$ref": "#/backend/entities/Rozvrh"
+          },
+          "description": "Stores class schedules for each day of the week.",
+          "params": [
+            {
+              "name": "tridaId",
+              "description": "The unique identifier of the class."
+            },
+            {
+              "name": "den",
+              "description": "The day of the week."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/oznameni/{oznameniId}",
+        "definition": {
+          "entityName": "Oznameni",
+          "schema": {
+            "$ref": "#/backend/entities/Oznameni"
+          },
+          "description": "Stores announcements. The 'proTridu' field indicates the target class.",
+          "params": [
+            {
+              "name": "oznameniId",
+              "description": "The unique identifier of the announcement."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to provide a secure and scalable data model for the ŠkolaWeb application. It addresses the requirements for user management, class management, grade management, scheduling, and announcements. The structure is optimized for role-based access control (učitel, rodic, ziak) and aims to minimize the need for complex security rules. The key strategy for achieving authorization independence is denormalization. For example, the `tridaId` is included in the `users` collection to avoid `get()` calls in security rules to verify the `trida` of a given `user`. This approach enables atomic operations and simplifies security rule debugging.\n\nTo support the QAPs, the structure leverages structural segregation. User-specific data (grades) are stored in subcollections of the `users` collection, ensuring that only the authenticated user (or a teacher) can access their own (or their student's) data. Announcements are segregated by class, enabling efficient listing of announcements relevant to a specific class. Collaborative data (such as class schedules) resides under the `tridy` collection, using the document ID as the `tridaId`.\n\nMembership maps aren't explicitly used here, but the structure allows for easy extension with membership maps if collaborative features become more complex in the future. For instance, if a more granular role system within a class is needed (e.g., assigning students to groups), a `members` map could be added to the `tridy/{tridaId}` document."
+  }
+}
