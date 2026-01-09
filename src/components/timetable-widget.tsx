@@ -29,14 +29,15 @@ const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek'];
 const generateDayMapping = () => {
     const today = new Date();
     const monday = startOfWeek(today, { weekStartsOn: 1 });
-    const mapping: { [key: string]: { short: string; date: string; dayIndex: number } } = {};
+    const mapping: { [key: string]: { short: string; date: string; dayIndex: number, fullDate: string } } = {};
 
     daysOfWeek.forEach((day, index) => {
         const date = addDays(monday, index);
         mapping[day] = {
             short: format(date, 'E', { locale: cs }),
             date: format(date, 'd.M.'),
-            dayIndex: index + 1
+            dayIndex: index + 1,
+            fullDate: format(date, 'yyyy-MM-dd'),
         };
     });
     return mapping;
@@ -90,12 +91,19 @@ function EventTooltipContent({ event }: { event: Udalost }) {
     )
 }
 
-function LessonContextMenu({ children, lesson }: { children: React.ReactNode, lesson: LessonBlock }) {
+function LessonContextMenu({ children, lesson, day, period }: { children: React.ReactNode, lesson: LessonBlock, day: string, period: number }) {
     const router = useRouter();
+    const dayInfo = dayMapping[day];
 
     const handleClassBookEntry = () => {
-        const lessonId = `${lesson.classId}-${lesson.subjectId}-${lesson.id}`.replace(/[^a-zA-Z0-9]/g, '-');
-        router.push(`/dashboard/tridni-kniha/${lessonId}`);
+        if (!dayInfo) return;
+        const query = new URLSearchParams({
+            tridaId: lesson.classId,
+            datum: dayInfo.fullDate,
+            hodina: (period).toString(),
+            predmetId: lesson.subjectId,
+        }).toString();
+        router.push(`/dashboard/tridni-kniha/zapis?${query}`);
     }
 
     return (
@@ -161,7 +169,7 @@ function LessonBlock({ lesson, isTeacher, day, period }: { lesson: LessonBlock; 
     );
     
     const interactiveBlock = isTeacher ? (
-        <LessonContextMenu lesson={lesson}>{blockContent}</LessonContextMenu>
+        <LessonContextMenu lesson={lesson} day={day} period={period}>{blockContent}</LessonContextMenu>
     ) : blockContent;
 
     return (
