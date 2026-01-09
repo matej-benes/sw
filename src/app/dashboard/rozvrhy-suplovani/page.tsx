@@ -44,12 +44,12 @@ const buildInitialWeekSchedule = (week: Date[]): DailySchedule[] => {
 export default function RozvrhySuplovaniPage() {
     const firestore = useFirestore();
     const { toast } = useToast();
-    const [selectedClassId, setSelectedClassId] = useState<string>();
+    const [selectedClassId, setSelectedClassId] = useState<string | undefined>();
     
     // Week navigation
     const [currentDate, setCurrentDate] = useState(new Date());
     const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-    const weekDays = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 4) });
+    const weekDays = useMemo(() => eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 4) }), [weekStart]);
 
     // Data fetching
     const { data: predmety } = useCollection<Predmet>(useMemoFirebase(() => firestore ? collection(firestore, 'predmety') : null, [firestore]));
@@ -96,7 +96,6 @@ export default function RozvrhySuplovaniPage() {
             });
             
             setWeekSchedule(newWeekSchedule);
-            toast({ title: 'Rozvrh načten', description: `Rozvrh pro třídu na vybraný týden byl načten.` });
         } catch (error) {
             console.error("Error loading week schedule: ", error);
             toast({ variant: 'destructive', title: 'Chyba při načítání', description: 'Nepodařilo se načíst rozvrh.' });
@@ -240,6 +239,15 @@ export default function RozvrhySuplovaniPage() {
         const h = hash % 360;
         return `hsl(${h}, 70%, 80%)`;
     };
+    
+    const handleClassChange = useCallback((value: string) => {
+        setSelectedClassId(value);
+    }, []);
+
+    const tridyOptions = useMemo(() => 
+        tridy?.map(t => ({value: t.id, label: t.nazev})) || [],
+    [tridy]);
+
 
     return (
         <div className="space-y-6">
@@ -249,12 +257,12 @@ export default function RozvrhySuplovaniPage() {
                     <p className="text-muted-foreground">Vytvářejte a upravujte týdenní rozvrhy pro třídy.</p>
                 </div>
                  <div className="flex gap-2">
-                     <Select onValueChange={setSelectedClassId} value={selectedClassId}>
+                     <Select onValueChange={handleClassChange} value={selectedClassId}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="Vyberte třídu" />
                         </SelectTrigger>
                         <SelectContent>
-                            {tridy?.map(t => <SelectItem key={t.id} value={t.id}>{t.nazev}</SelectItem>)}
+                            {tridyOptions.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
                         </SelectContent>
                     </Select>
                      <Button onClick={handleSaveSchedule} disabled={!selectedClassId}>
@@ -428,5 +436,3 @@ export default function RozvrhySuplovaniPage() {
         </div>
     );
 }
-
-    
