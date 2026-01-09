@@ -29,6 +29,13 @@ export interface Student {
   classId: string;
 }
 
+export interface Trida {
+    id: string;
+    nazev: string;
+    ucitelId: string;
+    ziaciIds: string[];
+}
+
 export interface Lesson {
   time: string;
   subject: string;
@@ -42,3 +49,5 @@ export type DaySchedule = Lesson[];
 export type Timetable = {
   [day: string]: DaySchedule;
 };
+
+    

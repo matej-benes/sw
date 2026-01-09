@@ -43,8 +43,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useState, useMemo } from 'react';
+import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useToast } from '@/hooks/use-toast';
@@ -54,44 +54,51 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  query,
+  where
 } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
+import type { User, Trida as Class } from '@/lib/types';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
-type Class = {
-  id: string;
-  name: string;
-  studentCount: number;
-  teacher: string;
-};
 
 const classSchema = z.object({
-  name: z.string().min(1, 'Název je povinný'),
-  teacher: z.string().min(1, 'Jméno učitele je povinné'),
-  studentCount: z.coerce.number().min(0, 'Počet musí být nezáporný'),
+  nazev: z.string().min(1, 'Název je povinný'),
+  ucitelId: z.string().min(1, 'Je nutné vybrat třídního učitele'),
+  studentCount: z.coerce.number().min(0, 'Počet musí být nezáporný').optional(),
 });
 
 type ClassFormData = z.infer<typeof classSchema>;
 
 function ClassForm({
   classData,
+  teachers,
   onSave,
   closeDialog,
 }: {
   classData?: Class | null;
+  teachers: User[];
   onSave: (data: ClassFormData) => void;
   closeDialog: () => void;
 }) {
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
   } = useForm<ClassFormData>({
     resolver: zodResolver(classSchema),
     defaultValues: {
-      name: classData?.name || '',
-      teacher: classData?.teacher || '',
-      studentCount: classData?.studentCount || 0,
+      nazev: classData?.nazev || '',
+      ucitelId: classData?.ucitelId || '',
+      studentCount: classData?.ziaciIds?.length || 0,
     },
   });
 
@@ -103,17 +110,36 @@ function ClassForm({
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
       <div className="space-y-1">
-        <Label htmlFor="name">Název třídy</Label>
-        <Input id="name" {...register('name')} />
-        {errors.name && (
-          <p className="text-sm text-destructive">{errors.name.message}</p>
+        <Label htmlFor="nazev">Název třídy</Label>
+        <Input id="nazev" {...register('nazev')} />
+        {errors.nazev && (
+          <p className="text-sm text-destructive">{errors.nazev.message}</p>
         )}
       </div>
       <div className="space-y-1">
         <Label htmlFor="teacher">Třídní učitel</Label>
-        <Input id="teacher" {...register('teacher')} />
-        {errors.teacher && (
-          <p className="text-sm text-destructive">{errors.teacher.message}</p>
+        <Controller
+          name="ucitelId"
+          control={control}
+          render={({ field }) => (
+            <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <SelectTrigger>
+                <SelectValue placeholder="Vyberte učitele" />
+              </SelectTrigger>
+              <SelectContent>
+                {teachers.map((teacher) => (
+                  <SelectItem key={teacher.id} value={teacher.id}>
+                    {teacher.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        />
+        {errors.ucitelId && (
+          <p className="text-sm text-destructive">
+            {errors.ucitelId.message}
+          </p>
         )}
       </div>
       <div className="space-y-1">
@@ -122,6 +148,7 @@ function ClassForm({
           id="studentCount"
           type="number"
           {...register('studentCount')}
+          disabled
         />
         {errors.studentCount && (
           <p className="text-sm text-destructive">
@@ -141,12 +168,14 @@ function ClassForm({
   );
 }
 
-function ClassRow({ classData, onEdit, onDelete }: { classData: Class, onEdit: (classData: Class) => void, onDelete: (classData: Class) => void }) {
+function ClassRow({ classData, teachers, onEdit, onDelete }: { classData: Class, teachers: User[], onEdit: (classData: Class) => void, onDelete: (classData: Class) => void }) {
+    const teacher = teachers.find(t => t.id === classData.ucitelId);
+    
     return (
         <TableRow>
-            <TableCell className="font-medium">{classData.name}</TableCell>
-            <TableCell>{classData.teacher}</TableCell>
-            <TableCell>{classData.studentCount}</TableCell>
+            <TableCell className="font-medium">{classData.nazev}</TableCell>
+            <TableCell>{teacher?.name || 'Neznámý'}</TableCell>
+            <TableCell>{classData.ziaciIds?.length || 0}</TableCell>
             <TableCell className="text-right">
                 <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -176,8 +205,13 @@ function ClassRow({ classData, onEdit, onDelete }: { classData: Class, onEdit: (
 function AdminClassManagement() {
   const firestore = useFirestore();
   const { hasRole } = useAuth();
+  
   const classesCollection = useMemoFirebase(() => (firestore && hasRole('administrator')) ? collection(firestore, 'tridy') : null, [firestore, hasRole]);
   const { data: classes, isLoading: classesLoading } = useCollection<Class>(classesCollection);
+  
+  const teachersQuery = useMemoFirebase(() => (firestore && hasRole('administrator')) ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore, hasRole]);
+  const { data: teachers, isLoading: teachersLoading } = useCollection<User>(teachersQuery);
+
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<Class | null>(null);
@@ -186,20 +220,29 @@ function AdminClassManagement() {
 
   const handleSaveClass = async (formData: ClassFormData) => {
     if (!firestore) return;
+    
+    const dataToSave = {
+        nazev: formData.nazev,
+        ucitelId: formData.ucitelId,
+    }
+
     try {
       if (editingClass) {
         const classRef = doc(firestore, 'tridy', editingClass.id);
-        await updateDoc(classRef, formData as any);
+        await updateDoc(classRef, dataToSave);
         toast({
           title: 'Třída uložena',
-          description: `Třída ${formData.name} byla úspěšně uložena.`,
+          description: `Třída ${formData.nazev} byla úspěšně uložena.`,
         });
       } else {
-        const docRef = await addDoc(collection(firestore, 'tridy'), formData);
+        const docRef = await addDoc(collection(firestore, 'tridy'), {
+            ...dataToSave,
+            ziaciIds: [], // initialize with empty students array
+        });
         await updateDoc(docRef, { id: docRef.id });
         toast({
           title: 'Třída přidána',
-          description: `Třída ${formData.name} byla úspěšně přidána.`,
+          description: `Třída ${formData.nazev} byla úspěšně přidána.`,
         });
       }
       setIsDialogOpen(false);
@@ -253,7 +296,7 @@ function AdminClassManagement() {
                 Celkem {classes?.length ?? 0} tříd v databázi.
               </CardDescription>
             </div>
-            <Button onClick={() => openDialog(null)}>
+            <Button onClick={() => openDialog(null)} disabled={teachersLoading}>
               <PlusCircle className="mr-2 h-4 w-4" />
               Přidat třídu
             </Button>
@@ -271,15 +314,15 @@ function AdminClassManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {classesLoading && (
+                {(classesLoading || teachersLoading) && (
                   <TableRow>
                     <TableCell colSpan={4} className="h-24 text-center">
                       Načítání dat...
                     </TableCell>
                   </TableRow>
                 )}
-                {!classesLoading && classes?.map((cls) => (
-                    <ClassRow key={cls.id} classData={cls} onEdit={openDialog} onDelete={setDeletingClass} />
+                {!classesLoading && !teachersLoading && classes?.map((cls) => (
+                    <ClassRow key={cls.id} classData={cls} teachers={teachers || []} onEdit={openDialog} onDelete={setDeletingClass} />
                 ))}
               </TableBody>
             </Table>
@@ -294,6 +337,7 @@ function AdminClassManagement() {
           {isDialogOpen && (
              <ClassForm
                 classData={editingClass}
+                teachers={teachers || []}
                 onSave={handleSaveClass}
                 closeDialog={() => setIsDialogOpen(false)}
             />
@@ -307,7 +351,7 @@ function AdminClassManagement() {
                 <AlertDialogHeader>
                 <AlertDialogTitle>Opravdu chcete smazat třídu?</AlertDialogTitle>
                 <AlertDialogDescription>
-                    Tato akce je nevratná a trvale smaže třídu "{deletingClass?.name}".
+                    Tato akce je nevratná a trvale smaže třídu "{deletingClass?.nazev}".
                 </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -328,11 +372,11 @@ function AdminClassManagement() {
 
 export default function SpravaTridyPage() {
   const { hasRole } = useAuth();
-  const { isUserLoading } = useUser();
+  const { user, isUserLoading } = useUser();
   
   const showLoading = isUserLoading;
   const showAccessDenied = !isUserLoading && !hasRole('administrator');
-  const showContent = !isUserLoading && hasRole('administrator');
+  const showContent = !isUserLoading && user && hasRole('administrator');
 
   return (
     <div className="space-y-6">
@@ -370,3 +414,5 @@ export default function SpravaTridyPage() {
     </div>
   );
 }
+
+    
