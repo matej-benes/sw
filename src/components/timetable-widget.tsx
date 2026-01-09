@@ -97,7 +97,7 @@ function LessonContextMenu({ children, lesson, dayInfo, period }: { children: Re
     const router = useRouter();
     
     const handleClassBookEntry = () => {
-        if (!dayInfo) return;
+        if (!dayInfo || !lesson) return;
         const query = new URLSearchParams({
             tridaId: lesson.classId,
             datum: format(dayInfo.fullDate, 'yyyy-MM-dd'),
@@ -108,7 +108,7 @@ function LessonContextMenu({ children, lesson, dayInfo, period }: { children: Re
     }
 
     const handleNewGrading = () => {
-        if(!dayInfo) return;
+        if(!dayInfo || !lesson) return;
         const query = new URLSearchParams({
             tridaId: lesson.classId,
             predmetId: lesson.subjectId,
@@ -245,7 +245,7 @@ function CancelledLessonBlock({ substitution }: { substitution: Substitution }) 
     )
 }
 
-export function TimetableWidget({ schedules, eventsData, substitutionsData, isTeacher, userId }: { schedules: Rozvrh[], eventsData: Udalost[], substitutionsData: Substitution[], isTeacher: boolean, userId: string }) {
+export function TimetableWidget({ schedules, eventsData, substitutionsData, isTeacher, userId, userClassId }: { schedules: Rozvrh[], eventsData: Udalost[], substitutionsData: Substitution[], isTeacher: boolean, userId: string, userClassId?: string }) {
     
     const timeSlots = schedules[0]?.timeSlots || defaultTimeSlots;
     
@@ -285,7 +285,7 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
                     if (lesson.teacherId === userId) return { lesson, classId: schedule.id };
                 } else {
                     // For students/parents, we need to check if they are part of the class for this lesson
-                    if(schedule.id === userId) return { lesson, classId: schedule.id };
+                    if(schedule.id === userClassId) return { lesson, classId: schedule.id };
                 }
             }
         }

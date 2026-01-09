@@ -18,22 +18,13 @@ export default function DashboardPage() {
 
   const isTeacher = hasRole('ucitel');
 
-  // For students, fetch only their class schedule. For teachers, fetch all schedules.
+  // Fetch all schedules. The widget will filter them based on role.
   const schedulesCollectionRef = useMemoFirebase(() => {
     if (!firestore) return null;
     return collection(firestore, 'rozvrhy');
   }, [firestore]);
 
-  const studentScheduleRef = useMemoFirebase(() => {
-    if (!firestore || isTeacher || !user?.tridaId) return null;
-    return doc(firestore, 'rozvrhy', user.tridaId);
-  }, [firestore, user?.tridaId, isTeacher]);
-
-  const { data: allSchedules } = useCollection<Rozvrh>(isTeacher ? schedulesCollectionRef : null);
-  const { data: studentScheduleData } = useDoc<Rozvrh>(studentScheduleRef);
-
-  // Combine schedule data based on role
-  const scheduleData = isTeacher ? allSchedules : (studentScheduleData ? [studentScheduleData] : []);
+  const { data: scheduleData } = useCollection<Rozvrh>(schedulesCollectionRef);
 
 
   // Fetch events
@@ -89,6 +80,7 @@ export default function DashboardPage() {
                         substitutionsData={substitutions || []}
                         isTeacher={isTeacher} 
                         userId={user.id}
+                        userClassId={user.tridaId}
                     />
                 </CardContent>
             </Card>
