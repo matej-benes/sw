@@ -180,7 +180,7 @@ export default function RozvrhySuplovaniPage() {
               <SelectContent>
                 <SelectItem value="tridy">Třídy</SelectItem>
                 <SelectItem value="ucitele">Učitelé</SelectItem>
-                <SelectItem value: "ucebny">Učebny</SelectItem>
+                <SelectItem value="ucebny">Učebny</SelectItem>
               </SelectContent>
             </Select>
 
