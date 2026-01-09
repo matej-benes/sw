@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-import { useFirestore, addDocumentNonBlocking } from '@/firebase';
+import { useFirestore } from '@/firebase';
 import { collection, query, where, getDocs, doc, setDoc, addDoc, getDoc } from 'firebase/firestore';
 import type { User } from '@/lib/types';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -287,7 +287,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                     <CardContent>
                         <div className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm">
                             <p><strong>Jméno:</strong> {registrationData.user.name}</p>
-                            <p><strong>Třída:</strong> {registrationData.tridaName || 'Neznámá'}</p>
+                            {registrationData.tridaName && <p><strong>Třída:</strong> {registrationData.tridaName}</p>}
                         </div>
                         <Form {...registrationForm}>
                             <form onSubmit={registrationForm.handleSubmit(handleRegistrationSubmit)} className="space-y-4">
