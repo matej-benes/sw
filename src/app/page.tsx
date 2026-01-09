@@ -109,11 +109,11 @@ function LoginForm() {
   )
 }
 
-function RegistrationForm() {
+function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
     const [step, setStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
+    const [registrationData, setRegistrationData] = useState<{ name: string; className: string } | null>(null);
     const { toast } = useToast();
-    const router = useRouter();
 
     const pinForm = useForm<z.infer<typeof pinSchema>>({
         resolver: zodResolver(pinSchema),
@@ -127,9 +127,11 @@ function RegistrationForm() {
 
     const handlePinSubmit = (values: z.infer<typeof pinSchema>) => {
         setIsLoading(true);
-        // Simulate PIN verification
+        // Simulate PIN verification and fetching user data
         setTimeout(() => {
             if (values.pin === '123456') {
+                // Mock data fetch based on PIN
+                setRegistrationData({ name: 'Adam Volný', className: '4.C' });
                 setStep(2);
                 toast({ title: 'PIN ověřen', description: 'Nyní si můžete vytvořit účet.' });
             } else {
@@ -145,8 +147,7 @@ function RegistrationForm() {
         setTimeout(() => {
             console.log('Registrace s daty:', values);
             toast({ title: 'Registrace úspěšná', description: 'Váš účet byl vytvořen, nyní se můžete přihlásit.' });
-            // In a real app, you would likely auto-login the user and redirect
-            window.location.reload(); // For now, just reload to go back to login
+            onLoginClick(); // Switch back to login form
             setIsLoading(false);
         }, 1500);
     };
@@ -183,13 +184,17 @@ function RegistrationForm() {
                     </CardContent>
                 </>
             )}
-            {step === 2 && (
+            {step === 2 && registrationData && (
                  <>
                     <CardHeader>
                         <CardTitle>Krok 2: Registrace</CardTitle>
                         <CardDescription>Vytvořte si svůj účet pro přístup do systému.</CardDescription>
                     </CardHeader>
                     <CardContent>
+                        <div className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm">
+                            <p><strong>Jméno:</strong> {registrationData.name}</p>
+                            <p><strong>Třída:</strong> {registrationData.className}</p>
+                        </div>
                         <Form {...registrationForm}>
                             <form onSubmit={registrationForm.handleSubmit(handleRegistrationSubmit)} className="space-y-4">
                                 <FormField
@@ -241,11 +246,11 @@ export default function LoginPage() {
         <p className="text-muted-foreground">Vítejte v informačním systému</p>
       </div>
       
-      {isRegistering ? <RegistrationForm /> : <LoginForm />}
+      {isRegistering ? <RegistrationForm onLoginClick={() => setIsRegistering(false)} /> : <LoginForm />}
 
       <Button 
         variant="link" 
-        className="mt-6 text-muted-foreground"
+        className="mt-6 text-muted-foreground text-center h-auto leading-normal"
         onClick={() => setIsRegistering(!isRegistering)}
         >
         {isRegistering ? 'Už mám účet, chci se přihlásit' : 'Jsem v systému poprvé, mám od školy pin a chci se zaregistrovat.'}
