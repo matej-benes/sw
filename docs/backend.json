@@ -177,6 +177,35 @@
         "text",
         "datum"
       ]
+    },
+    "Predmet": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Predmet",
+      "type": "object",
+      "description": "Represents a subject taught in school.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the subject."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the subject."
+        },
+        "shortcut": {
+          "type": "string",
+          "description": "A short abbreviation for the subject."
+        },
+        "teacherCount": {
+          "type": "number",
+          "description": "The number of teachers teaching this subject."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "shortcut"
+      ]
     }
   },
   "auth": {
@@ -215,6 +244,22 @@
             {
               "name": "tridaId",
               "description": "The unique identifier of the class."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/predmety/{predmetId}",
+        "definition": {
+          "entityName": "Predmet",
+          "schema": {
+            "$ref": "#/backend/entities/Predmet"
+          },
+          "description": "Stores school subjects.",
+          "params": [
+            {
+              "name": "predmetId",
+              "description": "The unique identifier of the subject."
             }
           ]
         }

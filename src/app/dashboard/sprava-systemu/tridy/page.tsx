@@ -1,19 +1,61 @@
 'use client';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { PlusCircle, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useToast } from "@/hooks/use-toast";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { PlusCircle, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useToast } from '@/hooks/use-toast';
+import {
+  collection,
+  doc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+} from 'firebase/firestore';
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 
 type Class = {
   id: string;
@@ -22,182 +64,260 @@ type Class = {
   teacher: string;
 };
 
-const initialClasses: Class[] = [
-  { id: 'trida-1', name: '1.A', studentCount: 25, teacher: 'Matěj Mikolášek' },
-  { id: 'trida-4', name: '4.C', studentCount: 22, teacher: 'Robert Bartošek' },
-  { id: 'trida-2', name: '2.B', studentCount: 28, teacher: 'Jana Nováková' },
-  { id: 'trida-3', name: '3.D', studentCount: 21, teacher: 'Petr Svoboda' },
-];
-
 const classSchema = z.object({
-    name: z.string().min(1, "Název je povinný"),
-    teacher: z.string().min(1, "Jméno učitele je povinné"),
-    studentCount: z.coerce.number().min(0, "Počet musí být nezáporný"),
+  name: z.string().min(1, 'Název je povinný'),
+  teacher: z.string().min(1, 'Jméno učitele je povinné'),
+  studentCount: z.coerce.number().min(0, 'Počet musí být nezáporný'),
 });
 
 type ClassFormData = z.infer<typeof classSchema>;
 
-function ClassForm({ classData, onSave, closeDialog }: { classData?: Class | null, onSave: (data: Class) => void, closeDialog: () => void }) {
-    const { register, handleSubmit, formState: { errors } } = useForm<ClassFormData>({
-        resolver: zodResolver(classSchema),
-        defaultValues: {
-            name: classData?.name || "",
-            teacher: classData?.teacher || "",
-            studentCount: classData?.studentCount || 0,
-        },
-    });
-    const { toast } = useToast();
+function ClassForm({
+  classData,
+  onSave,
+  closeDialog,
+}: {
+  classData?: Class | null;
+  onSave: (data: ClassFormData) => void;
+  closeDialog: () => void;
+}) {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<ClassFormData>({
+    resolver: zodResolver(classSchema),
+    defaultValues: {
+      name: classData?.name || '',
+      teacher: classData?.teacher || '',
+      studentCount: classData?.studentCount || 0,
+    },
+  });
 
-    const onSubmit = (data: ClassFormData) => {
-        const newClass: Class = {
-            id: classData?.id || `trida-${Date.now()}`,
-            ...data,
-        };
-        onSave(newClass);
-        toast({ title: "Třída uložena", description: `Třída ${newClass.name} byla úspěšně uložena.` });
-        closeDialog();
-    };
+  const onSubmit = (data: ClassFormData) => {
+    onSave(data);
+    closeDialog();
+  };
 
-    return (
-        <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
-            <div className="space-y-1">
-                <Label htmlFor="name">Název třídy</Label>
-                <Input id="name" {...register("name")} />
-                {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
-            </div>
-            <div className="space-y-1">
-                <Label htmlFor="teacher">Třídní učitel</Label>
-                <Input id="teacher" {...register("teacher")} />
-                {errors.teacher && <p className="text-sm text-destructive">{errors.teacher.message}</p>}
-            </div>
-            <div className="space-y-1">
-                <Label htmlFor="studentCount">Počet žáků</Label>
-                <Input id="studentCount" type="number" {...register("studentCount")} />
-                {errors.studentCount && <p className="text-sm text-destructive">{errors.studentCount.message}</p>}
-            </div>
-            <DialogFooter>
-                <DialogClose asChild><Button type="button" variant="outline">Zrušit</Button></DialogClose>
-                <Button type="submit">Uložit</Button>
-            </DialogFooter>
-        </form>
-    );
-}
-
-
-function DeleteClassDialog({ classData, onDelete }: { classData: Class, onDelete: (id: string) => void}) {
-    return (
-        <AlertDialog>
-            <AlertDialogTrigger asChild>
-                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Smazat
-                </DropdownMenuItem>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Opravdu chcete smazat třídu?</AlertDialogTitle>
-                    <AlertDialogDescription>Tato akce je nevratná a trvale smaže třídu "{classData.name}".</AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Zrušit</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => onDelete(classData.id)} className="bg-destructive hover:bg-destructive/90">Smazat</AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-    );
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
+      <div className="space-y-1">
+        <Label htmlFor="name">Název třídy</Label>
+        <Input id="name" {...register('name')} />
+        {errors.name && (
+          <p className="text-sm text-destructive">{errors.name.message}</p>
+        )}
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="teacher">Třídní učitel</Label>
+        <Input id="teacher" {...register('teacher')} />
+        {errors.teacher && (
+          <p className="text-sm text-destructive">{errors.teacher.message}</p>
+        )}
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="studentCount">Počet žáků</Label>
+        <Input
+          id="studentCount"
+          type="number"
+          {...register('studentCount')}
+        />
+        {errors.studentCount && (
+          <p className="text-sm text-destructive">
+            {errors.studentCount.message}
+          </p>
+        )}
+      </div>
+      <DialogFooter>
+        <DialogClose asChild>
+          <Button type="button" variant="outline">
+            Zrušit
+          </Button>
+        </DialogClose>
+        <Button type="submit">Uložit</Button>
+      </DialogFooter>
+    </form>
+  );
 }
 
 export default function SpravaTridyPage() {
-    const [classes, setClasses] = useState<Class[]>(initialClasses);
-    const [isDialogOpen, setIsDialogOpen] = useState(false);
-    const [editingClass, setEditingClass] = useState<Class | null>(null);
-    const { toast } = useToast();
+  const firestore = useFirestore();
+  const classesCollection = useMemoFirebase(
+    () => (firestore ? collection(firestore, 'tridy') : null),
+    [firestore]
+  );
+  const { data: classes, isLoading } = useCollection<Class>(classesCollection);
 
-    const handleSaveClass = (classData: Class) => {
-        setClasses(prevClasses => {
-            if (prevClasses.some(c => c.id === classData.id)) {
-                return prevClasses.map(c => c.id === classData.id ? classData : c);
-            } else {
-                return [classData, ...prevClasses];
-            }
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingClass, setEditingClass] = useState<Class | null>(null);
+  const [deletingClass, setDeletingClass] = useState<Class | null>(null);
+  const { toast } = useToast();
+
+  const handleSaveClass = async (formData: ClassFormData) => {
+    if (!firestore) return;
+    try {
+      if (editingClass) {
+        const classRef = doc(firestore, 'tridy', editingClass.id);
+        await updateDoc(classRef, formData);
+        toast({
+          title: 'Třída uložena',
+          description: `Třída ${formData.name} byla úspěšně uložena.`,
         });
-    };
+      } else {
+        await addDoc(collection(firestore, 'tridy'), formData);
+        toast({
+          title: 'Třída přidána',
+          description: `Třída ${formData.name} byla úspěšně přidána.`,
+        });
+      }
+    } catch (error) {
+      console.error('Error saving class:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Chyba',
+        description: 'Při ukládání třídy došlo k chybě.',
+      });
+    }
+  };
 
-    const handleDeleteClass = (classId: string) => {
-        setClasses(prevClasses => prevClasses.filter(c => c.id !== classId));
-        toast({ title: "Třída smazána", description: "Třída byla úspěšně odstraněna." });
-    };
-    
-    const openDialog = (classData: Class | null) => {
-        setEditingClass(classData);
-        setIsDialogOpen(true);
-    };
+  const handleDeleteClass = async (classId: string) => {
+    if (!firestore) return;
+    try {
+      await deleteDoc(doc(firestore, 'tridy', classId));
+      toast({
+        title: 'Třída smazána',
+        description: 'Třída byla úspěšně odstraněna.',
+      });
+    } catch (error) {
+      console.error('Error deleting class:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Chyba',
+        description: 'Při mazání třídy došlo k chybě.',
+      });
+    }
+    setDeletingClass(null);
+  };
 
-    return (
-        <div className="space-y-6">
+  const openDialog = (classData: Class | null) => {
+    setEditingClass(classData);
+    setIsDialogOpen(true);
+  };
+
+  const openDeleteDialog = (classData: Class) => {
+    setDeletingClass(classData);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Správa tříd</h1>
+        <p className="text-muted-foreground">Správa všech tříd v systému.</p>
+      </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
             <div>
-                <h1 className="text-3xl font-bold tracking-tight">Správa tříd</h1>
-                <p className="text-muted-foreground">Správa všech tříd v systému.</p>
+              <CardTitle>Seznam tříd</CardTitle>
+              <CardDescription>
+                Celkem {classes?.length ?? 0} tříd v databázi.
+              </CardDescription>
             </div>
+            <Button onClick={() => openDialog(null)}>
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Přidat třídu
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Název třídy</TableHead>
+                  <TableHead>Třídní učitel</TableHead>
+                  <TableHead>Počet žáků</TableHead>
+                  <TableHead>
+                    <span className="sr-only">Akce</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="h-24 text-center">
+                      Načítání dat...
+                    </TableCell>
+                  </TableRow>
+                )}
+                {!isLoading && classes?.map((cls) => (
+                  <TableRow key={cls.id}>
+                    <TableCell className="font-medium">{cls.name}</TableCell>
+                    <TableCell>{cls.teacher}</TableCell>
+                    <TableCell>{cls.studentCount}</TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuItem onSelect={() => openDialog(cls)}>
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Upravit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>Zobrazit žáky</DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => openDeleteDialog(cls)}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Smazat
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>
+              {editingClass ? 'Upravit třídu' : 'Přidat novou třídu'}
+            </DialogTitle>
+          </DialogHeader>
+          <ClassForm
+            classData={editingClass}
+            onSave={handleSaveClass}
+            closeDialog={() => setIsDialogOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
 
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                 <Card>
-                    <CardHeader className="flex-row items-center justify-between">
-                        <div>
-                            <CardTitle>Seznam tříd</CardTitle>
-                            <CardDescription>Celkem {classes.length} tříd v databázi.</CardDescription>
-                        </div>
-                        <Button onClick={() => openDialog(null)}>
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Přidat třídu
-                        </Button>
-                    </CardHeader>
-                    <CardContent>
-                    <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Název třídy</TableHead>
-                                    <TableHead>Třídní učitel</TableHead>
-                                    <TableHead>Počet žáků</TableHead>
-                                    <TableHead><span className="sr-only">Akce</span></TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {classes.map(cls => (
-                                    <TableRow key={cls.id}>
-                                        <TableCell className="font-medium">{cls.name}</TableCell>
-                                        <TableCell>{cls.teacher}</TableCell>
-                                        <TableCell>{cls.studentCount}</TableCell>
-                                        <TableCell className="text-right">
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="icon">
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent>
-                                                    <DropdownMenuItem onSelect={() => openDialog(cls)}>
-                                                        <Pencil className="mr-2 h-4 w-4" />
-                                                        Upravit
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem>Zobrazit žáky</DropdownMenuItem>
-                                                    <DeleteClassDialog classData={cls} onDelete={handleDeleteClass} />
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                    </Table>
-                    </CardContent>
-                </Card>
-                <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                        <DialogTitle>{editingClass ? 'Upravit třídu' : 'Přidat novou třídu'}</DialogTitle>
-                    </DialogHeader>
-                    <ClassForm classData={editingClass} onSave={handleSaveClass} closeDialog={() => setIsDialogOpen(false)} />
-                </DialogContent>
-            </Dialog>
-        </div>
-    );
+      {deletingClass && (
+        <AlertDialog open={!!deletingClass} onOpenChange={() => setDeletingClass(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Opravdu chcete smazat třídu?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tato akce je nevratná a trvale smaže třídu "{deletingClass.name}".
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setDeletingClass(null)}>Zrušit</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => handleDeleteClass(deletingClass.id)}
+                className="bg-destructive hover:bg-destructive/90"
+              >
+                Smazat
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+    </div>
+  );
 }

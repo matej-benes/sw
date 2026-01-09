@@ -5,7 +5,7 @@ export interface User {
   name: string;
   email: string;
   roles: Role[];
-  avatarUrl: string;
+  avatarUrl?: string;
   tridaId?: string; // Class for student or teacher
   studentId?: string; // For parent role
 }
