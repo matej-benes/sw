@@ -36,6 +36,12 @@ export interface Trida {
     ziaciIds: string[];
 }
 
+export interface Predmet {
+  id: string;
+  name: string;
+  shortcut: string;
+}
+
 export interface Lesson {
   time: string;
   subject: string;
@@ -50,4 +56,19 @@ export type Timetable = {
   [day: string]: DaySchedule;
 };
 
-    
+export interface LessonBlock {
+  id: string;
+  subjectId: string;
+  teacherId: string;
+  classId: string;
+  subjectName: string;
+  subjectShortcut: string;
+  teacherName: string;
+  className: string;
+}
+
+export type ScheduleGrid = {
+  [day: string]: {
+    [period: number]: LessonBlock | null;
+  };
+};
