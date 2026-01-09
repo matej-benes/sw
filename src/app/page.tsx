@@ -33,10 +33,11 @@ const registrationSchema = z.object({
     password: z.string().min(6, { message: 'Heslo musí mít alespoň 6 znaků.' }),
 });
 
-// Helper function to create initial admin user
+// Helper function to create/update initial admin user
 const createInitialAdminIfNeeded = async (firestore: any) => {
   if (!firestore) return;
   const adminEmail = 'matej.romana@seznam.cz';
+  const newPin = '987654';
   const usersRef = collection(firestore, 'users');
   const q = query(usersRef, where("email", "==", adminEmail));
   const querySnapshot = await getDocs(q);
@@ -47,11 +48,16 @@ const createInitialAdminIfNeeded = async (firestore: any) => {
       name: 'Matěj Mikolášek',
       email: adminEmail,
       roles: ['ucitel', 'administrator', 'vedouci pracovnik'],
-      pin: '135792', // Pre-defined PIN
+      pin: newPin,
       avatarUrl: `https://picsum.photos/seed/${Date.now()}/100/100`,
     };
     await addDoc(usersRef, adminUser);
-    console.log("Initial admin user created.");
+    console.log("Initial admin user created with PIN:", newPin);
+  } else {
+    // If admin exists, just update the PIN
+    const adminDoc = querySnapshot.docs[0];
+    await updateDoc(doc(firestore, 'users', adminDoc.id), { pin: newPin });
+    console.log("Updated admin user PIN to:", newPin);
   }
 };
 
@@ -232,7 +238,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             // 3. Invalidate the PIN on the original document to prevent re-use
             const originalUserDocRef = doc(firestore, 'users', registrationData.user.id);
             await updateDoc(originalUserDocRef, {
-                pin: `USED_${new Date().toISOString()}`, 
+                pin: `USED_${new Date().toISOString()}_${Math.random()}`, 
             });
 
 
@@ -291,7 +297,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                     <CardContent>
                         <div className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm">
                             <p><strong>Jméno:</strong> {registrationData.user.name}</p>
-                            {registrationData.tridaName && <p><strong>Třída:</strong> {registrationData.tridaName}</p>}
+                            {registrationData.tridaName ? <p><strong>Třída:</strong> {registrationData.tridaName}</p> : <p><strong>Role:</strong> Zaměstnanec školy</p>}
                         </div>
                         <Form {...registrationForm}>
                             <form onSubmit={registrationForm.handleSubmit(handleRegistrationSubmit)} className="space-y-4">
