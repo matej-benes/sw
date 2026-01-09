@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { PlusCircle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 const timeSlots = [
     "07:55 - 08:40", "08:55 - 09:40", "09:55 - 10:40", "10:45 - 11:30",
@@ -27,13 +28,21 @@ const dayMapping: { [key: string]: { short: string; date: string } } = {
 
 
 function LessonContextMenu({ children, lesson }: { children: React.ReactNode, lesson: Lesson }) {
+    const router = useRouter();
+
+    const handleClassBookEntry = () => {
+        // Assuming lesson has a unique ID. If not, we might need to generate one.
+        const lessonId = `${lesson.class}-${lesson.subject}-${lesson.time}`.replace(/[^a-zA-Z0-9]/g, '-');
+        router.push(`/dashboard/tridni-kniha/${lessonId}`);
+    }
+
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild onContextMenu={(e) => e.preventDefault()}>
                 {children}
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-                <DropdownMenuItem>Zapsat do třídní knihy</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleClassBookEntry}>Zapsat do třídní knihy</DropdownMenuItem>
                 <DropdownMenuItem>Nové hodnocení</DropdownMenuItem>
                 <DropdownMenuItem>Probrané učivo</DropdownMenuItem>
                 <DropdownMenuItem>Poznámka dítěte/žáka/studenta do třídní knihy</DropdownMenuItem>
