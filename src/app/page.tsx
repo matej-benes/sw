@@ -14,9 +14,9 @@ import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { useFirestore, addDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, getDocs, doc, setDoc, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, addDoc, getDoc } from 'firebase/firestore';
 import type { User } from '@/lib/types';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 
 
 const loginSchema = z.object({
@@ -149,6 +149,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
     const [registrationData, setRegistrationData] = useState<{ user: User, tridaName: string | null } | null>(null);
     const { toast } = useToast();
     const firestore = useFirestore();
+    const auth = getAuth();
 
     const pinForm = useForm<z.infer<typeof pinSchema>>({
         resolver: zodResolver(pinSchema),
@@ -182,14 +183,14 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             const userDoc = querySnapshot.docs[0];
             const userData = { ...userDoc.data(), id: userDoc.id } as User;
             
-            let tridaName = 'Neznámá';
+            let tridaName: string | null = null;
             if (userData.tridaId) {
-                const tridaDoc = await getDocs(query(collection(firestore, 'tridy'), where('id', '==', userData.tridaId)));
-                if (!tridaDoc.empty) {
-                    tridaName = tridaDoc.docs[0].data().nazev;
+                const tridaRef = doc(firestore, 'tridy', userData.tridaId);
+                const tridaDoc = await getDoc(tridaRef);
+                if (tridaDoc.exists()) {
+                    tridaName = tridaDoc.data().nazev;
                 }
             }
-
 
             setRegistrationData({ user: userData, tridaName });
             registrationForm.setValue('email', userData.email);
@@ -212,26 +213,24 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             return;
         }
 
-        const { auth } = await import('@/firebase');
-
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
             const firebaseUser = userCredential.user;
 
-            const userRef = doc(firestore, 'users', registrationData.user.id);
             const userDataToUpdate = {
-                ...registrationData.user,
+                name: registrationData.user.name,
+                roles: registrationData.user.roles,
+                tridaId: registrationData.user.tridaId,
                 email: values.email,
+                avatarUrl: registrationData.user.avatarUrl || `https://picsum.photos/seed/${firebaseUser.uid}/100/100`,
                 pin: '', // Clear the PIN after registration
-                id: firebaseUser.uid,
             };
             
-            await setDoc(doc(firestore, 'users', firebaseUser.uid), userDataToUpdate, { merge: true });
+            await setDoc(doc(firestore, 'users', firebaseUser.uid), userDataToUpdate);
             
-            // Delete the old doc if it had a different, temporary ID
-            if (registrationData.user.id !== firebaseUser.uid) {
-                await setDoc(doc(firestore, 'users', registrationData.user.id), {pin: 'USED'}, {merge: true}); // Invalidate PIN
-            }
+            // Invalidate the PIN on the original document
+             await setDoc(doc(firestore, 'users', registrationData.user.id), { pin: `USED_${firebaseUser.uid}` }, { merge: true });
+
 
             toast({ title: 'Registrace úspěšná', description: 'Váš účet byl vytvořen, nyní se můžete přihlásit.' });
             onLoginClick(); // Switch back to login form
