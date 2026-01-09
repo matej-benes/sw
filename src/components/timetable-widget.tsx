@@ -17,7 +17,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { format, getDay, parseISO } from 'date-fns';
+import { format, getDay, parseISO, startOfWeek, addDays } from 'date-fns';
 import { cs } from 'date-fns/locale';
 
 const defaultTimeSlots = [
@@ -26,13 +26,24 @@ const defaultTimeSlots = [
 ];
 const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek'];
 
-const dayMapping: { [key: string]: { short: string; date: string; dayIndex: number } } = {
-    'Pondělí': { short: 'Po', date: '30.8.', dayIndex: 1 },
-    'Úterý': { short: 'Út', date: '31.8.', dayIndex: 2 },
-    'Středa': { short: 'St', date: '1.9.', dayIndex: 3 },
-    'Čtvrtek': { short: 'Čt', date: '2.9.', dayIndex: 4 },
-    'Pátek': { short: 'Pá', date: '3.9.', dayIndex: 5 },
-};
+const generateDayMapping = () => {
+    const today = new Date();
+    const monday = startOfWeek(today, { weekStartsOn: 1 });
+    const mapping: { [key: string]: { short: string; date: string; dayIndex: number } } = {};
+
+    daysOfWeek.forEach((day, index) => {
+        const date = addDays(monday, index);
+        mapping[day] = {
+            short: format(date, 'E', { locale: cs }),
+            date: format(date, 'd.M.'),
+            dayIndex: index + 1
+        };
+    });
+    return mapping;
+}
+
+const dayMapping = generateDayMapping();
+
 
 function LessonTooltipContent({ lesson, day, period }: { lesson: LessonBlock, day: string, period: number }) {
     return (
