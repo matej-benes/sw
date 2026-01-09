@@ -34,21 +34,6 @@ export default function DashboardPage() {
             <p className="text-muted-foreground">Přehled vašeho dne v Škola Online.</p>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-            <Card className="col-span-1 lg:col-span-4">
-                <CardHeader>
-                    <CardTitle>Kalendář</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                   <Calendar
-                        mode="single"
-                        selected={new Date()}
-                        className="rounded-md border-none w-full"
-                    />
-                </CardContent>
-            </Card>
-        </div>
-
         <div className="mt-6">
             <h2 className="text-2xl font-bold tracking-tight mb-4">Rychlé akce</h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
