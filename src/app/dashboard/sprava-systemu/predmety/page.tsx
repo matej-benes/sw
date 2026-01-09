@@ -59,8 +59,7 @@ export default function PredmetyPage() {
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent>
-                                                <DropdownMenuItem>Upravit</DropdownMenuItem>
-                                                <DropdownMenuItem className="text-destructive">Smazat</DropdownMenuItem>
+                                                
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </TableCell>

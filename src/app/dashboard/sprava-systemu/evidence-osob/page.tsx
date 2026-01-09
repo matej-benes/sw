@@ -67,8 +67,7 @@ export default function EvidenceOsobPage() {
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent>
-                                                <DropdownMenuItem>Upravit</DropdownMenuItem>
-                                                <DropdownMenuItem className="text-destructive">Smazat</DropdownMenuItem>
+                                                
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </TableCell>

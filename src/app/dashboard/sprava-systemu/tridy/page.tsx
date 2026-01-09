@@ -56,9 +56,7 @@ export default function SpravaTridyPage() {
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent>
-                                                <DropdownMenuItem>Upravit</DropdownMenuItem>
                                                 <DropdownMenuItem>Zobrazit žáky</DropdownMenuItem>
-                                                <DropdownMenuItem className="text-destructive">Smazat</DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </TableCell>
