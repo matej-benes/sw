@@ -59,13 +59,14 @@ function LessonContextMenu({ children, lesson }: { children: React.ReactNode, le
 }
 
 function EmptySlotContextMenu({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild onContextMenu={(e) => e.preventDefault()}>
         {children}
       </DropdownMenuTrigger>
       <DropdownMenuContent>
-        <DropdownMenuItem>
+        <DropdownMenuItem onClick={() => router.push('/dashboard/udalosti')}>
           <PlusCircle className="mr-2 h-4 w-4" />
           Vytvořit událost
         </DropdownMenuItem>
