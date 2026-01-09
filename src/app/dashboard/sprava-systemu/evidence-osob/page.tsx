@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import type { Role } from '@/lib/types';
+import type { Role, Trida } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
@@ -52,12 +52,17 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useToast } from '@/hooks/use-toast';
 import {
   collection,
-  doc
+  doc,
+  getDoc,
+  updateDoc,
+  arrayUnion,
+  arrayRemove
 } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import type { User } from '@/lib/types';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 
 const roleTranslations: { [key in Role]: string } = {
@@ -74,6 +79,7 @@ const userSchema = z.object({
   email: z.string().email('Neplatný formát emailu'),
   roles: z.array(z.string()).min(1, 'Uživatel musí mít alespoň jednu roli'),
   pin: z.string().optional(),
+  tridaId: z.string().optional(),
 });
 
 type UserFormData = z.infer<typeof userSchema>;
@@ -87,6 +93,10 @@ function UserForm({
   onSave: (data: Partial<User>) => void;
   closeDialog: () => void;
 }) {
+  const firestore = useFirestore();
+  const tridyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]);
+  const { data: classes } = useCollection<Trida>(tridyCollection);
+
   const {
     register,
     handleSubmit,
@@ -101,6 +111,7 @@ function UserForm({
       email: user?.email || '',
       roles: user?.roles || [],
       pin: user?.pin || '',
+      tridaId: user?.tridaId || '',
     },
   });
 
@@ -115,6 +126,14 @@ function UserForm({
   };
   
   const currentPin = watch('pin');
+  const roles = watch('roles');
+  const isZiak = roles.includes('ziak');
+
+  useEffect(() => {
+    if (!isZiak) {
+      setValue('tridaId', undefined);
+    }
+  }, [isZiak, setValue]);
 
 
   return (
@@ -164,6 +183,31 @@ function UserForm({
           <p className="text-sm text-destructive">{errors.roles.message}</p>
         )}
       </div>
+
+       {isZiak && (
+        <div className="space-y-1">
+            <Label htmlFor="tridaId">Třída</Label>
+            <Controller
+                name="tridaId"
+                control={control}
+                render={({ field }) => (
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Vyberte třídu" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {classes?.map((c) => (
+                                <SelectItem key={c.id} value={c.id}>
+                                    {c.nazev}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
+            />
+            {errors.tridaId && <p className="text-sm text-destructive">{errors.tridaId.message}</p>}
+        </div>
+       )}
 
        <div className="space-y-2">
         <Label htmlFor="pin">Registrační PIN</Label>
@@ -245,38 +289,90 @@ function AdminUserManagement() {
     const [deletingUser, setDeletingUser] = useState<User | null>(null);
     const { toast } = useToast();
 
-    const handleSaveUser = (formData: Partial<User>) => {
+    const handleSaveUser = async (formData: Partial<User>) => {
       if (!firestore) return;
       
-      if (editingUser) {
-        const userRef = doc(firestore, 'users', editingUser.id);
-        updateDocumentNonBlocking(userRef, formData);
-        toast({
-          title: 'Uživatel aktualizován',
-          description: `Uživatel ${formData.name} byl úspěšně aktualizován.`,
-        });
-      } else {
-        const newUser = {
-          ...formData,
-          avatarUrl: `https://picsum.photos/seed/${Date.now()}/100/100`,
-        };
-        addDocumentNonBlocking(collection(firestore, 'users'), newUser);
-        toast({
-          title: 'Uživatel přidán',
-          description: `Uživatel ${formData.name} byl úspěšně přidán.`,
-        });
+      try {
+        if (editingUser) {
+            const userRef = doc(firestore, 'users', editingUser.id);
+            const originalUserDoc = await getDoc(userRef);
+            const originalUserData = originalUserDoc.data() as User | undefined;
+
+            await updateDoc(userRef, formData);
+
+            // If class changed for a student, update the ziaciIds in both old and new class
+            if (formData.roles?.includes('ziak')) {
+                const originalTridaId = originalUserData?.tridaId;
+                const newTridaId = formData.tridaId;
+
+                if (originalTridaId !== newTridaId) {
+                    // Remove from old class
+                    if (originalTridaId) {
+                        const oldTridaRef = doc(firestore, 'tridy', originalTridaId);
+                        await updateDoc(oldTridaRef, { ziaciIds: arrayRemove(editingUser.id) });
+                    }
+                    // Add to new class
+                    if (newTridaId) {
+                        const newTridaRef = doc(firestore, 'tridy', newTridaId);
+                        await updateDoc(newTridaRef, { ziaciIds: arrayUnion(editingUser.id) });
+                    }
+                }
+            }
+
+            toast({
+              title: 'Uživatel aktualizován',
+              description: `Uživatel ${formData.name} byl úspěšně aktualizován.`,
+            });
+        } else {
+            const newUserWithId = { // We need an ID to add to the class
+                ...formData,
+                id: doc(collection(firestore, 'users')).id,
+                avatarUrl: `https://picsum.photos/seed/${Date.now()}/100/100`,
+            };
+            
+            const newUserRef = doc(firestore, 'users', newUserWithId.id);
+            await addDocumentNonBlocking(collection(firestore, 'users'), newUserWithId);
+
+            if (newUserWithId.roles?.includes('ziak') && newUserWithId.tridaId) {
+                const tridaRef = doc(firestore, 'tridy', newUserWithId.tridaId);
+                await updateDoc(tridaRef, { ziaciIds: arrayUnion(newUserWithId.id) });
+            }
+
+            toast({
+              title: 'Uživatel přidán',
+              description: `Uživatel ${formData.name} byl úspěšně přidán.`,
+            });
+        }
+      } catch(e) {
+          console.error("Error saving user:", e);
+          toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se uložit uživatele.' });
       }
+
       setIsDialogOpen(false);
       setEditingUser(null);
     };
 
-    const handleDeleteUser = () => {
+    const handleDeleteUser = async () => {
         if (!deletingUser || !firestore) return;
-        deleteDocumentNonBlocking(doc(firestore, 'users', deletingUser.id));
-        toast({
-          title: 'Uživatel smazán',
-          description: 'Uživatel byl úspěšně odstraněn ze systému.',
-        });
+
+        try {
+            // If deleting a student, remove them from their class
+            if (deletingUser.roles.includes('ziak') && deletingUser.tridaId) {
+                const tridaRef = doc(firestore, 'tridy', deletingUser.tridaId);
+                await updateDoc(tridaRef, { ziaciIds: arrayRemove(deletingUser.id) });
+            }
+
+            await deleteDocumentNonBlocking(doc(firestore, 'users', deletingUser.id));
+            
+            toast({
+              title: 'Uživatel smazán',
+              description: 'Uživatel byl úspěšně odstraněn ze systému.',
+            });
+        } catch(e) {
+            console.error("Error deleting user:", e);
+            toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se smazat uživatele.' });
+        }
+        
         setDeletingUser(null);
       };
 

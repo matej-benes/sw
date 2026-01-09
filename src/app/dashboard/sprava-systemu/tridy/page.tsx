@@ -43,7 +43,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -52,7 +52,9 @@ import {
   collection,
   doc,
   query,
-  where
+  where,
+  getDocs,
+  writeBatch
 } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
@@ -69,7 +71,6 @@ import {
 const classSchema = z.object({
   nazev: z.string().min(1, 'Název je povinný'),
   ucitelId: z.string().min(1, 'Je nutné vybrat třídního učitele'),
-  studentCount: z.coerce.number().min(0, 'Počet musí být nezáporný').optional(),
 });
 
 type ClassFormData = z.infer<typeof classSchema>;
@@ -95,7 +96,6 @@ function ClassForm({
     defaultValues: {
       nazev: classData?.nazev || '',
       ucitelId: classData?.ucitelId || '',
-      studentCount: classData?.ziaciIds?.length || 0,
     },
   });
 
@@ -144,14 +144,9 @@ function ClassForm({
         <Input
           id="studentCount"
           type="number"
-          {...register('studentCount')}
+          value={classData?.ziaciIds?.length || 0}
           disabled
         />
-        {errors.studentCount && (
-          <p className="text-sm text-destructive">
-            {errors.studentCount.message}
-          </p>
-        )}
       </div>
       <DialogFooter>
         <DialogClose asChild>
@@ -204,11 +199,10 @@ function AdminClassManagement() {
   const { hasRole } = useAuth();
   
   const classesCollection = useMemoFirebase(() => (firestore) ? collection(firestore, 'tridy') : null, [firestore]);
-  const { data: classes, isLoading: classesLoading } = useCollection<Class>(classesCollection);
+  const { data: classes, isLoading: classesLoading, error: classesError } = useCollection<Class>(classesCollection);
   
   const teachersQuery = useMemoFirebase(() => (firestore) ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore]);
-  const { data: teachers, isLoading: teachersLoading } = useCollection<User>(teachersQuery);
-
+  const { data: teachers, isLoading: teachersLoading, error: teachersError } = useCollection<User>(teachersQuery);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<Class | null>(null);
@@ -244,13 +238,43 @@ function AdminClassManagement() {
     setEditingClass(null);
   };
 
-  const handleDeleteClass = () => {
+  const handleDeleteClass = async () => {
     if (!firestore || !deletingClass) return;
-    deleteDocumentNonBlocking(doc(firestore, 'tridy', deletingClass.id));
-    toast({
-      title: 'Třída smazána',
-      description: 'Třída byla úspěšně odstraněna.',
-    });
+
+    try {
+        const batch = writeBatch(firestore);
+
+        // 1. Unassign tridaId from all students in the class
+        if (deletingClass.ziaciIds && deletingClass.ziaciIds.length > 0) {
+            const usersRef = collection(firestore, 'users');
+            const q = query(usersRef, where('__name__', 'in', deletingClass.ziaciIds));
+            const studentsSnapshot = await getDocs(q);
+            studentsSnapshot.forEach((studentDoc) => {
+                const userRef = doc(firestore, 'users', studentDoc.id);
+                batch.update(userRef, { tridaId: null });
+            });
+        }
+
+        // 2. Delete the class document
+        const classRef = doc(firestore, 'tridy', deletingClass.id);
+        batch.delete(classRef);
+        
+        await batch.commit();
+
+        toast({
+            title: 'Třída smazána',
+            description: `Třída "${deletingClass.nazev}" a její vazby na studenty byly odstraněny.`,
+        });
+
+    } catch (e) {
+        console.error("Error deleting class and updating students: ", e);
+        toast({
+            variant: 'destructive',
+            title: 'Chyba při mazání',
+            description: 'Nepodařilo se smazat třídu a aktualizovat studenty.',
+        });
+    }
+
     setDeletingClass(null);
   };
 
@@ -258,6 +282,11 @@ function AdminClassManagement() {
     setEditingClass(classData);
     setIsDialogOpen(true);
   };
+
+  useEffect(() => {
+    if(classesError) console.error("Error loading classes: ", classesError);
+    if(teachersError) console.error("Error loading teachers: ", teachersError);
+  }, [classesError, teachersError])
     
   return (
     <>
@@ -298,7 +327,7 @@ function AdminClassManagement() {
                     </TableCell>
                   </TableRow>
                 )}
-                {!classesLoading && !teachersLoading && classes?.map((cls) => (
+                {!(classesLoading || teachersLoading) && classes?.map((cls) => (
                     <ClassRow key={cls.id} classData={cls} teachers={teachers || []} onEdit={openDialog} onDelete={setDeletingClass} />
                 ))}
               </TableBody>
@@ -328,7 +357,7 @@ function AdminClassManagement() {
                 <AlertDialogHeader>
                 <AlertDialogTitle>Opravdu chcete smazat třídu?</AlertDialogTitle>
                 <AlertDialogDescription>
-                    Tato akce je nevratná a trvale smaže třídu "{deletingClass?.nazev}".
+                    Tato akce je nevratná. Trvale smaže třídu "{deletingClass?.nazev}" a odebere všechny žáky z této třídy.
                 </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
