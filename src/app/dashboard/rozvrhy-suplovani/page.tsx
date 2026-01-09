@@ -7,7 +7,7 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, doc, getDocs, writeBatch, query } from 'firebase/firestore';
+import { collection, doc, getDocs, writeBatch, query, where } from 'firebase/firestore';
 import type { Trida, User, Predmet, Ucebna, LessonBlock, DailySchedule, Rozvrh } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
