@@ -268,6 +268,61 @@
             "uciteleIds": { "type": "array", "items": { "type": "string" }, "description": "List of teacher IDs involved in the event." }
         },
         "required": ["id", "nazev", "typ", "datum", "cas"]
+    },
+    "Substitution": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Substitution",
+      "type": "object",
+      "description": "Represents a temporary change (substitution) for a specific lesson on a specific date.",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the substitution." },
+        "date": { "type": "string", "format": "date", "description": "The date the substitution occurs." },
+        "originalLesson": {
+          "type": "object",
+          "properties": {
+            "day": { "type": "string", "description": "Day of the week." },
+            "period": { "type": "number", "description": "Lesson period index." },
+            "classId": { "type": "string", "description": "Original class ID." },
+            "lessonBlock": { "$ref": "#/backend/entities/LessonBlock" }
+          },
+          "required": ["day", "period", "classId", "lessonBlock"]
+        },
+        "changes": {
+          "type": "object",
+          "properties": {
+            "teacherId": { "type": "string", "description": "ID of the substitute teacher." },
+            "ucebnaId": { "type": "string", "description": "ID of the substitute classroom." },
+            "subjectId": { "type": "string", "description": "ID of the substitute subject." },
+            "note": { "type": "string", "description": "A note regarding the substitution." },
+            "type": { 
+              "oneOf": [
+                { "type": "string" },
+                { "type": "array", "items": { "type": "string" } }
+              ],
+              "description": "Type of substitution (e.g., 'zmena-ucitele', 'zruseno', 'spojeno')."
+            }
+          },
+          "required": ["type"]
+        }
+      },
+      "required": ["id", "date", "originalLesson", "changes"]
+    },
+     "LessonBlock": {
+      "title": "LessonBlock",
+      "type": "object",
+      "description": "A reusable block representing a single lesson in a schedule.",
+      "properties": {
+        "id": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "classId": { "type": "string" },
+        "subjectName": { "type": "string" },
+        "subjectShortcut": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "className": { "type": "string" },
+        "ucebnaId": { "type": "string" },
+        "ucebnaName": { "type": "string" }
+      }
     }
   },
   "auth": {
@@ -417,6 +472,17 @@
             "description": "Stores general calendar events for classes and teachers.",
             "params": [
                 { "name": "udalostId", "description": "The unique ID of the event." }
+            ]
+        }
+      },
+      {
+        "path": "/suplovani/{substitutionId}",
+        "definition": {
+            "entityName": "Substitution",
+            "schema": { "$ref": "#/backend/entities/Substitution" },
+            "description": "Stores temporary lesson substitutions for specific dates.",
+            "params": [
+                { "name": "substitutionId", "description": "The unique ID of the substitution." }
             ]
         }
       }

@@ -53,6 +53,7 @@ export interface Predmet {
   id: string;
   name: string;
   shortcut: string;
+  teacherCount: number;
 }
 
 export interface Ucebna {
@@ -84,6 +85,8 @@ export interface LessonBlock {
   subjectShortcut: string;
   teacherName: string;
   className: string;
+  ucebnaId?: string;
+  ucebnaName?: string;
 }
 
 export type ScheduleGrid = {
@@ -119,4 +122,24 @@ export interface Udalost {
   cas: string; // HH:MM
   tridyIds: string[];
   uciteleIds: string[];
+}
+
+export type SubstitutionType = 'zmena-ucitele' | 'zmena-ucebny' | 'zruseno' | 'spojeno';
+
+export interface Substitution {
+    id: string;
+    date: string; // YYYY-MM-DD
+    originalLesson: {
+        day: string;
+        period: number;
+        classId: string;
+        lessonBlock: LessonBlock;
+    };
+    changes: {
+        teacherId?: string;
+        ucebnaId?: string;
+        subjectId?: string;
+        note?: string;
+        type: SubstitutionType | SubstitutionType[];
+    };
 }
