@@ -3,7 +3,7 @@
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { mockStudentTimetable, mockTeacherTimetable, getStudentById } from '@/lib/mock-data';
+import { getStudentById } from '@/lib/mock-data';
 import { GraduationCap, BookOpenCheck, CalendarDays, BookUser, MessageSquarePlus, Settings2 } from 'lucide-react';
 import type { Timetable } from '@/lib/types';
 import { useRouter } from 'next/navigation';
@@ -30,7 +30,7 @@ export default function DashboardPage() {
   const parentStudent = hasRole('rodic') && user.studentId ? getStudentById(`student-${user.studentId.split('-')[1]}`) : null;
   const displayStudent = student || parentStudent || getStudentById('student-1');
   const teacher = isTeacher ? user : { name: 'Byrtusová Linda' };
-  const timetable = isTeacher ? mockTeacherTimetable : mockStudentTimetable;
+  const timetable: Timetable = {}; // Empty timetable
 
   return (
     <div className="flex-1 space-y-8">

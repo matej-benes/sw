@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import { PlusCircle } from 'lucide-react';
 
 const timeSlots = [
     "07:55 - 08:40", "08:55 - 09:40", "09:55 - 10:40", "10:45 - 11:30",
@@ -46,6 +47,22 @@ function LessonContextMenu({ children, lesson }: { children: React.ReactNode, le
             </DropdownMenuContent>
         </DropdownMenu>
     );
+}
+
+function EmptySlotContextMenu({ children }: { children: React.ReactNode }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild onContextMenu={(e) => e.preventDefault()}>
+        {children}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuItem>
+          <PlusCircle className="mr-2 h-4 w-4" />
+          Vytvořit událost
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 
@@ -113,7 +130,17 @@ export function TimetableWidget({ timetableData, isTeacher, studentName, teacher
                             const lesson = findLesson(day, time);
                             return (
                                 <div key={index} className="p-0.5 border-b border-r border-border min-h-[60px]">
-                                    {lesson && <LessonBlock lesson={lesson} isTeacher={isTeacher} />}
+                                    {lesson ? (
+                                        <LessonBlock lesson={lesson} isTeacher={isTeacher} />
+                                    ) : (
+                                        isTeacher ? (
+                                            <EmptySlotContextMenu>
+                                                <div className="h-full w-full cursor-pointer"></div>
+                                            </EmptySlotContextMenu>
+                                        ) : (
+                                            <div className="h-full w-full"></div>
+                                        )
+                                    )}
                                 </div>
                             )
                         })}
