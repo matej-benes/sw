@@ -11,6 +11,19 @@ export interface User {
   pin?: string; // 6-digit PIN for registration
 }
 
+export interface Znamka {
+  id: string;
+  studentId: string;
+  predmet: string;
+  hodnota: number;
+  datum: string;
+  ucitelId: string;
+  slovniHodnoceni?: string;
+  tema?: string;
+  druhHodnoceni?: string;
+}
+
+
 export interface Grade {
   id: string;
   subject: string;

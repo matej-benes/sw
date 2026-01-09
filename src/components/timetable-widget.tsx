@@ -106,6 +106,17 @@ function LessonContextMenu({ children, lesson, day, period }: { children: React.
         router.push(`/dashboard/tridni-kniha/zapis?${query}`);
     }
 
+    const handleNewGrading = () => {
+        if(!dayInfo) return;
+        const query = new URLSearchParams({
+            tridaId: lesson.classId,
+            predmetId: lesson.subjectId,
+            datum: dayInfo.fullDate,
+            hodina: period.toString()
+        }).toString();
+        router.push(`/dashboard/hodnoceni/nove?${query}`);
+    }
+
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild onContextMenu={(e) => e.preventDefault()}>
@@ -113,7 +124,7 @@ function LessonContextMenu({ children, lesson, day, period }: { children: React.
             </DropdownMenuTrigger>
             <DropdownMenuContent>
                 <DropdownMenuItem onClick={handleClassBookEntry}>Zapsat do třídní knihy</DropdownMenuItem>
-                <DropdownMenuItem>Nové hodnocení</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleNewGrading}>Nové hodnocení</DropdownMenuItem>
                 <DropdownMenuItem>Probrané učivo</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => router.push('/dashboard/poznamky-zaka')}>Poznámka dítěte/žáka/studenta do třídní knihy</DropdownMenuItem>
                 <DropdownMenuSeparator />
