@@ -1,12 +1,13 @@
 'use client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, School, Book } from "lucide-react";
+import { Users, School, Book, Home } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 const managementCards = [
     { title: "Evidence osob", icon: Users, href: "/dashboard/sprava-systemu/evidence-osob", description: "Správa uživatelských účtů a rolí." },
     { title: "Třídy", icon: School, href: "/dashboard/sprava-systemu/tridy", description: "Vytváření a správa školních tříd." },
     { title: "Předměty", icon: Book, href: "/dashboard/sprava-systemu/predmety", description: "Definice a správa vyučovaných předmětů." },
+    { title: "Učebny", icon: Home, href: "/dashboard/sprava-systemu/ucebny", description: "Správa učeben a jejich vybavení." },
 ]
 
 export default function SpravaSystemuPage() {

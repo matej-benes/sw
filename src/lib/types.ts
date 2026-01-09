@@ -42,6 +42,12 @@ export interface Predmet {
   shortcut: string;
 }
 
+export interface Ucebna {
+  id: string;
+  nazev: string;
+  kapacita?: number;
+}
+
 export interface Lesson {
   time: string;
   subject: string;

@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Menu, ChevronDown, BookCopy, Settings, Users, School, Book, FileQuestion } from 'lucide-react';
+import { Menu, ChevronDown, BookCopy, Settings, Users, School, Book, FileQuestion, Home } from 'lucide-react';
 import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
@@ -21,6 +21,7 @@ const spravaSystemuLinks = [
      { name: "Evidence osob", href: "/dashboard/sprava-systemu/evidence-osob", icon: Users },
      { name: "Třídy", href: "/dashboard/sprava-systemu/tridy", icon: School },
      { name: "Předměty", href: "/dashboard/sprava-systemu/predmety", icon: Book },
+     { name: "Učebny", href: "/dashboard/sprava-systemu/ucebny", icon: Home },
 ]
 
 export default function DashboardLayout({
