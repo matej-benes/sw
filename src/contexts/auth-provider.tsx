@@ -48,14 +48,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return new Promise((resolve, reject) => {
       setTimeout(() => {
         const foundUser = getMockUserByEmail(email);
-        // Mock password check - use a more secure password for real users
-        const validPasswords = ['password', 'heslo'];
-        if (foundUser && validPasswords.includes(pass)) { 
+        
+        let isValid = false;
+        if (foundUser?.email === 'matej.romana@seznam.cz' && pass === 'MikMat2008_') {
+          isValid = true;
+        } else if (foundUser && ['password', 'heslo'].includes(pass)) {
+          isValid = true;
+        }
+
+        if (foundUser && isValid) { 
           setUser(foundUser);
           sessionStorage.setItem('skolaweb-user', JSON.stringify(foundUser));
           resolve();
         } else {
-          reject(new Error('Nesprávný email nebo heslo. Zkuste "matej.romana@seznam.cz" a heslo "password".'));
+          reject(new Error('Nesprávný email nebo heslo.'));
         }
       }, 1000);
     });
