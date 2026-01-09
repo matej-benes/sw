@@ -78,40 +78,41 @@ export const mockStudents: Student[] = [
 
 export const mockStudentTimetable: Timetable = {
   'Pondělí': [
-    { time: '8:00-8:45', subject: 'Český jazyk', teacher: 'Mgr. Dvořáčková', room: 'ČJ2' },
-    { time: '9:00-9:45', subject: 'Matematika', teacher: 'Mgr. Bartošek', room: 'M1' },
+    { time: '08:00-8:45', subject: 'Český jazyk', teacher: 'Mgr. Dvořáčková', room: 'ČJ2' },
+    { time: '09:00-9:45', subject: 'Matematika', teacher: 'Mgr. Bartošek', room: 'M1' },
     { time: '10:00-10:45', subject: 'Tělesná výchova', teacher: 'Mgr. Sportovec', room: 'Tělocvična' },
     { time: '11:00-11:45', subject: 'Fyzika', teacher: 'Mgr. Procházka', room: 'F1' },
   ],
   'Úterý': [
-    { time: '8:00-8:45', subject: 'Dějepis', teacher: 'Mgr. Černý', room: 'D5' },
-    { time: '9:00-9:45', subject: 'Chemie', teacher: 'Ing. Růžičková', room: 'CHL' },
+    { time: '08:00-8:45', subject: 'Dějepis', teacher: 'Mgr. Černý', room: 'D5' },
+    { time: '09:00-9:45', subject: 'Chemie', teacher: 'Ing. Růžičková', room: 'CHL' },
     { time: '10:00-10:45', subject: 'Matematika', teacher: 'Mgr. Bartošek', room: 'M1' },
     { time: '11:00-11:45', subject: 'Český jazyk', teacher: 'Mgr. Dvořáčková', room: 'ČJ2' },
   ],
   'Středa': [
-    { time: '9:00-9:45', subject: 'Anglický jazyk', teacher: 'Mr. Smith', room: 'A3' },
-    { time: '10:00-10:45', subject: 'Fyzika', teacher: 'Mgr. Procházka', room: 'F1' },
-    { time: '11:00-11:45', subject: 'Tělesná výchova', teacher: 'Mgr. Sportovec', room: 'Tělocvična' },
-    { time: '12:00-12:45', subject: 'Hudební výchova', teacher: 'Mgr. Zpěvavá', room: 'HV' },
+    { time: '07:55 - 08:40', subject: 'MAT', teacher: 'VILA', room: 'U112' },
+    { time: '08:55 - 09:40', subject: 'Aj', teacher: 'VILA', room: '' },
+    { time: '09:55 - 10:40', subject: 'ČJ', teacher: 'VILA', room: '' },
+    { time: '10:45 - 11:30', subject: 'FYZ', teacher: 'FYZ', room: '' },
+    { time: '11:35 - 12:20', subject: 'INF', teacher: 'VILA', room: '' },
   ],
   'Čtvrtek': [
-    { time: '8:00-8:45', subject: 'Matematika', teacher: 'Mgr. Bartošek', room: 'M1' },
-    { time: '9:00-9:45', subject: 'Český jazyk', teacher: 'Mgr. Dvořáčková', room: 'ČJ2' },
-    { time: '10:00-10:45', subject: 'Chemie', teacher: 'Ing. Růžičková', room: 'CHL' },
-    { time: '11:00-11:45', subject: 'Dějepis', teacher: 'Mgr. Černý', room: 'D5' },
+    { time: '07:55 - 08:40', subject: 'MAT', teacher: 'VILA', room: 'U112' },
+    { time: '08:55 - 09:40', subject: 'Aj', teacher: 'VILA', room: '' },
+    { time: '09:55 - 10:40', subject: 'DJ', teacher: 'VILA', room: 'U112' },
+    { time: '10:45 - 11:30', subject: 'TV', teacher: 'VILA', room: '' },
   ],
   'Pátek': [
-    { time: '8:00-8:45', subject: 'Anglický jazyk', teacher: 'Mr. Smith', room: 'A3' },
-    { time: '9:00-9:45', subject: 'Fyzika', teacher: 'Mgr. Procházka', room: 'F1' },
+    { time: '08:00-8:45', subject: 'Anglický jazyk', teacher: 'Mr. Smith', room: 'A3' },
+    { time: '09:00-9:45', subject: 'Fyzika', teacher: 'Mgr. Procházka', room: 'F1' },
     { time: '10:00-10:45', subject: 'Výtvarná výchova', teacher: 'Mgr. Malíř', room: 'VV' },
   ],
 };
 
 export const mockTeacherTimetable: Timetable = {
   'Pondělí': [
-    { time: '8:00-8:45', subject: 'Matematika', class: '8.A', room: 'M1' },
-    { time: '9:00-9:45', subject: 'Matematika', class: '9.B', room: 'M1' },
+    { time: '08:00-8:45', subject: 'Matematika', class: '8.A', room: 'M1' },
+    { time: '09:00-9:45', subject: 'Matematika', class: '9.B', room: 'M1' },
     { time: '10:00-10:45', subject: 'Volná hodina', room: 'Kabinet' },
     { time: '11:00-11:45', subject: 'Matematika', class: '7.C', room: 'M2' },
   ],
@@ -119,19 +120,21 @@ export const mockTeacherTimetable: Timetable = {
     { time: '10:00-10:45', subject: 'Matematika', class: '8.A', room: 'M1' },
     { time: '11:00-11:45', subject: 'Matematika', class: '9.B', room: 'M1' },
   ],
-  'Středa': [
-    { time: '8:00-8:45', subject: 'Dozor', room: 'Chodba 1. patro' },
-    { time: '9:00-9:45', subject: 'Matematika', class: '7.C', room: 'M2' },
-    { time: '10:00-10:45', subject: 'Volná hodina', room: 'Kabinet' },
+    'Středa': [
+    { time: '07:55 - 08:40', subject: 'MAT', class: 'VII.A', room: 'U112' },
+    { time: '08:55 - 09:40', subject: 'Aj', class: 'VII.A', room: '' },
+    { time: '09:55 - 10:40', subject: 'ČJ', class: 'VII.A', room: '' },
+    { time: '10:45 - 11:30', subject: 'FYZ', class: 'VII.A', room: '' },
+    { time: '11:35 - 12:20', subject: 'INF', class: 'VII.A', room: '' },
   ],
   'Čtvrtek': [
-    { time: '8:00-8:45', subject: 'Matematika', class: '8.A', room: 'M1' },
-    { time: '9:00-9:45', subject: 'Konzultace', room: 'Kabinet' },
+    { time: '08:00-8:45', subject: 'Matematika', class: '8.A', room: 'M1' },
+    { time: '09:00-9:45', subject: 'Konzultace', room: 'Kabinet' },
     { time: '10:00-10:45', subject: 'Matematika', class: '9.B', room: 'M1' },
   ],
   'Pátek': [
-    { time: '8:00-8:45', subject: 'Volná hodina', room: 'Kabinet' },
-    { time: '9:00-9:45', subject: 'Matematika', class: '7.C', room: 'M2' },
+    { time: '08:00-8:45', subject: 'Volná hodina', room: 'Kabinet' },
+    { time: '09:00-9:45', subject: 'Matematika', class: '7.C', room: 'M2' },
     { time: '10:00-10:45', subject: 'Třídnická hodina', class: '8.A', room: 'M1' },
   ],
 };

@@ -3,12 +3,12 @@
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
-import { mockStudentTimetable, mockTeacherTimetable } from '@/lib/mock-data';
-import { Badge } from '@/components/ui/badge';
+import { mockStudentTimetable, mockTeacherTimetable, getStudentById } from '@/lib/mock-data';
 import { GraduationCap, BookOpenCheck, CalendarDays, BookUser, MessageSquarePlus, Settings2 } from 'lucide-react';
 import type { Timetable } from '@/lib/types';
 import { useRouter } from 'next/navigation';
+import { TimetableWidget } from '@/components/timetable-widget';
+import { CalendarIcon } from 'lucide-react';
 
 const actionCards = [
     { title: "Zapsat hodnocení", icon: GraduationCap, href: "/dashboard/studenti", description: "Přidejte nové známky." },
@@ -25,13 +25,41 @@ export default function DashboardPage() {
 
   if (!user) return null;
 
-  const timetable = hasRole('ucitel') ? mockTeacherTimetable : mockStudentTimetable;
+  const isTeacher = hasRole('ucitel');
+  const student = hasRole('ziak') ? getStudentById(`student-${user.id.split('-')[1]}`) : null;
+  const parentStudent = hasRole('rodic') && user.studentId ? getStudentById(`student-${user.studentId.split('-')[1]}`) : null;
+  const displayStudent = student || parentStudent || getStudentById('student-1');
+  const teacher = isTeacher ? user : { name: 'Byrtusová Linda' };
+  const timetable = isTeacher ? mockTeacherTimetable : mockStudentTimetable;
 
   return (
-    <div className="flex-1 space-y-4">
+    <div className="flex-1 space-y-8">
         <div className="space-y-2">
             <h1 className="text-3xl font-bold tracking-tight">Vítejte zpět, {user.name}!</h1>
             <p className="text-muted-foreground">Přehled vašeho dne v Škola Online.</p>
+        </div>
+
+        <div className="mt-6">
+             <Card>
+                <CardHeader className="flex flex-row items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                        <CalendarIcon className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                        <CardTitle>Kalendář</CardTitle>
+                        <CardDescription>Váš týdenní přehled.</CardDescription>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    <TimetableWidget 
+                        timetableData={timetable} 
+                        isTeacher={isTeacher} 
+                        studentName={displayStudent?.name || ''}
+                        teacherName={teacher.name}
+                        className="VII.A"
+                    />
+                </CardContent>
+            </Card>
         </div>
 
         <div className="mt-6">
