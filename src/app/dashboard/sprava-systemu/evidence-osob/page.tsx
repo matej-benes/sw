@@ -168,12 +168,52 @@ function UserForm({
   );
 }
 
+function UserRow({ user, onEdit, onDelete }: { user: User, onEdit: (user: User) => void, onDelete: (user: User) => void }) {
+    return (
+        <TableRow>
+            <TableCell className="font-medium">{user.name}</TableCell>
+            <TableCell>{user.email}</TableCell>
+            <TableCell>
+                <div className="flex flex-wrap gap-1">
+                {(user.roles || []).map((role) => (
+                    <Badge key={role} variant="secondary">
+                    {roleTranslations[role as Role] || role}
+                    </Badge>
+                ))}
+                </div>
+            </TableCell>
+            <TableCell className="text-right">
+                <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                    <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                    <DropdownMenuItem onSelect={() => onEdit(user)}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Upravit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                    onSelect={() => onDelete(user)}
+                    className="text-destructive"
+                    >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Smazat
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+                </DropdownMenu>
+            </TableCell>
+        </TableRow>
+    )
+}
+
 function AdminUserManagement() {
     const firestore = useFirestore();
     const { hasRole } = useAuth();
     
     const usersCollection = useMemoFirebase(
-      () => hasRole('administrator') ? collection(firestore, 'users') : null,
+      () => (firestore && hasRole('administrator')) ? collection(firestore, 'users') : null,
       [firestore, hasRole]
     );
 
@@ -234,7 +274,8 @@ function AdminUserManagement() {
             title: 'Chyba',
             description: 'Při mazání uživatele došlo k chybě.',
           });
-          setDeletingUser(null);
+        } finally {
+            setDeletingUser(null);
         }
       };
 
@@ -242,10 +283,6 @@ function AdminUserManagement() {
       setEditingUser(user);
       setIsDialogOpen(true);
     };
-
-    const openDeleteDialog = (user: User) => {
-      setDeletingUser(user);
-    }
     
     return (
     <>
@@ -287,41 +324,7 @@ function AdminUserManagement() {
                   </TableRow>
                 )}
                 {!usersLoading && users?.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.name}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {(user.roles || []).map((role) => (
-                          <Badge key={role} variant="secondary">
-                            {roleTranslations[role as Role] || role}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <DropdownMenuItem onSelect={() => openDialog(user)}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            Upravit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={() => openDeleteDialog(user)}
-                            className="text-destructive"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Smazat
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
+                    <UserRow key={user.id} user={user} onEdit={openDialog} onDelete={setDeletingUser} />
                 ))}
               </TableBody>
             </Table>
@@ -343,27 +346,29 @@ function AdminUserManagement() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deletingUser} onOpenChange={setDeletingUser}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                Opravdu chcete smazat uživatele?
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                Tato akce je nevratná a trvale smaže uživatele "{deletingUser?.name}".
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Zrušit</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleDeleteUser}
-                className="bg-destructive hover:bg-destructive/90"
-              >
-                Smazat
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+      {deletingUser && (
+        <AlertDialog open={!!deletingUser} onOpenChange={() => setDeletingUser(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Opravdu chcete smazat uživatele?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  Tato akce je nevratná a trvale smaže uživatele "{deletingUser?.name}".
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Zrušit</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteUser}
+                  className="bg-destructive hover:bg-destructive/90"
+                >
+                  Smazat
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </>
     );
 }
@@ -373,13 +378,18 @@ export default function EvidenceOsobPage() {
   const { hasRole } = useAuth();
   const { isUserLoading } = useUser();
   
-  if (isUserLoading) {
-    return (
-       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Evidence osob</h1>
-          <p className="text-muted-foreground">Správa všech uživatelů v systému.</p>
-        </div>
+  const showLoading = isUserLoading;
+  const showAccessDenied = !isUserLoading && !hasRole('administrator');
+  const showContent = !isUserLoading && hasRole('administrator');
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Evidence osob</h1>
+        <p className="text-muted-foreground">Správa všech uživatelů v systému.</p>
+      </div>
+
+      {showLoading && (
         <Card>
             <CardHeader>
               <CardTitle>Načítání...</CardTitle>
@@ -391,34 +401,20 @@ export default function EvidenceOsobPage() {
                 </div>
             </CardContent>
         </Card>
-      </div>
-    )
-  }
+      )}
 
-  if (!hasRole('administrator')) {
-     return (
-       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Evidence osob</h1>
-          <p className="text-muted-foreground">Správa všech uživatelů v systému.</p>
-        </div>
-        <Card>
+      {showAccessDenied && (
+         <Card>
             <CardHeader>
               <CardTitle>Přístup odepřen</CardTitle>
               <CardDescription>Pro přístup k této stránce nemáte oprávnění.</CardDescription>
             </CardHeader>
         </Card>
-      </div>
-    )
-  }
+      )}
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Evidence osob</h1>
-        <p className="text-muted-foreground">Správa všech uživatelů v systému.</p>
-      </div>
-      <AdminUserManagement />
+      {showContent && (
+        <AdminUserManagement />
+      )}
     </div>
   );
 }

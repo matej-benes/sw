@@ -141,10 +141,42 @@ function SubjectForm({
   );
 }
 
+function SubjectRow({ subject, onEdit, onDelete }: { subject: Subject; onEdit: (subject: Subject) => void; onDelete: (subject: Subject) => void; }) {
+    return (
+        <TableRow>
+            <TableCell className="font-medium">{subject.name}</TableCell>
+            <TableCell>{subject.shortcut}</TableCell>
+            <TableCell>{subject.teacherCount}</TableCell>
+            <TableCell className="text-right">
+                <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                    <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                    <DropdownMenuItem onSelect={() => onEdit(subject)}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Upravit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                    onSelect={() => onDelete(subject)}
+                    className="text-destructive"
+                    >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Smazat
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+                </DropdownMenu>
+            </TableCell>
+        </TableRow>
+    )
+}
+
 function AdminSubjectManagement() {
   const firestore = useFirestore();
   const { hasRole } = useAuth();
-  const subjectsCollection = useMemoFirebase(() => hasRole('administrator') ? collection(firestore, 'predmety') : null, [firestore, hasRole]);
+  const subjectsCollection = useMemoFirebase(() => (firestore && hasRole('administrator')) ? collection(firestore, 'predmety') : null, [firestore, hasRole]);
   const { data: subjects, isLoading: subjectsLoading } = useCollection<Subject>(subjectsCollection);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -190,7 +222,6 @@ function AdminSubjectManagement() {
         title: 'Předmět smazán',
         description: 'Předmět byl úspěšně odstraněn.',
       });
-      setDeletingSubject(null);
     } catch (error) {
       console.error('Error deleting subject:', error);
       toast({
@@ -198,7 +229,8 @@ function AdminSubjectManagement() {
         title: 'Chyba',
         description: 'Při mazání předmětu došlo k chybě.',
       });
-      setDeletingSubject(null);
+    } finally {
+        setDeletingSubject(null);
     }
   };
 
@@ -247,33 +279,7 @@ function AdminSubjectManagement() {
                   </TableRow>
                 )}
                 {!subjectsLoading && subjects?.map((subject) => (
-                  <TableRow key={subject.id}>
-                    <TableCell className="font-medium">{subject.name}</TableCell>
-                    <TableCell>{subject.shortcut}</TableCell>
-                    <TableCell>{subject.teacherCount}</TableCell>
-                    <TableCell className="text-right">
-                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <DropdownMenuItem onSelect={() => openDialog(subject)}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            Upravit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={() => setDeletingSubject(subject)}
-                            className="text-destructive"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Smazat
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
+                    <SubjectRow key={subject.id} subject={subject} onEdit={openDialog} onDelete={setDeletingSubject} />
                 ))}
               </TableBody>
             </Table>
@@ -295,27 +301,29 @@ function AdminSubjectManagement() {
         </DialogContent>
       </Dialog>
 
-       <AlertDialog open={!!deletingSubject} onOpenChange={setDeletingSubject}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                Opravdu chcete smazat předmět?
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                Tato akce je nevratná a trvale smaže předmět "{deletingSubject?.name}".
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Zrušit</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleDeleteSubject}
-                className="bg-destructive hover:bg-destructive/90"
-              >
-                Smazat
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        {deletingSubject && (
+            <AlertDialog open={!!deletingSubject} onOpenChange={() => setDeletingSubject(null)}>
+                <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>
+                    Opravdu chcete smazat předmět?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                    Tato akce je nevratná a trvale smaže předmět "{deletingSubject?.name}".
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Zrušit</AlertDialogCancel>
+                    <AlertDialogAction
+                    onClick={handleDeleteSubject}
+                    className="bg-destructive hover:bg-destructive/90"
+                    >
+                    Smazat
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        )}
     </>
   );
 }
@@ -324,6 +332,10 @@ export default function PredmetyPage() {
   const { hasRole } = useAuth();
   const { isUserLoading } = useUser();
   
+  const showLoading = isUserLoading;
+  const showAccessDenied = !isUserLoading && !hasRole('administrator');
+  const showContent = !isUserLoading && hasRole('administrator');
+
   return (
     <div className="space-y-6">
       <div>
@@ -333,7 +345,7 @@ export default function PredmetyPage() {
         </p>
       </div>
 
-       {isUserLoading ? (
+       {showLoading && (
          <Card>
             <CardHeader>
               <CardTitle>Načítání...</CardTitle>
@@ -345,15 +357,19 @@ export default function PredmetyPage() {
                 </div>
             </CardContent>
         </Card>
-      ) : hasRole('administrator') ? (
-        <AdminSubjectManagement />
-      ) : (
+      )}
+      
+      {showAccessDenied && (
         <Card>
             <CardHeader>
               <CardTitle>Přístup odepřen</CardTitle>
               <CardDescription>Pro přístup k této stránce nemáte oprávnění.</CardDescription>
             </CardHeader>
         </Card>
+      )}
+
+      {showContent && (
+        <AdminSubjectManagement />
       )}
     </div>
   );

@@ -141,10 +141,42 @@ function ClassForm({
   );
 }
 
+function ClassRow({ classData, onEdit, onDelete }: { classData: Class, onEdit: (classData: Class) => void, onDelete: (classData: Class) => void }) {
+    return (
+        <TableRow>
+            <TableCell className="font-medium">{classData.name}</TableCell>
+            <TableCell>{classData.teacher}</TableCell>
+            <TableCell>{classData.studentCount}</TableCell>
+            <TableCell className="text-right">
+                <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                    <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                    <DropdownMenuItem onSelect={() => onEdit(classData)}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Upravit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                    onSelect={() => onDelete(classData)}
+                    className="text-destructive"
+                    >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Smazat
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+                </DropdownMenu>
+            </TableCell>
+        </TableRow>
+    )
+}
+
 function AdminClassManagement() {
   const firestore = useFirestore();
   const { hasRole } = useAuth();
-  const classesCollection = useMemoFirebase(() => hasRole('administrator') ? collection(firestore, 'tridy') : null, [firestore, hasRole]);
+  const classesCollection = useMemoFirebase(() => (firestore && hasRole('administrator')) ? collection(firestore, 'tridy') : null, [firestore, hasRole]);
   const { data: classes, isLoading: classesLoading } = useCollection<Class>(classesCollection);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -190,7 +222,6 @@ function AdminClassManagement() {
         title: 'Třída smazána',
         description: 'Třída byla úspěšně odstraněna.',
       });
-      setDeletingClass(null);
     } catch (error) {
       console.error('Error deleting class:', error);
       toast({
@@ -198,7 +229,8 @@ function AdminClassManagement() {
         title: 'Chyba',
         description: 'Při mazání třídy došlo k chybě.',
       });
-      setDeletingClass(null);
+    } finally {
+        setDeletingClass(null);
     }
   };
 
@@ -247,33 +279,7 @@ function AdminClassManagement() {
                   </TableRow>
                 )}
                 {!classesLoading && classes?.map((cls) => (
-                  <TableRow key={cls.id}>
-                    <TableCell className="font-medium">{cls.name}</TableCell>
-                    <TableCell>{cls.teacher}</TableCell>
-                    <TableCell>{cls.studentCount}</TableCell>
-                    <TableCell className="text-right">
-                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <DropdownMenuItem onSelect={() => openDialog(cls)}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            Upravit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={() => setDeletingClass(cls)}
-                            className="text-destructive"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Smazat
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
+                    <ClassRow key={cls.id} classData={cls} onEdit={openDialog} onDelete={setDeletingClass} />
                 ))}
               </TableBody>
             </Table>
@@ -295,25 +301,27 @@ function AdminClassManagement() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deletingClass} onOpenChange={setDeletingClass}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Opravdu chcete smazat třídu?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Tato akce je nevratná a trvale smaže třídu "{deletingClass?.name}".
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Zrušit</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleDeleteClass}
-                className="bg-destructive hover:bg-destructive/90"
-              >
-                Smazat
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+      {deletingClass && (
+        <AlertDialog open={!!deletingClass} onOpenChange={() => setDeletingClass(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                <AlertDialogTitle>Opravdu chcete smazat třídu?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    Tato akce je nevratná a trvale smaže třídu "{deletingClass?.name}".
+                </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                <AlertDialogCancel>Zrušit</AlertDialogCancel>
+                <AlertDialogAction
+                    onClick={handleDeleteClass}
+                    className="bg-destructive hover:bg-destructive/90"
+                >
+                    Smazat
+                </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+            </AlertDialog>
+      )}
     </>
   );
 }
@@ -322,6 +330,10 @@ export default function SpravaTridyPage() {
   const { hasRole } = useAuth();
   const { isUserLoading } = useUser();
   
+  const showLoading = isUserLoading;
+  const showAccessDenied = !isUserLoading && !hasRole('administrator');
+  const showContent = !isUserLoading && hasRole('administrator');
+
   return (
     <div className="space-y-6">
       <div>
@@ -329,7 +341,7 @@ export default function SpravaTridyPage() {
         <p className="text-muted-foreground">Správa všech tříd v systému.</p>
       </div>
 
-      {isUserLoading ? (
+      {showLoading && (
         <Card>
             <CardHeader>
               <CardTitle>Načítání...</CardTitle>
@@ -341,15 +353,19 @@ export default function SpravaTridyPage() {
                 </div>
             </CardContent>
         </Card>
-      ) : hasRole('administrator') ? (
-        <AdminClassManagement />
-      ) : (
+      )}
+      
+      {showAccessDenied && (
          <Card>
             <CardHeader>
               <CardTitle>Přístup odepřen</CardTitle>
               <CardDescription>Pro přístup k této stránce nemáte oprávnění.</CardDescription>
             </CardHeader>
         </Card>
+      )}
+
+      {showContent && (
+        <AdminClassManagement />
       )}
     </div>
   );
