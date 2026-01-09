@@ -57,21 +57,18 @@ function NewGradingContent() {
   const datum = searchParams.get('datum');
   const hodina = searchParams.get('hodina');
   
-  const [students, setStudents] = useState<User[]>([]);
-
   // Fetch data
   const predmetyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'predmety') : null, [firestore]);
   const { data: predmety, isLoading: predmetyLoading } = useCollection<Predmet>(predmetyCollection);
 
-  const tridaRef = useMemoFirebase(() => tridaId ? doc(firestore, 'tridy', tridaId) : null, [firestore, tridaId]);
-  const { data: tridaData, isLoading: tridaLoading } = useDoc<Trida>(tridaRef);
-
   const studentsQuery = useMemoFirebase(() => {
-    if (!firestore || !tridaData?.ziaciIds || tridaData.ziaciIds.length === 0) return null;
-    return query(collection(firestore, "users"), where('__name__', 'in', tridaData.ziaciIds));
-  }, [firestore, tridaData]);
+    if (!firestore || !tridaId) return null;
+    return query(collection(firestore, "users"), where("tridaId", "==", tridaId));
+  }, [firestore, tridaId]);
   const { data: studentDocs, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
   
+  const tridaRef = useMemoFirebase(() => tridaId ? doc(firestore, 'tridy', tridaId) : null, [firestore, tridaId]);
+  const { data: tridaData } = useDoc<Trida>(tridaRef);
   const rozvrhRef = useMemoFirebase(() => tridaId ? doc(firestore, 'rozvrhy', tridaId) : null, [firestore, tridaId]);
   const { data: rozvrhData } = useDoc<Rozvrh>(rozvrhRef);
   
@@ -117,7 +114,7 @@ function NewGradingContent() {
 
 
   const onSubmit = async (data: GradingFormData) => {
-    if (!teacherUser) {
+    if (!teacherUser || !firestore) {
         toast({ variant: 'destructive', title: 'Chyba', description: 'Nejste přihlášeni.' });
         return;
     }
@@ -161,7 +158,7 @@ function NewGradingContent() {
   const selectedCount = watch('studenti').filter(s => s.zahrnout).length;
 
 
-  if (tridaLoading || predmetyLoading || studentsLoading) {
+  if (predmetyLoading || studentsLoading) {
     return <div>Načítání dat...</div>
   }
 

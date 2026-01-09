@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   Card,
@@ -75,9 +75,9 @@ export default function TridniKnihaZapisContent() {
 
   // Fetch students for the class
   const studentsQuery = useMemoFirebase(() => {
-    if (!firestore || !tridaData?.ziaciIds || tridaData.ziaciIds.length === 0) return null;
-    return query(collection(firestore, "users"), where('__name__', 'in', tridaData.ziaciIds));
-  }, [firestore, tridaData]);
+    if (!firestore || !tridaId) return null;
+    return query(collection(firestore, "users"), where("tridaId", "==", tridaId));
+  }, [firestore, tridaId]);
   const { data: studentDocs, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
   
   useEffect(() => {
