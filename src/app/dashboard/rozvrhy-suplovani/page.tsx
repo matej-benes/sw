@@ -85,33 +85,37 @@ export default function RozvrhySuplovaniPage() {
             return;
         };
         setIsLoading(true);
-
-        const newWeekSchedule = buildInitialWeekSchedule(weekDays);
         
-        const docIds = weekDays.map(day => `${selectedClassId}-${format(day, 'yyyy-MM-dd')}`);
-        
-        const scheduleQuery = query(collection(firestore, 'rozvrhy'), where('id', 'in', docIds));
+        const loadScheduleForWeek = async () => {
+            const newWeekSchedule = buildInitialWeekSchedule(weekDays);
+            const docIds = weekDays.map(day => `${selectedClassId}-${format(day, 'yyyy-MM-dd')}`);
+            
+            try {
+                const scheduleQuery = query(collection(firestore, 'rozvrhy'), where('id', 'in', docIds));
+                const querySnapshot = await getDocs(scheduleQuery);
 
-        getDocs(scheduleQuery).then(querySnapshot => {
-            querySnapshot.forEach(docSnap => {
-                const data = docSnap.data() as Rozvrh;
-                const dayIndex = newWeekSchedule.findIndex(d => isSameDay(d.date, new Date(data.datum + 'T00:00:00')));
-                
-                if (dayIndex !== -1) {
-                    newWeekSchedule[dayIndex] = {
-                        ...newWeekSchedule[dayIndex],
-                        timeSlots: data.timeSlots || initialTimeSlots,
-                        lessons: data.hodiny
-                    };
-                }
-            });
-            setWeekSchedule(newWeekSchedule);
-        }).catch(error => {
-             console.error("Error loading week schedule: ", error);
-             toast({ variant: 'destructive', title: 'Chyba při načítání', description: 'Nepodařilo se načíst rozvrh.' });
-        }).finally(() => {
-            setIsLoading(false);
-        });
+                querySnapshot.forEach(docSnap => {
+                    const data = docSnap.data() as Rozvrh;
+                    const dayIndex = newWeekSchedule.findIndex(d => isSameDay(d.date, new Date(data.datum + 'T00:00:00')));
+                    
+                    if (dayIndex !== -1) {
+                        newWeekSchedule[dayIndex] = {
+                            ...newWeekSchedule[dayIndex],
+                            timeSlots: data.timeSlots || initialTimeSlots,
+                            lessons: data.hodiny
+                        };
+                    }
+                });
+                setWeekSchedule(newWeekSchedule);
+            } catch (error) {
+                console.error("Error loading week schedule: ", error);
+                toast({ variant: 'destructive', title: 'Chyba při načítání', description: 'Nepodařilo se načíst rozvrh.' });
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        loadScheduleForWeek();
 
     }, [selectedClassId, weekDays, firestore, toast]);
 
@@ -273,7 +277,7 @@ export default function RozvrhySuplovaniPage() {
                     <p className="text-muted-foreground">Vytvářejte a upravujte týdenní rozvrhy pro třídy.</p>
                 </div>
                  <div className="flex gap-2">
-                     <Select onValueChange={handleClassChange}>
+                     <Select onValueChange={handleClassChange} value={selectedClassId}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="Vyberte třídu" />
                         </SelectTrigger>
