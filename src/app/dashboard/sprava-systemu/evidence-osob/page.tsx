@@ -327,14 +327,14 @@ function AdminUserManagement() {
             });
         } else {
             // This is a new user
-            const newUserRef = doc(collection(firestore, 'users'));
+            const newUserDocRef = doc(collection(firestore, 'users'));
             const newUserWithId = {
                 ...formData,
-                id: newUserRef.id,
-                avatarUrl: `https://picsum.photos/seed/${newUserRef.id}/100/100`,
+                id: newUserDocRef.id,
+                avatarUrl: `https://picsum.photos/seed/${newUserDocRef.id}/100/100`,
             };
             
-            await setDoc(newUserRef, newUserWithId);
+            await setDoc(newUserDocRef, newUserWithId);
 
             if (newUserWithId.roles?.includes('ziak') && newUserWithId.tridaId) {
                 const tridaRef = doc(firestore, 'tridy', newUserWithId.tridaId);
