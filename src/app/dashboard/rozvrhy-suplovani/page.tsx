@@ -53,7 +53,7 @@ const buildInitialWeekSchedule = (week: Date[]): DailySchedule[] => {
 export default function RozvrhySuplovaniPage() {
     const firestore = useFirestore();
     const { toast } = useToast();
-    const [selectedClassId, setSelectedClassId] = useState<string | undefined>();
+    const [selectedClassId, setSelectedClassId] = useState<string>();
     
     // Week navigation
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -80,46 +80,41 @@ export default function RozvrhySuplovaniPage() {
     const { subjectId, teacherId, classId, ucebnaId } = watch();
 
     useEffect(() => {
-        const loadScheduleForWeek = async (classId: string, week: Date[]) => {
-            if (!firestore) return;
-            setIsLoading(true);
-
-            const newWeekSchedule = buildInitialWeekSchedule(week);
-            
-            try {
-                const docIds = week.map(day => `${classId}-${format(day, 'EEEE', { locale: cs })}`);
-                const scheduleQuery = query(collection(firestore, 'rozvrhy'), where('id', 'in', docIds));
-                const querySnapshot = await getDocs(scheduleQuery);
-
-                querySnapshot.forEach(docSnap => {
-                    const data = docSnap.data() as Rozvrh;
-                    // Note: 'datum' here is the day name string like 'Pondělí'
-                    const dayIndex = newWeekSchedule.findIndex(d => d.dayName === data.datum);
-                    
-                    if (dayIndex !== -1) {
-                        newWeekSchedule[dayIndex] = {
-                            ...newWeekSchedule[dayIndex],
-                            timeSlots: data.timeSlots || initialTimeSlots,
-                            lessons: data.hodiny
-                        };
-                    }
-                });
-                
-                setWeekSchedule(newWeekSchedule);
-            } catch (error) {
-                console.error("Error loading week schedule: ", error);
-                toast({ variant: 'destructive', title: 'Chyba při načítání', description: 'Nepodařilo se načíst rozvrh.' });
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        if (selectedClassId) {
-            loadScheduleForWeek(selectedClassId, weekDays);
-        } else {
+        if (!selectedClassId || !firestore) {
             setWeekSchedule(buildInitialWeekSchedule(weekDays));
-        }
+            return;
+        };
+        setIsLoading(true);
+
+        const newWeekSchedule = buildInitialWeekSchedule(weekDays);
+        
+        const docIds = weekDays.map(day => `${selectedClassId}-${format(day, 'yyyy-MM-dd')}`);
+        
+        const scheduleQuery = query(collection(firestore, 'rozvrhy'), where('id', 'in', docIds));
+
+        getDocs(scheduleQuery).then(querySnapshot => {
+            querySnapshot.forEach(docSnap => {
+                const data = docSnap.data() as Rozvrh;
+                const dayIndex = newWeekSchedule.findIndex(d => isSameDay(d.date, new Date(data.datum + 'T00:00:00')));
+                
+                if (dayIndex !== -1) {
+                    newWeekSchedule[dayIndex] = {
+                        ...newWeekSchedule[dayIndex],
+                        timeSlots: data.timeSlots || initialTimeSlots,
+                        lessons: data.hodiny
+                    };
+                }
+            });
+            setWeekSchedule(newWeekSchedule);
+        }).catch(error => {
+             console.error("Error loading week schedule: ", error);
+             toast({ variant: 'destructive', title: 'Chyba při načítání', description: 'Nepodařilo se načíst rozvrh.' });
+        }).finally(() => {
+            setIsLoading(false);
+        });
+
     }, [selectedClassId, weekDays, firestore, toast]);
+
 
     const handleCreateLessonBlock = (data: LessonFormData) => {
         const subject = predmety?.find(p => p.id === data.subjectId);
@@ -158,17 +153,17 @@ export default function RozvrhySuplovaniPage() {
             const batch = writeBatch(firestore);
             
             weekSchedule.forEach(daySchedule => {
-                const docId = `${selectedClassId}-${daySchedule.dayName}`;
+                const docId = `${selectedClassId}-${format(daySchedule.date, 'yyyy-MM-dd')}`;
                 const scheduleRef = doc(firestore, 'rozvrhy', docId);
                  
                 const scheduleData: Omit<Rozvrh, 'id'> = {
                     tridaId: selectedClassId,
-                    datum: daySchedule.dayName, // Saving day name as datum
+                    datum: format(daySchedule.date, 'yyyy-MM-dd'),
                     timeSlots: daySchedule.timeSlots,
                     hodiny: daySchedule.lessons,
                 };
                 
-                batch.set(scheduleRef, scheduleData);
+                batch.set(scheduleRef, scheduleData, { merge: true });
             });
 
             await batch.commit();
@@ -189,15 +184,39 @@ export default function RozvrhySuplovaniPage() {
         const sourceWeekStart = startOfWeek(sourceWeek, { weekStartsOn: 1 });
         const sourceWeekDays = eachDayOfInterval({ start: sourceWeekStart, end: addDays(sourceWeekStart, 4) });
         
-        // Since we are now saving by day name, we don't need to query by date. We just copy the structure.
-        // This is a simplification. A real "copy week" would fetch a specific week's data.
-        // For now, we assume we copy the currently loaded template if it existed for another week.
-        // This part of logic is complex and might need re-evaluation based on exact product requirements.
-        // Let's assume for now "copy" just re-uses the current `weekSchedule` state if you change week.
-        
-        // This is a placeholder for a more complex "copy from another week" logic.
-        toast({ title: "Funkce není implementována", description: "Kopírování z jiného týdne bude dostupné brzy." });
-        setIsLoading(false);
+        try {
+            const sourceDocIds = sourceWeekDays.map(day => `${selectedClassId}-${format(day, 'yyyy-MM-dd')}`);
+            const scheduleQuery = query(collection(firestore, 'rozvrhy'), where('id', 'in', sourceDocIds));
+            const querySnapshot = await getDocs(scheduleQuery);
+
+            const sourceSchedules: { [key: string]: Rozvrh } = {};
+             querySnapshot.forEach(docSnap => {
+                const data = docSnap.data() as Rozvrh;
+                const dayOfWeek = format(new Date(data.datum + 'T00:00:00'), 'EEEE', { locale: cs });
+                sourceSchedules[dayOfWeek] = data;
+            });
+            
+            const newWeekSchedule = buildInitialWeekSchedule(weekDays).map(daySchedule => {
+                const sourceDaySchedule = sourceSchedules[daySchedule.dayName];
+                if (sourceDaySchedule) {
+                    return {
+                        ...daySchedule,
+                        timeSlots: sourceDaySchedule.timeSlots,
+                        lessons: sourceDaySchedule.hodiny,
+                    };
+                }
+                return daySchedule;
+            });
+            
+            setWeekSchedule(newWeekSchedule);
+            toast({ title: "Týden zkopírován", description: "Rozvrh byl zkopírován, nyní jej uložte." });
+
+        } catch (error) {
+            console.error("Error copying week: ", error);
+            toast({ variant: 'destructive', title: 'Chyba při kopírování', description: 'Nepodařilo se zkopírovat týden.' });
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleDragStart = (e: React.DragEvent, block: LessonBlock) => {
@@ -254,7 +273,7 @@ export default function RozvrhySuplovaniPage() {
                     <p className="text-muted-foreground">Vytvářejte a upravujte týdenní rozvrhy pro třídy.</p>
                 </div>
                  <div className="flex gap-2">
-                     <Select onValueChange={handleClassChange} value={selectedClassId}>
+                     <Select onValueChange={handleClassChange}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="Vyberte třídu" />
                         </SelectTrigger>
@@ -433,4 +452,3 @@ export default function RozvrhySuplovaniPage() {
         </div>
     );
 }
-    
