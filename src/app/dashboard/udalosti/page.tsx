@@ -9,16 +9,25 @@ import { Calendar } from '@/components/ui/calendar';
 import { Calendar as CalendarIcon, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, where } from 'firebase/firestore';
+import type { Trida, User } from '@/lib/types';
+
 
 // Mock data for demonstration purposes
 const periods = ['1. pololetí', '2. pololetí'];
-const classes = [{ id: 'trida-1', nazev: 'VI.A' }, { id: 'trida-2', nazev: 'VII.B' }];
-const teachers = [{ id: 'ucitel-1', name: 'Matěj Mikolášek' }, { id: 'ucitel-2', name: 'Robert Bartošek' }];
 const eventTypes = ['Školní akce', 'Porada', 'Exkurze'];
 const classrooms = ['Učebna 1', 'Učebna 2', 'Tělocvična'];
 
 export default function ObecnaUdalostPage() {
   const [date, setDate] = useState<Date | undefined>();
+  const firestore = useFirestore();
+
+  const tridyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]);
+  const { data: classes } = useCollection<Trida>(tridyCollection);
+
+  const uciteleQuery = useMemoFirebase(() => firestore ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore]);
+  const { data: teachers } = useCollection<User>(uciteleQuery);
 
   return (
     <div className="space-y-6">
@@ -47,7 +56,7 @@ export default function ObecnaUdalostPage() {
                   <SelectValue placeholder="Vyberte třídu" />
                 </SelectTrigger>
                 <SelectContent>
-                  {classes.map(c => <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>)}
+                  {classes?.map(c => <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -71,7 +80,7 @@ export default function ObecnaUdalostPage() {
                   <SelectValue placeholder="Vyberte učitele" />
                 </SelectTrigger>
                 <SelectContent>
-                  {teachers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                  {teachers?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
