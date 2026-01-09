@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Trash2, Save, Download, Edit } from "lucide-react";
+import { PlusCircle, Trash2, Save, Download, Edit, Plus, Minus } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -28,13 +28,17 @@ const initialTimeSlots = [
 ];
 const daysOfWeek = ["Pondělí", "Úterý", "Středa", "Čtvrtek", "Pátek"];
 
-const initialSchedule: ScheduleGrid = daysOfWeek.reduce((acc, day) => {
-  acc[day] = {};
-  initialTimeSlots.forEach((_, index) => {
-    acc[day][index] = null;
-  });
-  return acc;
-}, {} as ScheduleGrid);
+const buildInitialSchedule = (slots: string[]): ScheduleGrid => {
+    return daysOfWeek.reduce((acc, day) => {
+      acc[day] = {};
+      slots.forEach((_, index) => {
+        acc[day][index] = null;
+      });
+      return acc;
+    }, {} as ScheduleGrid);
+}
+
+const initialSchedule = buildInitialSchedule(initialTimeSlots);
 
 
 export default function RozvrhySuplovaniPage() {
@@ -140,8 +144,8 @@ export default function RozvrhySuplovaniPage() {
     const handleLoadSchedule = async (classId: string) => {
         setSelectedClassForSchedule(classId);
         if (!classId || !firestore) {
-            setSchedule(initialSchedule);
             setTimeSlots(initialTimeSlots);
+            setSchedule(buildInitialSchedule(initialTimeSlots));
             return;
         };
         try {
@@ -150,23 +154,26 @@ export default function RozvrhySuplovaniPage() {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 const loadedSchedule = data.scheduleData;
-                const loadedTimeSlots = data.timeSlots || initialTimeSlots; // Load saved times or use default
+                const loadedTimeSlots = data.timeSlots || initialTimeSlots;
                 
-                // Make sure all days and periods are present in schedule
-                daysOfWeek.forEach(day => {
-                    if (!loadedSchedule[day]) loadedSchedule[day] = {};
-                    timeSlots.forEach((_, index) => {
-                        if (loadedSchedule[day][index] === undefined) {
-                            loadedSchedule[day][index] = null;
-                        }
-                    })
-                })
-                setSchedule(loadedSchedule);
                 setTimeSlots(loadedTimeSlots);
+                const fullSchedule = buildInitialSchedule(loadedTimeSlots);
+
+                daysOfWeek.forEach(day => {
+                    if (loadedSchedule[day]) {
+                        for (const period in loadedSchedule[day]) {
+                            if (fullSchedule[day].hasOwnProperty(period)) {
+                                fullSchedule[day][parseInt(period)] = loadedSchedule[day][period];
+                            }
+                        }
+                    }
+                });
+
+                setSchedule(fullSchedule);
                 toast({ title: 'Rozvrh načten', description: `Rozvrh pro vybranou třídu byl načten.` });
             } else {
-                setSchedule(initialSchedule);
                 setTimeSlots(initialTimeSlots);
+                setSchedule(buildInitialSchedule(initialTimeSlots));
                 toast({ title: 'Nový rozvrh', description: 'Pro tuto třídu zatím neexistuje žádný rozvrh.' });
             }
         } catch (error) {
@@ -187,6 +194,38 @@ export default function RozvrhySuplovaniPage() {
         const newTimes = [...timeSlots];
         newTimes[index] = value;
         setTimeSlots(newTimes);
+    };
+
+    const addTimeSlot = () => {
+        const newTime = "16:00-16:45"; // Default new time
+        const newTimeSlots = [...timeSlots, newTime];
+        setTimeSlots(newTimeSlots);
+
+        // Add a new empty period to the schedule for each day
+        const newSchedule = { ...schedule };
+        const newPeriodIndex = newTimeSlots.length - 1;
+        daysOfWeek.forEach(day => {
+            if (!newSchedule[day]) newSchedule[day] = {};
+            newSchedule[day][newPeriodIndex] = null;
+        });
+        setSchedule(newSchedule);
+    };
+
+    const removeTimeSlot = () => {
+        if (timeSlots.length > 1) {
+            const newTimeSlots = timeSlots.slice(0, -1);
+            setTimeSlots(newTimeSlots);
+
+             // Remove the last period from the schedule for each day
+            const newSchedule = { ...schedule };
+            const lastPeriodIndex = timeSlots.length - 1;
+            daysOfWeek.forEach(day => {
+                if (newSchedule[day]) {
+                    delete newSchedule[day][lastPeriodIndex];
+                }
+            });
+            setSchedule(newSchedule);
+        }
     };
 
     return (
@@ -217,7 +256,13 @@ export default function RozvrhySuplovaniPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Editor rozvrhu pro třídu: {tridy?.find(t => t.id === selectedClassForSchedule)?.nazev || 'Nevybrána'}</CardTitle>
-                             <CardDescription>Přetáhněte hodiny z panelu vpravo do mřížky.</CardDescription>
+                             <CardDescription className="flex justify-between items-center">
+                                <span>Přetáhněte hodiny z panelu vpravo do mřížky.</span>
+                                <div className='flex gap-2'>
+                                     <Button variant="outline" size="sm" onClick={addTimeSlot}><Plus className="mr-2 h-4 w-4"/> Přidat hodinu</Button>
+                                    <Button variant="outline" size="sm" onClick={removeTimeSlot} disabled={timeSlots.length <= 1}><Minus className="mr-2 h-4 w-4"/> Odebrat hodinu</Button>
+                                </div>
+                            </CardDescription>
                         </CardHeader>
                         <CardContent>
                              <div className="grid grid-cols-[auto_repeat(5,1fr)] border-t border-l rounded-tl-lg">
@@ -235,13 +280,14 @@ export default function RozvrhySuplovaniPage() {
                                 {/* Řádky */}
                                 {timeSlots.map((time, periodIndex) => (
                                     <React.Fragment key={periodIndex}>
-                                        <div className="border-b border-r p-2 font-mono text-xs text-muted-foreground text-center bg-muted/50">
+                                        <div className="border-b border-r p-2 font-mono text-xs text-muted-foreground text-center bg-muted/50 flex flex-col justify-center">
+                                            <span className='font-bold text-sm'>{periodIndex + 1}.</span>
                                             {isEditingTimes ? (
                                                 <Input 
                                                     type="text" 
                                                     value={time}
                                                     onChange={(e) => handleTimeChange(periodIndex, e.target.value)}
-                                                    className="h-8 text-center"
+                                                    className="h-8 text-center mt-1"
                                                 />
                                             ) : (
                                                 time
