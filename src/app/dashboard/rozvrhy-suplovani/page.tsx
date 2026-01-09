@@ -1,8 +1,8 @@
 'use client';
-import React, { useState, useMemo, useEffect }from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Trash2, Save, Download } from "lucide-react";
+import { PlusCircle, Trash2, Save, Download, Edit } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -12,6 +12,7 @@ import type { Trida, User, Predmet, LessonBlock, ScheduleGrid } from '@/lib/type
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
 
 const lessonSchema = z.object({
     subjectId: z.string().min(1, "Předmět je povinný"),
@@ -21,7 +22,7 @@ const lessonSchema = z.object({
 
 type LessonFormData = z.infer<typeof lessonSchema>;
 
-const timeSlots = [
+const initialTimeSlots = [
     "7:55-8:40", "8:55-9:40", "9:55-10:40", "10:45-11:30",
     "11:35-12:20", "12:30-13:15", "13:20-14:05", "14:15-15:00"
 ];
@@ -29,7 +30,7 @@ const daysOfWeek = ["Pondělí", "Úterý", "Středa", "Čtvrtek", "Pátek"];
 
 const initialSchedule: ScheduleGrid = daysOfWeek.reduce((acc, day) => {
   acc[day] = {};
-  timeSlots.forEach((_, index) => {
+  initialTimeSlots.forEach((_, index) => {
     acc[day][index] = null;
   });
   return acc;
@@ -51,6 +52,8 @@ export default function RozvrhySuplovaniPage() {
     const { data: ucitele } = useCollection<User>(uciteleQuery);
 
     // State
+    const [timeSlots, setTimeSlots] = useState(initialTimeSlots);
+    const [isEditingTimes, setIsEditingTimes] = useState(false);
     const [lessonBlocks, setLessonBlocks] = useState<LessonBlock[]>([]);
     const [schedule, setSchedule] = useState<ScheduleGrid>(initialSchedule);
     const [selectedClassForSchedule, setSelectedClassForSchedule] = useState<string>('');
@@ -126,7 +129,8 @@ export default function RozvrhySuplovaniPage() {
         }
         try {
             const scheduleRef = doc(firestore, 'rozvrhy', selectedClassForSchedule);
-            await setDoc(scheduleRef, { scheduleData: schedule });
+            // Save schedule with current timeSlots
+            await setDoc(scheduleRef, { scheduleData: schedule, timeSlots });
             toast({ title: 'Rozvrh uložen', description: `Rozvrh pro třídu byl úspěšně uložen.` });
         } catch (error) {
             toast({ variant: 'destructive', title: 'Chyba při ukládání', description: 'Nepodařilo se uložit rozvrh.' });
@@ -137,14 +141,18 @@ export default function RozvrhySuplovaniPage() {
         setSelectedClassForSchedule(classId);
         if (!classId || !firestore) {
             setSchedule(initialSchedule);
+            setTimeSlots(initialTimeSlots);
             return;
         };
         try {
             const scheduleRef = doc(firestore, 'rozvrhy', classId);
             const docSnap = await getDoc(scheduleRef);
             if (docSnap.exists()) {
-                const loadedSchedule = docSnap.data().scheduleData;
-                // Make sure all days and periods are present
+                const data = docSnap.data();
+                const loadedSchedule = data.scheduleData;
+                const loadedTimeSlots = data.timeSlots || initialTimeSlots; // Load saved times or use default
+                
+                // Make sure all days and periods are present in schedule
                 daysOfWeek.forEach(day => {
                     if (!loadedSchedule[day]) loadedSchedule[day] = {};
                     timeSlots.forEach((_, index) => {
@@ -154,9 +162,11 @@ export default function RozvrhySuplovaniPage() {
                     })
                 })
                 setSchedule(loadedSchedule);
+                setTimeSlots(loadedTimeSlots);
                 toast({ title: 'Rozvrh načten', description: `Rozvrh pro vybranou třídu byl načten.` });
             } else {
                 setSchedule(initialSchedule);
+                setTimeSlots(initialTimeSlots);
                 toast({ title: 'Nový rozvrh', description: 'Pro tuto třídu zatím neexistuje žádný rozvrh.' });
             }
         } catch (error) {
@@ -173,6 +183,11 @@ export default function RozvrhySuplovaniPage() {
         return `hsl(${h}, 70%, 80%)`;
     };
 
+    const handleTimeChange = (index: number, value: string) => {
+        const newTimes = [...timeSlots];
+        newTimes[index] = value;
+        setTimeSlots(newTimes);
+    };
 
     return (
         <div className="space-y-6">
@@ -207,7 +222,12 @@ export default function RozvrhySuplovaniPage() {
                         <CardContent>
                              <div className="grid grid-cols-[auto_repeat(5,1fr)] border-t border-l rounded-tl-lg">
                                 {/* Header - Dny */}
-                                <div className="border-b border-r p-2 font-bold bg-muted/50 text-center">Čas</div>
+                                <div className="border-b border-r p-2 font-bold bg-muted/50 text-center flex items-center justify-center gap-2">
+                                    Čas
+                                    <Button variant="ghost" size="icon" onClick={() => setIsEditingTimes(!isEditingTimes)}>
+                                        <Edit className="h-4 w-4" />
+                                    </Button>
+                                </div>
                                 {daysOfWeek.map(day => (
                                     <div key={day} className="border-b border-r p-2 font-bold bg-muted/50 text-center">{day}</div>
                                 ))}
@@ -215,7 +235,18 @@ export default function RozvrhySuplovaniPage() {
                                 {/* Řádky */}
                                 {timeSlots.map((time, periodIndex) => (
                                     <React.Fragment key={periodIndex}>
-                                        <div className="border-b border-r p-2 font-mono text-xs text-muted-foreground text-center bg-muted/50">{time}</div>
+                                        <div className="border-b border-r p-2 font-mono text-xs text-muted-foreground text-center bg-muted/50">
+                                            {isEditingTimes ? (
+                                                <Input 
+                                                    type="text" 
+                                                    value={time}
+                                                    onChange={(e) => handleTimeChange(periodIndex, e.target.value)}
+                                                    className="h-8 text-center"
+                                                />
+                                            ) : (
+                                                time
+                                            )}
+                                        </div>
                                         {daysOfWeek.map(day => (
                                             <div 
                                                 key={`${day}-${periodIndex}`} 
