@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -11,18 +11,48 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, where } from 'firebase/firestore';
+import type { Trida, User, PoznamkaZaka } from '@/lib/types';
 
-// Mock data for demonstration
-const classes = [{ id: 'trida-1', nazev: 'VI.A' }, { id: 'trida-2', nazev: 'VII.B' }];
-const students = [{ id: 'student-1', name: 'Kropáček Pavel', classId: 'trida-1' }, { id: 'student-2', name: 'Nováková Eva', classId: 'trida-1' }];
 
 export default function PoznamkaZakaPage() {
+  const firestore = useFirestore();
+
   const [selectedClass, setSelectedClass] = useState<string | undefined>();
   const [selectedStudent, setSelectedStudent] = useState<string | undefined>();
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
 
-  const filteredStudents = selectedClass ? students.filter(s => s.classId === selectedClass) : students;
+  // Data fetching
+  const tridyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]);
+  const { data: classes, isLoading: classesLoading } = useCollection<Trida>(tridyCollection);
+
+  const studentsQuery = useMemoFirebase(() => {
+    if (!firestore || !selectedClass) return null;
+    return query(collection(firestore, "users"), where("tridaId", "==", selectedClass));
+  }, [firestore, selectedClass]);
+  const { data: students, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
+  
+  const notesQuery = useMemoFirebase(() => {
+    if (!firestore || !selectedStudent) return null;
+    
+    let q = query(collection(firestore, 'poznamky-zaku'), where('studentId', '==', selectedStudent));
+    if (dateFrom) {
+        q = query(q, where('datum', '>=', format(dateFrom, 'yyyy-MM-dd')));
+    }
+    if (dateTo) {
+        q = query(q, where('datum', '<=', format(dateTo, 'yyyy-MM-dd')));
+    }
+
+    return q;
+  }, [firestore, selectedStudent, dateFrom, dateTo]);
+  const { data: notes, isLoading: notesLoading } = useCollection<PoznamkaZaka>(notesQuery);
+
+  const handleClassChange = (classId: string) => {
+    setSelectedClass(classId);
+    setSelectedStudent(undefined); // Reset student when class changes
+  };
 
   return (
     <div className="space-y-6">
@@ -41,24 +71,26 @@ export default function PoznamkaZakaPage() {
           <div className="flex flex-wrap items-end gap-4">
             <div className="grid gap-1.5">
               <label htmlFor="class-select" className="text-sm font-medium">Třída:</label>
-              <Select onValueChange={setSelectedClass}>
+              <Select onValueChange={handleClassChange} value={selectedClass}>
                 <SelectTrigger id="class-select" className="w-[180px]">
                   <SelectValue placeholder="Vyberte třídu" />
                 </SelectTrigger>
                 <SelectContent>
-                  {classes.map(c => <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>)}
+                  {classesLoading ? <SelectItem value="loading" disabled>Načítání...</SelectItem> : 
+                   classes?.map(c => <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="grid gap-1.5">
               <label htmlFor="student-select" className="text-sm font-medium">Žák/Student:</label>
-              <Select onValueChange={setSelectedStudent} disabled={!selectedClass}>
+              <Select onValueChange={setSelectedStudent} disabled={!selectedClass || studentsLoading} value={selectedStudent}>
                 <SelectTrigger id="student-select" className="w-[180px]">
                   <SelectValue placeholder="Vyberte žáka" />
                 </SelectTrigger>
                 <SelectContent>
-                  {filteredStudents.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  {studentsLoading ? <SelectItem value="loading" disabled>Načítání...</SelectItem> :
+                   students?.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -112,28 +144,50 @@ export default function PoznamkaZakaPage() {
                     <TableHeader>
                         <TableRow>
                         <TableHead>Datum</TableHead>
-                        <TableHead>Vyuč. hod.</TableHead>
                         <TableHead>Předmět</TableHead>
                         <TableHead>Žák/Student</TableHead>
                         <TableHead>Druh poznámky</TableHead>
                         <TableHead>Text poznámky</TableHead>
+                        <TableHead>Učitel</TableHead>
                         <TableHead>Datum podpisu</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        <TableRow>
-                            <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                                Žádné záznamy k zobrazení.
-                            </TableCell>
-                        </TableRow>
+                        {notesLoading && (
+                          <TableRow>
+                            <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">Načítání poznámek...</TableCell>
+                          </TableRow>
+                        )}
+                        {!notesLoading && notes?.length === 0 && (
+                            <TableRow>
+                                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                    Žádné záznamy k zobrazení.
+                                </TableCell>
+                            </TableRow>
+                        )}
+                        {!notesLoading && notes?.map(note => {
+                          const student = students?.find(s => s.id === note.studentId);
+                          // In a real app, you would fetch teacher name based on ucitelId
+                          const teacherName = 'Neznámý učitel'; 
+                          return (
+                            <TableRow key={note.id}>
+                              <TableCell>{format(new Date(note.datum), 'dd.MM.yyyy')}</TableCell>
+                              <TableCell>{note.predmet || '-'}</TableCell>
+                              <TableCell>{student?.name || note.studentId}</TableCell>
+                              <TableCell>{note.druh}</TableCell>
+                              <TableCell className="max-w-xs truncate">{note.text}</TableCell>
+                              <TableCell>{note.ucitelId}</TableCell>
+                              <TableCell>{note.datumPodpisu ? format(new Date(note.datumPodpisu), 'dd.MM.yyyy') : 'Nepodepsáno'}</TableCell>
+                            </TableRow>
+                          )
+                        })}
                     </TableBody>
                 </Table>
             </div>
         </CardContent>
         <CardFooter className="p-3 flex justify-between items-center bg-muted/50">
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                <p>Počet záznamů: 0</p>
-                <p>Stránky: 1</p>
+                <p>Počet záznamů: {notes?.length || 0}</p>
             </div>
             <div className="flex items-center gap-2">
                  <Button><Plus className="mr-2 h-4 w-4" /> Nový záznam</Button>
