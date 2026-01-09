@@ -56,7 +56,8 @@ import {
   getDoc,
   updateDoc,
   arrayUnion,
-  arrayRemove
+  arrayRemove,
+  setDoc,
 } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
@@ -325,14 +326,15 @@ function AdminUserManagement() {
               description: `Uživatel ${formData.name} byl úspěšně aktualizován.`,
             });
         } else {
-            const newUserWithId = { // We need an ID to add to the class
+            // This is a new user
+            const newUserRef = doc(collection(firestore, 'users'));
+            const newUserWithId = {
                 ...formData,
-                id: doc(collection(firestore, 'users')).id,
-                avatarUrl: `https://picsum.photos/seed/${Date.now()}/100/100`,
+                id: newUserRef.id,
+                avatarUrl: `https://picsum.photos/seed/${newUserRef.id}/100/100`,
             };
             
-            const newUserRef = doc(firestore, 'users', newUserWithId.id);
-            await addDocumentNonBlocking(collection(firestore, 'users'), newUserWithId);
+            await setDoc(newUserRef, newUserWithId);
 
             if (newUserWithId.roles?.includes('ziak') && newUserWithId.tridaId) {
                 const tridaRef = doc(firestore, 'tridy', newUserWithId.tridaId);
