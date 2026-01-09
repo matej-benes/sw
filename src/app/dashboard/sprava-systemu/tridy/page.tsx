@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, MoreHorizontal } from "lucide-react";
+import { PlusCircle, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -56,7 +56,15 @@ export default function SpravaTridyPage() {
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent>
+                                                <DropdownMenuItem>
+                                                    <Pencil className="mr-2 h-4 w-4" />
+                                                    Upravit
+                                                </DropdownMenuItem>
                                                 <DropdownMenuItem>Zobrazit žáky</DropdownMenuItem>
+                                                <DropdownMenuItem className="text-destructive">
+                                                    <Trash2 className="mr-2 h-4 w-4" />
+                                                    Smazat
+                                                </DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </TableCell>
