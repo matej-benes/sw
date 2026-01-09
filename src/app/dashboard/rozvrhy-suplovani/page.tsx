@@ -7,8 +7,8 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
-import { collection, doc, getDoc, setDoc, query, where, getDocs } from 'firebase/firestore';
-import type { Trida, User, Predmet, Ucebna, LessonBlock, ScheduleGrid, Substitution } from '@/lib/types';
+import { collection, doc, getDoc, setDoc, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import type { Trida, User, Predmet, Ucebna, LessonBlock, ScheduleGrid, Substitution, Rozvrh } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -92,11 +92,11 @@ function SubstitutionManagement() {
             const allLessons: DailyLesson[] = [];
             
             for(const trida of tridy) {
-                const rozvrhRef = doc(firestore, 'rozvrhy', trida.id);
+                const rozvrhRef = doc(firestore, 'rozvrhy', `${trida.id}-${dayOfWeek}`);
                 const rozvrhSnap = await getDoc(rozvrhRef);
                 if (rozvrhSnap.exists()) {
-                    const rozvrhData = rozvrhSnap.data();
-                    const lessonsForDay = rozvrhData.scheduleData[dayOfWeek] || {};
+                    const rozvrhData = rozvrhSnap.data() as Rozvrh;
+                    const lessonsForDay = rozvrhData.hodiny || [];
                     const timeSlots = rozvrhData.timeSlots || initialTimeSlots;
 
                     for(let i = 0; i < timeSlots.length; i++) {
@@ -219,15 +219,22 @@ function SubstitutionDialog({ isOpen, setIsOpen, lessonData, onSave, teachers, c
 
         if(isCancelled) {
             types.push('zruseno');
+        } else {
+            if(subTeacherId !== lessonData.lesson?.teacherId) {
+                types.push('zmena-ucitele');
+                changes.teacherId = subTeacherId;
+            }
+            if(subUcebnaId !== lessonData.lesson?.ucebnaId) {
+                types.push('zmena-ucebny');
+                changes.ucebnaId = subUcebnaId;
+            }
         }
-        if(subTeacherId !== lessonData.lesson?.teacherId) {
-            types.push('zmena-ucitele');
-            changes.teacherId = subTeacherId;
+
+        if (types.length === 0 && !note) {
+            setIsOpen(false);
+            return;
         }
-        if(subUcebnaId !== lessonData.lesson?.ucebnaId) {
-            types.push('zmena-ucebny');
-            changes.ucebnaId = subUcebnaId;
-        }
+        
         changes.type = types;
         if (note) changes.note = note;
 
@@ -279,7 +286,7 @@ function SubstitutionDialog({ isOpen, setIsOpen, lessonData, onSave, teachers, c
 }
 
 
-function ScheduleEditor() {
+function ScheduleEditor({ selectedClassId, onScheduleChange }: { selectedClassId: string, onScheduleChange: (schedule: ScheduleGrid, slots: string[]) => void }) {
     const firestore = useFirestore();
     const { toast } = useToast();
 
@@ -301,7 +308,6 @@ function ScheduleEditor() {
     const [isEditingTimes, setIsEditingTimes] = useState(false);
     const [lessonBlocks, setLessonBlocks] = useState<LessonBlock[]>([]);
     const [schedule, setSchedule] = useState<ScheduleGrid>(initialSchedule);
-    const [selectedClassForSchedule, setSelectedClassForSchedule] = useState<string>('');
 
     const { control, handleSubmit, reset, watch } = useForm<LessonFormData>({
         resolver: zodResolver(lessonSchema),
@@ -312,6 +318,76 @@ function ScheduleEditor() {
     const teacherId = watch('teacherId');
     const classId = watch('classId');
     const ucebnaId = watch('ucebnaId');
+
+    // Effect to load schedule when selectedClassId changes
+    useEffect(() => {
+        const loadSchedule = async (classId: string) => {
+            if (!classId || !firestore) {
+                const newSchedule = buildInitialSchedule(initialTimeSlots);
+                setSchedule(newSchedule);
+                setTimeSlots(initialTimeSlots);
+                onScheduleChange(newSchedule, initialTimeSlots);
+                return;
+            };
+
+            const batch = writeBatch(firestore);
+            const schedulePromises = daysOfWeek.map(day => getDoc(doc(firestore, 'rozvrhy', `${classId}-${day}`)));
+            
+            try {
+                const scheduleSnapshots = await Promise.all(schedulePromises);
+                
+                let loadedSomething = false;
+                let newScheduleGrid: ScheduleGrid = buildInitialSchedule(initialTimeSlots);
+                let newTimeSlots: string[] | null = null;
+                
+                scheduleSnapshots.forEach((docSnap, index) => {
+                    const day = daysOfWeek[index];
+                    if (docSnap.exists()) {
+                        loadedSomething = true;
+                        const data = docSnap.data() as Rozvrh;
+                        if (!newTimeSlots) newTimeSlots = data.timeSlots; // Take from first available
+                        
+                        data.hodiny.forEach((lesson, period) => {
+                            newScheduleGrid[day][period] = lesson;
+                        });
+                    }
+                });
+
+                const finalTimeSlots = newTimeSlots || initialTimeSlots;
+                if(newTimeSlots) {
+                  // Rebuild grid if timeslots were different
+                  newScheduleGrid = buildInitialSchedule(finalTimeSlots);
+                  scheduleSnapshots.forEach((docSnap, index) => {
+                    const day = daysOfWeek[index];
+                    if(docSnap.exists()){
+                      const data = docSnap.data() as Rozvrh;
+                       data.hodiny.forEach((lesson, period) => {
+                            if(newScheduleGrid[day] && newScheduleGrid[day].hasOwnProperty(period)) {
+                                newScheduleGrid[day][period] = lesson;
+                            }
+                        });
+                    }
+                  });
+                }
+                
+                setSchedule(newScheduleGrid);
+                setTimeSlots(finalTimeSlots);
+                onScheduleChange(newScheduleGrid, finalTimeSlots);
+
+                if (loadedSomething) {
+                    toast({ title: 'Rozvrh načten', description: `Rozvrh pro vybranou třídu byl načten.` });
+                } else {
+                    toast({ title: 'Nový rozvrh', description: 'Pro tuto třídu zatím neexistuje žádný rozvrh.' });
+                }
+            } catch (error) {
+                console.error("Error loading schedule: ", error);
+                toast({ variant: 'destructive', title: 'Chyba při načítání', description: 'Nepodařilo se načíst rozvrh.' });
+            }
+        };
+
+        loadSchedule(selectedClassId);
+    }, [selectedClassId, firestore, toast, onScheduleChange]);
+
 
     const handleCreateLessonBlock = (data: LessonFormData) => {
         const subject = predmety?.find(p => p.id === data.subjectId);
@@ -350,13 +426,15 @@ function ScheduleEditor() {
         const lessonData = e.dataTransfer.getData("lessonBlock");
         if (lessonData) {
             const block = JSON.parse(lessonData) as LessonBlock;
-            setSchedule(prev => ({
-                ...prev,
+            const newSchedule = {
+                ...schedule,
                 [day]: {
-                    ...prev[day],
+                    ...schedule[day],
                     [period]: block
                 }
-            }));
+            };
+            setSchedule(newSchedule);
+            onScheduleChange(newSchedule, timeSlots);
         }
     };
     
@@ -365,64 +443,12 @@ function ScheduleEditor() {
     };
 
     const removeLessonFromSchedule = (day: string, period: number) => {
-        setSchedule(prev => ({
-            ...prev,
-            [day]: { ...prev[day], [period]: null }
-        }));
-    };
-    
-    const handleSaveSchedule = async () => {
-        if (!selectedClassForSchedule || !firestore) {
-            toast({ variant: 'destructive', title: 'Chyba', description: 'Prosím, vyberte třídu pro uložení rozvrhu.' });
-            return;
-        }
-        try {
-            const scheduleRef = doc(firestore, 'rozvrhy', selectedClassForSchedule);
-            await setDoc(scheduleRef, { scheduleData: schedule, timeSlots });
-            toast({ title: 'Rozvrh uložen', description: `Rozvrh pro třídu byl úspěšně uložen.` });
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Chyba při ukládání', description: 'Nepodařilo se uložit rozvrh.' });
-        }
-    };
-
-    const handleLoadSchedule = async (classId: string) => {
-        setSelectedClassForSchedule(classId);
-        if (!classId || !firestore) {
-            setTimeSlots(initialTimeSlots);
-            setSchedule(buildInitialSchedule(initialTimeSlots));
-            return;
+        const newSchedule = {
+            ...schedule,
+            [day]: { ...schedule[day], [period]: null }
         };
-        try {
-            const scheduleRef = doc(firestore, 'rozvrhy', classId);
-            const docSnap = await getDoc(scheduleRef);
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                const loadedSchedule = data.scheduleData;
-                const loadedTimeSlots = data.timeSlots || initialTimeSlots;
-                
-                setTimeSlots(loadedTimeSlots);
-                const fullSchedule = buildInitialSchedule(loadedTimeSlots);
-
-                daysOfWeek.forEach(day => {
-                    if (loadedSchedule[day]) {
-                        for (const period in loadedSchedule[day]) {
-                            if (fullSchedule[day].hasOwnProperty(period)) {
-                                fullSchedule[day][parseInt(period)] = loadedSchedule[day][period];
-                            }
-                        }
-                    }
-                });
-
-                setSchedule(fullSchedule);
-                toast({ title: 'Rozvrh načten', description: `Rozvrh pro vybranou třídu byl načten.` });
-            } else {
-                setTimeSlots(initialTimeSlots);
-                setSchedule(buildInitialSchedule(initialTimeSlots));
-                toast({ title: 'Nový rozvrh', description: 'Pro tuto třídu zatím neexistuje žádný rozvrh.' });
-            }
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Chyba při načítání', description: 'Nepodařilo se načíst rozvrh.' });
-        }
+        setSchedule(newSchedule);
+        onScheduleChange(newSchedule, timeSlots);
     };
     
     const getSubjectColor = (subjectId?: string) => {
@@ -439,20 +465,45 @@ function ScheduleEditor() {
         const newTimes = [...timeSlots];
         newTimes[index] = value;
         setTimeSlots(newTimes);
+        onScheduleChange(schedule, newTimes);
     };
 
     const addTimeSlot = () => {
         const newTime = "16:00-16:45"; // Default new time
         const newTimeSlots = [...timeSlots, newTime];
+        const newSchedule = buildInitialSchedule(newTimeSlots);
+        // copy old data
+        Object.keys(schedule).forEach(day => {
+          Object.keys(schedule[day]).forEach(period => {
+              const pIdx = parseInt(period);
+              if (newSchedule[day] && newSchedule[day].hasOwnProperty(pIdx)) {
+                 newSchedule[day][pIdx] = schedule[day][pIdx];
+              }
+          })
+        });
+
         setTimeSlots(newTimeSlots);
-        setSchedule(buildInitialSchedule(newTimeSlots));
+        setSchedule(newSchedule);
+        onScheduleChange(newSchedule, newTimeSlots);
     };
 
     const removeTimeSlot = () => {
         if (timeSlots.length > 1) {
             const newTimeSlots = timeSlots.slice(0, -1);
+            const newSchedule = buildInitialSchedule(newTimeSlots);
+             // copy old data
+            Object.keys(schedule).forEach(day => {
+                Object.keys(schedule[day]).forEach(period => {
+                    const pIdx = parseInt(period);
+                    if (newSchedule[day] && newSchedule[day].hasOwnProperty(pIdx)) {
+                        newSchedule[day][pIdx] = schedule[day][pIdx];
+                    }
+                })
+            });
+
             setTimeSlots(newTimeSlots);
-            setSchedule(buildInitialSchedule(newTimeSlots));
+            setSchedule(newSchedule);
+            onScheduleChange(newSchedule, newTimeSlots);
         }
     };
     
@@ -461,7 +512,7 @@ function ScheduleEditor() {
             <div className="lg:col-span-3">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Editor rozvrhu pro třídu: {tridy?.find(t => t.id === selectedClassForSchedule)?.nazev || 'Nevybrána'}</CardTitle>
+                        <CardTitle>Editor rozvrhu pro třídu: {tridy?.find(t => t.id === selectedClassId)?.nazev || 'Nevybrána'}</CardTitle>
                          <CardDescription className="flex justify-between items-center">
                             <span>Přetáhněte hodiny z panelu vpravo do mřížky.</span>
                             <div className='flex gap-2'>
@@ -623,14 +674,39 @@ export default function RozvrhySuplovaniPage() {
     const tridyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]);
     const { data: tridy } = useCollection<Trida>(tridyCollection);
 
+    const handleScheduleChange = (schedule: ScheduleGrid, slots: string[]) => {
+        setCurrentSchedule(schedule);
+        setCurrentTimeSlots(slots);
+    };
+
     const handleSaveSchedule = async () => {
         if (!selectedClassForSchedule || !firestore) {
             toast({ variant: 'destructive', title: 'Chyba', description: 'Prosím, vyberte třídu pro uložení rozvrhu.' });
             return;
         }
         try {
-            const scheduleRef = doc(firestore, 'rozvrhy', selectedClassForSchedule);
-            await setDoc(scheduleRef, { scheduleData: currentSchedule, timeSlots: currentTimeSlots });
+            const batch = writeBatch(firestore);
+            
+            daysOfWeek.forEach(day => {
+                const docId = `${selectedClassForSchedule}-${day}`;
+                const scheduleRef = doc(firestore, 'rozvrhy', docId);
+
+                const hodiny: (LessonBlock | null)[] = [];
+                for(let i=0; i < currentTimeSlots.length; i++) {
+                    hodiny.push(currentSchedule[day]?.[i] || null)
+                }
+
+                const dayScheduleData: Omit<Rozvrh, 'id'> = {
+                    tridaId: selectedClassForSchedule,
+                    den: day,
+                    timeSlots: currentTimeSlots,
+                    hodiny: hodiny
+                };
+                
+                batch.set(scheduleRef, dayScheduleData);
+            });
+
+            await batch.commit();
             toast({ title: 'Rozvrh uložen', description: `Rozvrh pro třídu byl úspěšně uložen.` });
         } catch (error) {
             console.error("Save schedule error: ", error)
@@ -638,47 +714,6 @@ export default function RozvrhySuplovaniPage() {
         }
     };
     
-    const handleLoadSchedule = async (classId: string) => {
-        setSelectedClassForSchedule(classId);
-        if (!classId || !firestore) {
-            setCurrentTimeSlots(initialTimeSlots);
-            setCurrentSchedule(buildInitialSchedule(initialTimeSlots));
-            return;
-        };
-        try {
-            const scheduleRef = doc(firestore, 'rozvrhy', classId);
-            const docSnap = await getDoc(scheduleRef);
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                const loadedSchedule = data.scheduleData;
-                const loadedTimeSlots = data.timeSlots || initialTimeSlots;
-                
-                setCurrentTimeSlots(loadedTimeSlots);
-                const fullSchedule = buildInitialSchedule(loadedTimeSlots);
-
-                daysOfWeek.forEach(day => {
-                    if (loadedSchedule[day]) {
-                        for (const period in loadedSchedule[day]) {
-                            if (fullSchedule[day].hasOwnProperty(period)) {
-                                fullSchedule[day][parseInt(period)] = loadedSchedule[day][period];
-                            }
-                        }
-                    }
-                });
-
-                setCurrentSchedule(fullSchedule);
-                toast({ title: 'Rozvrh načten', description: `Rozvrh pro vybranou třídu byl načten.` });
-            } else {
-                setCurrentTimeSlots(initialTimeSlots);
-                setCurrentSchedule(buildInitialSchedule(initialTimeSlots));
-                toast({ title: 'Nový rozvrh', description: 'Pro tuto třídu zatím neexistuje žádný rozvrh.' });
-            }
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Chyba při načítání', description: 'Nepodařilo se načíst rozvrh.' });
-        }
-    };
-
-
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-start">
@@ -687,7 +722,7 @@ export default function RozvrhySuplovaniPage() {
                     <p className="text-muted-foreground">Vytvářejte a upravujte týdenní rozvrhy pro třídy a spravujte suplování.</p>
                 </div>
                  <div className="flex gap-2">
-                     <Select onValueChange={handleLoadSchedule} value={selectedClassForSchedule}>
+                     <Select onValueChange={setSelectedClassForSchedule} value={selectedClassForSchedule}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="Vyberte třídu" />
                         </SelectTrigger>
@@ -708,7 +743,7 @@ export default function RozvrhySuplovaniPage() {
                     <TabsTrigger value="substitution">Správa suplování</TabsTrigger>
                 </TabsList>
                 <TabsContent value="editor" className="mt-4">
-                   <ScheduleEditor />
+                   <ScheduleEditor selectedClassId={selectedClassForSchedule} onScheduleChange={handleScheduleChange} />
                 </TabsContent>
                 <TabsContent value="substitution" className="mt-4">
                    <SubstitutionManagement />

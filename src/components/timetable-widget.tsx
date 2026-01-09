@@ -247,7 +247,7 @@ function CancelledLessonBlock({ substitution }: { substitution: Substitution }) 
 
 export function TimetableWidget({ schedules, eventsData, substitutionsData, isTeacher, userId, userClassId }: { schedules: Rozvrh[], eventsData: Udalost[], substitutionsData: Substitution[], isTeacher: boolean, userId: string, userClassId?: string }) {
     
-    const timeSlots = schedules[0]?.timeSlots || defaultTimeSlots;
+    const timeSlots = schedules.find(s => s.timeSlots)?.timeSlots || defaultTimeSlots;
     
     const findEventForCell = (day: string, periodIndex: number) => {
         const dayInfo = dayMapping[day];
@@ -278,17 +278,31 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
     const getLessonForCell = (day: string, periodIndex: number) => {
         if (!schedules) return null;
 
-        for (const schedule of schedules) {
-            const lesson = schedule.scheduleData?.[day]?.[periodIndex];
+        const scheduleForDay = schedules.find(s => s.den === day && (isTeacher || s.tridaId === userClassId));
+        if (scheduleForDay) {
+            const lesson = scheduleForDay.hodiny[periodIndex];
             if (lesson) {
-                 if (isTeacher) {
-                    if (lesson.teacherId === userId) return { lesson, classId: schedule.id };
+                if (isTeacher) {
+                    if (lesson.teacherId === userId) return { lesson, classId: scheduleForDay.tridaId };
                 } else {
-                    // For students/parents, we need to check if they are part of the class for this lesson
-                    if(schedule.id === userClassId) return { lesson, classId: schedule.id };
+                    if (scheduleForDay.tridaId === userClassId) return { lesson, classId: scheduleForDay.tridaId };
                 }
             }
         }
+
+        // For teachers, search all schedules if not found in their primary class schedule
+        if (isTeacher) {
+             for (const schedule of schedules) {
+                if(schedule.den === day) {
+                    const lesson = schedule.hodiny?.[periodIndex];
+                    if (lesson && lesson.teacherId === userId) {
+                        return { lesson, classId: schedule.tridaId };
+                    }
+                }
+            }
+        }
+
+
         return null;
     };
 
@@ -320,7 +334,7 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
                             const lesson = lessonInfo?.lesson;
                             
                             const event = findEventForCell(day, periodIndex);
-                            const substitution = lesson ? findSubstitutionForCell(day, periodIndex, lesson.classId) : null;
+                            const substitution = lesson ? findSubstitutionForCell(day, periodIndex, lessonInfo.classId) : null;
                             
                             const isCancelledByEvent = event && event.nahrazujeHodiny;
 

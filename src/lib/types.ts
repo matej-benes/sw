@@ -97,8 +97,10 @@ export type ScheduleGrid = {
 
 export interface Rozvrh {
     id: string;
-    scheduleData: ScheduleGrid;
+    tridaId: string;
+    den: string;
     timeSlots: string[];
+    hodiny: (LessonBlock | null)[];
 }
 
 
@@ -144,5 +146,3 @@ export interface Substitution {
         type: SubstitutionType | SubstitutionType[];
     };
 }
-
-    
