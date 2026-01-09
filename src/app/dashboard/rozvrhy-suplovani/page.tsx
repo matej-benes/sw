@@ -8,7 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, doc, getDocs, writeBatch, query, where } from 'firebase/firestore';
-import type { Trida, User, Predmet, Ucebna, LessonBlock, DailySchedule, Rozvrh } from '@/lib/types';
+import type { Trida, User, Predmet, Ucebna, LessonBlock, Rozvrh } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { CalendarIcon } from 'lucide-react';
-import { format, startOfWeek, addDays, eachDayOfInterval, isSameDay } from 'date-fns';
+import { format, startOfWeek, addDays, eachDayOfInterval, isSameDay, getDay } from 'date-fns';
 import { cs } from 'date-fns/locale';
 
 const lessonSchema = z.object({
@@ -33,9 +33,18 @@ const initialTimeSlots = [
     "11:35-12:20", "12:30-13:15", "13:20-14:05", "14:15-15:00"
 ];
 
+// Re-defining DailySchedule here as it's primarily used in this component's state
+interface DailySchedule {
+    date: Date;
+    dayName: string;
+    timeSlots: string[];
+    lessons: (LessonBlock | null)[];
+}
+
 const buildInitialWeekSchedule = (week: Date[]): DailySchedule[] => {
     return week.map(date => ({
         date,
+        dayName: format(date, 'EEEE', { locale: cs }),
         timeSlots: [...initialTimeSlots],
         lessons: Array(initialTimeSlots.length).fill(null),
     }));
@@ -70,47 +79,47 @@ export default function RozvrhySuplovaniPage() {
     
     const { subjectId, teacherId, classId, ucebnaId } = watch();
 
-    const loadScheduleForWeek = useCallback(async (classId: string, week: Date[]) => {
-        if (!firestore) return;
-        setIsLoading(true);
-
-        const newWeekSchedule = buildInitialWeekSchedule(week);
-        
-        try {
-            const docIds = week.map(day => `${classId}-${format(day, 'yyyy-MM-dd')}`);
-            const scheduleQuery = query(collection(firestore, 'rozvrhy'), where('__name__', 'in', docIds));
-            const querySnapshot = await getDocs(scheduleQuery);
-
-            querySnapshot.forEach(docSnap => {
-                const data = docSnap.data() as Rozvrh;
-                const date = new Date(data.datum + 'T00:00:00'); // Ensure correct date parsing
-                const dayIndex = newWeekSchedule.findIndex(d => isSameDay(d.date, date));
-                
-                if (dayIndex !== -1) {
-                    newWeekSchedule[dayIndex] = {
-                        date: date,
-                        timeSlots: data.timeSlots || initialTimeSlots,
-                        lessons: data.hodiny
-                    };
-                }
-            });
-            
-            setWeekSchedule(newWeekSchedule);
-        } catch (error) {
-            console.error("Error loading week schedule: ", error);
-            toast({ variant: 'destructive', title: 'Chyba při načítání', description: 'Nepodařilo se načíst rozvrh.' });
-        } finally {
-            setIsLoading(false);
-        }
-    }, [firestore, toast]);
-    
     useEffect(() => {
+        const loadScheduleForWeek = async (classId: string, week: Date[]) => {
+            if (!firestore) return;
+            setIsLoading(true);
+
+            const newWeekSchedule = buildInitialWeekSchedule(week);
+            
+            try {
+                const docIds = week.map(day => `${classId}-${format(day, 'EEEE', { locale: cs })}`);
+                const scheduleQuery = query(collection(firestore, 'rozvrhy'), where('id', 'in', docIds));
+                const querySnapshot = await getDocs(scheduleQuery);
+
+                querySnapshot.forEach(docSnap => {
+                    const data = docSnap.data() as Rozvrh;
+                    // Note: 'datum' here is the day name string like 'Pondělí'
+                    const dayIndex = newWeekSchedule.findIndex(d => d.dayName === data.datum);
+                    
+                    if (dayIndex !== -1) {
+                        newWeekSchedule[dayIndex] = {
+                            ...newWeekSchedule[dayIndex],
+                            timeSlots: data.timeSlots || initialTimeSlots,
+                            lessons: data.hodiny
+                        };
+                    }
+                });
+                
+                setWeekSchedule(newWeekSchedule);
+            } catch (error) {
+                console.error("Error loading week schedule: ", error);
+                toast({ variant: 'destructive', title: 'Chyba při načítání', description: 'Nepodařilo se načíst rozvrh.' });
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
         if (selectedClassId) {
             loadScheduleForWeek(selectedClassId, weekDays);
         } else {
             setWeekSchedule(buildInitialWeekSchedule(weekDays));
         }
-    }, [selectedClassId, weekDays, loadScheduleForWeek]);
+    }, [selectedClassId, weekDays, firestore, toast]);
 
     const handleCreateLessonBlock = (data: LessonFormData) => {
         const subject = predmety?.find(p => p.id === data.subjectId);
@@ -149,12 +158,12 @@ export default function RozvrhySuplovaniPage() {
             const batch = writeBatch(firestore);
             
             weekSchedule.forEach(daySchedule => {
-                const docId = `${selectedClassId}-${format(daySchedule.date, 'yyyy-MM-dd')}`;
+                const docId = `${selectedClassId}-${daySchedule.dayName}`;
                 const scheduleRef = doc(firestore, 'rozvrhy', docId);
-
+                 
                 const scheduleData: Omit<Rozvrh, 'id'> = {
                     tridaId: selectedClassId,
-                    datum: format(daySchedule.date, 'yyyy-MM-dd'),
+                    datum: daySchedule.dayName, // Saving day name as datum
                     timeSlots: daySchedule.timeSlots,
                     hodiny: daySchedule.lessons,
                 };
@@ -180,27 +189,15 @@ export default function RozvrhySuplovaniPage() {
         const sourceWeekStart = startOfWeek(sourceWeek, { weekStartsOn: 1 });
         const sourceWeekDays = eachDayOfInterval({ start: sourceWeekStart, end: addDays(sourceWeekStart, 4) });
         
-        const docIds = sourceWeekDays.map(day => `${selectedClassId}-${format(day, 'yyyy-MM-dd')}`);
-        const scheduleQuery = query(collection(firestore, 'rozvrhy'), where('__name__', 'in', docIds));
-        const querySnapshot = await getDocs(scheduleQuery);
-
-        const newWeekSchedule = buildInitialWeekSchedule(weekDays);
-
-        querySnapshot.forEach(docSnap => {
-            const data = docSnap.data() as Rozvrh;
-            const sourceDate = new Date(data.datum + 'T00:00:00');
-            const dayOfWeek = sourceDate.getDay(); // 0=Sun, 1=Mon
-            const targetDayIndex = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // adjust for our Mon-Fri array
-            
-            if (targetDayIndex >= 0 && targetDayIndex < 5) {
-                newWeekSchedule[targetDayIndex].lessons = data.hodiny;
-                newWeekSchedule[targetDayIndex].timeSlots = data.timeSlots;
-            }
-        });
+        // Since we are now saving by day name, we don't need to query by date. We just copy the structure.
+        // This is a simplification. A real "copy week" would fetch a specific week's data.
+        // For now, we assume we copy the currently loaded template if it existed for another week.
+        // This part of logic is complex and might need re-evaluation based on exact product requirements.
+        // Let's assume for now "copy" just re-uses the current `weekSchedule` state if you change week.
         
-        setWeekSchedule(newWeekSchedule);
+        // This is a placeholder for a more complex "copy from another week" logic.
+        toast({ title: "Funkce není implementována", description: "Kopírování z jiného týdne bude dostupné brzy." });
         setIsLoading(false);
-        toast({ title: "Rozvrh zkopírován", description: "Nyní můžete provést úpravy a uložit." });
     };
 
     const handleDragStart = (e: React.DragEvent, block: LessonBlock) => {
@@ -306,9 +303,9 @@ export default function RozvrhySuplovaniPage() {
                                 <div className="border-b border-r p-2 font-bold bg-muted/50 text-center flex items-center justify-center gap-2">
                                     Hodina
                                 </div>
-                                {weekDays.map(day => (
+                                {weekDays.map((day, dayIndex) => (
                                     <div key={day.toISOString()} className="border-b border-r p-2 font-bold bg-muted/50 text-center">
-                                       <p>{format(day, 'EEEE', { locale: cs })}</p>
+                                       <p>{weekSchedule[dayIndex].dayName}</p>
                                        <p className="text-sm font-normal text-muted-foreground">{format(day, 'd.M.')}</p>
                                     </div>
                                 ))}
@@ -436,3 +433,4 @@ export default function RozvrhySuplovaniPage() {
         </div>
     );
 }
+    
