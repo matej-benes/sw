@@ -14,7 +14,7 @@ import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { useFirestore, addDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, addDoc } from 'firebase/firestore';
 import type { User } from '@/lib/types';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 
@@ -33,11 +33,39 @@ const registrationSchema = z.object({
     password: z.string().min(6, { message: 'Heslo musí mít alespoň 6 znaků.' }),
 });
 
+// Helper function to create initial admin user
+const createInitialAdminIfNeeded = async (firestore: any) => {
+  if (!firestore) return;
+  const adminEmail = 'matej.romana@seznam.cz';
+  const usersRef = collection(firestore, 'users');
+  const q = query(usersRef, where("email", "==", adminEmail));
+  const querySnapshot = await getDocs(q);
+
+  if (querySnapshot.empty) {
+    console.log("Creating initial admin user...");
+    const adminUser = {
+      name: 'Matěj Mikolášek',
+      email: adminEmail,
+      roles: ['ucitel', 'administrator', 'vedouci pracovnik'],
+      pin: '135792', // Pre-defined PIN
+      avatarUrl: `https://picsum.photos/seed/${Date.now()}/100/100`,
+    };
+    await addDoc(usersRef, adminUser);
+    console.log("Initial admin user created.");
+  }
+};
+
+
 function LoginForm() {
   const { user, signIn, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const firestore = useFirestore();
+
+  useEffect(() => {
+    createInitialAdminIfNeeded(firestore);
+  },[firestore]);
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -154,8 +182,14 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             const userDoc = querySnapshot.docs[0];
             const userData = { ...userDoc.data(), id: userDoc.id } as User;
             
-            // For now, we mock the class name
-            const tridaName = "4.C";
+            let tridaName = 'Neznámá';
+            if (userData.tridaId) {
+                const tridaDoc = await getDocs(query(collection(firestore, 'tridy'), where('id', '==', userData.tridaId)));
+                if (!tridaDoc.empty) {
+                    tridaName = tridaDoc.docs[0].data().nazev;
+                }
+            }
+
 
             setRegistrationData({ user: userData, tridaName });
             registrationForm.setValue('email', userData.email);
@@ -181,25 +215,23 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
         const { auth } = await import('@/firebase');
 
         try {
-            // Step 1: Create user in Firebase Auth
             const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
             const firebaseUser = userCredential.user;
 
-            // Step 2: Update the user document in Firestore with the new Auth UID and remove the PIN
             const userRef = doc(firestore, 'users', registrationData.user.id);
             const userDataToUpdate = {
                 ...registrationData.user,
-                id: firebaseUser.uid, // This is crucial. Overwriting mock ID with real Auth UID
-                email: values.email, // Update email from the form
+                email: values.email,
                 pin: '', // Clear the PIN after registration
+                id: firebaseUser.uid,
             };
             
-            // We use setDoc here to create a new document with the Auth UID as the ID
-            const newDocRef = doc(firestore, 'users', firebaseUser.uid);
-            await setDoc(newDocRef, userDataToUpdate);
+            await setDoc(doc(firestore, 'users', firebaseUser.uid), userDataToUpdate, { merge: true });
             
-            // Optionally, delete the old document if the ID was different, but here we overwrite
-            // For this logic, we assume the user.id from PIN check is the one to be updated/replaced
+            // Delete the old doc if it had a different, temporary ID
+            if (registrationData.user.id !== firebaseUser.uid) {
+                await setDoc(doc(firestore, 'users', registrationData.user.id), {pin: 'USED'}, {merge: true}); // Invalidate PIN
+            }
 
             toast({ title: 'Registrace úspěšná', description: 'Váš účet byl vytvořen, nyní se můžete přihlásit.' });
             onLoginClick(); // Switch back to login form
