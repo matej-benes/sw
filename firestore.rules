@@ -120,7 +120,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isOwner(userId) || isTeacherOfStudent(userId) || isAdministrator();
       allow list: if isAdministrator();
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow create: if isSignedIn();
       allow update: if (isExistingOwner(userId) && request.resource.data.roles == resource.data.roles) || isAdministrator();
       allow delete: if isExistingOwner(userId) || isAdministrator();
     }
