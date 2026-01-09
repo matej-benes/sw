@@ -44,14 +44,15 @@ const createInitialAdminIfNeeded = async (firestore: any) => {
 
   if (querySnapshot.empty) {
     console.log("Creating initial admin user...");
-    const adminUser = {
+    const newUserDocRef = doc(usersRef);
+    const adminUser: Omit<User, 'id'> & { pin: string } = {
       name: 'Matěj Mikolášek',
       email: adminEmail,
       roles: ['ucitel', 'administrator', 'vedouci pracovnik'],
       pin: newPin,
-      avatarUrl: `https://picsum.photos/seed/${Date.now()}/100/100`,
+      avatarUrl: `https://picsum.photos/seed/${newUserDocRef.id}/100/100`,
     };
-    await addDoc(usersRef, adminUser);
+    await setDoc(newUserDocRef, adminUser);
     console.log("Initial admin user created with PIN:", newPin);
   } else {
     // If admin exists, just update the PIN
@@ -227,6 +228,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             // 2. Create the new user document in Firestore with the Firebase Auth UID.
             const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
             await setDoc(newUserDocRef, {
+                id: firebaseUser.uid,
                 name: registrationData.user.name,
                 email: values.email,
                 roles: registrationData.user.roles,

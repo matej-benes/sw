@@ -326,24 +326,24 @@ function AdminUserManagement() {
               description: `Uživatel ${formData.name} byl úspěšně aktualizován.`,
             });
         } else {
-            // This is a new user
+            // This is a new user (pre-registration)
             const newUserDocRef = doc(collection(firestore, 'users'));
-            const newUserWithId = {
+            const newUserForDb = {
                 ...formData,
                 id: newUserDocRef.id,
                 avatarUrl: `https://picsum.photos/seed/${newUserDocRef.id}/100/100`,
             };
             
-            await setDoc(newUserDocRef, newUserWithId);
+            await setDoc(newUserDocRef, newUserForDb);
 
-            if (newUserWithId.roles?.includes('ziak') && newUserWithId.tridaId) {
-                const tridaRef = doc(firestore, 'tridy', newUserWithId.tridaId);
-                await updateDoc(tridaRef, { ziaciIds: arrayUnion(newUserWithId.id) });
+            if (newUserForDb.roles?.includes('ziak') && newUserForDb.tridaId) {
+                const tridaRef = doc(firestore, 'tridy', newUserForDb.tridaId);
+                await updateDoc(tridaRef, { ziaciIds: arrayUnion(newUserForDb.id) });
             }
 
             toast({
               title: 'Uživatel přidán',
-              description: `Uživatel ${formData.name} byl úspěšně přidán.`,
+              description: `Uživatel ${formData.name} byl úspěšně přidán s PINem pro registraci.`,
             });
         }
       } catch(e) {
