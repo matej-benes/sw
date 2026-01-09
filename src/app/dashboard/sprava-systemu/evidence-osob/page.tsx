@@ -181,8 +181,8 @@ export default function EvidenceOsobPage() {
   }, [authLoading, hasRole]);
   
   const usersCollection = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'users') : null),
-    [firestore, isAdmin]
+    () => (firestore && isAdmin && !authLoading ? collection(firestore, 'users') : null),
+    [firestore, isAdmin, authLoading]
   );
   const { data: users, isLoading: usersLoading } = useCollection<User>(usersCollection);
 
@@ -393,4 +393,5 @@ export default function EvidenceOsobPage() {
     </div>
   );
 }
+    
     

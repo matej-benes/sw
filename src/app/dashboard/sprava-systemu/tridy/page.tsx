@@ -153,8 +153,8 @@ export default function SpravaTridyPage() {
   }, [authLoading, hasRole]);
 
   const classesCollection = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'tridy') : null),
-    [firestore, isAdmin]
+    () => (firestore && isAdmin && !authLoading ? collection(firestore, 'tridy') : null),
+    [firestore, isAdmin, authLoading]
   );
   const { data: classes, isLoading: classesLoading } = useCollection<Class>(classesCollection);
 

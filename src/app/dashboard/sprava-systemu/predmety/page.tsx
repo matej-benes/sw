@@ -153,8 +153,8 @@ export default function PredmetyPage() {
   }, [authLoading, hasRole]);
 
   const subjectsCollection = useMemoFirebase(
-    () => (firestore && isAdmin ? collection(firestore, 'predmety') : null),
-    [firestore, isAdmin]
+    () => (firestore && isAdmin && !authLoading ? collection(firestore, 'predmety') : null),
+    [firestore, isAdmin, authLoading]
   );
   const { data: subjects, isLoading: subjectsLoading } = useCollection<Subject>(subjectsCollection);
 
