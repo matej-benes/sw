@@ -14,32 +14,41 @@ import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 
-const formSchema = z.object({
+const loginSchema = z.object({
   email: z.string().email({ message: 'Prosím zadejte platný email.' }),
   password: z.string().min(1, { message: 'Prosím zadejte heslo.' }),
 });
 
-export default function LoginPage() {
+const pinSchema = z.object({
+  pin: z.string().min(1, { message: 'Prosím zadejte PIN.' }),
+});
+
+const registrationSchema = z.object({
+    email: z.string().email({ message: 'Prosím zadejte platný email.' }),
+    password: z.string().min(6, { message: 'Heslo musí mít alespoň 6 znaků.' }),
+});
+
+function LoginForm() {
   const { user, signIn } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<z.infer<typeof loginSchema>>({
+    resolver: zodResolver(loginSchema),
     defaultValues: {
       email: '',
       password: '',
     },
   });
 
-  useEffect(() => {
+   useEffect(() => {
     if (user) {
       router.push('/dashboard');
     }
   }, [user, router]);
 
-  async function onSubmit(values: z.infer<typeof formSchema>) {
+  async function onSubmit(values: z.infer<typeof loginSchema>) {
     setIsLoading(true);
     try {
       await signIn(values.email, values.password);
@@ -56,13 +65,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-4">
-      <div className="flex flex-col items-center justify-center text-center mb-8">
-        <Logo className="h-16 w-16 mb-4 text-primary" />
-        <h1 className="text-4xl font-bold text-primary">ŠkolaWeb</h1>
-        <p className="text-muted-foreground">Vítejte v informačním systému</p>
-      </div>
-      <Card className="w-full max-w-sm">
+    <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Přihlášení</CardTitle>
           <CardDescription>Zadejte své údaje pro vstup do systému.</CardDescription>
@@ -103,6 +106,150 @@ export default function LoginPage() {
           </Form>
         </CardContent>
       </Card>
+  )
+}
+
+function RegistrationForm() {
+    const [step, setStep] = useState(1);
+    const [isLoading, setIsLoading] = useState(false);
+    const { toast } = useToast();
+    const router = useRouter();
+
+    const pinForm = useForm<z.infer<typeof pinSchema>>({
+        resolver: zodResolver(pinSchema),
+        defaultValues: { pin: '' },
+    });
+
+    const registrationForm = useForm<z.infer<typeof registrationSchema>>({
+        resolver: zodResolver(registrationSchema),
+        defaultValues: { email: '', password: '' },
+    });
+
+    const handlePinSubmit = (values: z.infer<typeof pinSchema>) => {
+        setIsLoading(true);
+        // Simulate PIN verification
+        setTimeout(() => {
+            if (values.pin === '123456') {
+                setStep(2);
+                toast({ title: 'PIN ověřen', description: 'Nyní si můžete vytvořit účet.' });
+            } else {
+                toast({ variant: 'destructive', title: 'Chyba', description: 'Neplatný PIN kód.' });
+            }
+            setIsLoading(false);
+        }, 1000);
+    };
+
+    const handleRegistrationSubmit = (values: z.infer<typeof registrationSchema>) => {
+        setIsLoading(true);
+        // Simulate user registration
+        setTimeout(() => {
+            console.log('Registrace s daty:', values);
+            toast({ title: 'Registrace úspěšná', description: 'Váš účet byl vytvořen, nyní se můžete přihlásit.' });
+            // In a real app, you would likely auto-login the user and redirect
+            window.location.reload(); // For now, just reload to go back to login
+            setIsLoading(false);
+        }, 1500);
+    };
+
+    return (
+        <Card className="w-full max-w-sm">
+            {step === 1 && (
+                <>
+                    <CardHeader>
+                        <CardTitle>Krok 1: Ověření PINu</CardTitle>
+                        <CardDescription>Zadejte PIN kód, který jste obdrželi od školy.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Form {...pinForm}>
+                            <form onSubmit={pinForm.handleSubmit(handlePinSubmit)} className="space-y-4">
+                                <FormField
+                                    control={pinForm.control}
+                                    name="pin"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>PIN</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="123456" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <Button type="submit" className="w-full" disabled={isLoading}>
+                                    {isLoading ? <Loader2 className="animate-spin" /> : 'Ověřit PIN'}
+                                </Button>
+                            </form>
+                        </Form>
+                    </CardContent>
+                </>
+            )}
+            {step === 2 && (
+                 <>
+                    <CardHeader>
+                        <CardTitle>Krok 2: Registrace</CardTitle>
+                        <CardDescription>Vytvořte si svůj účet pro přístup do systému.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Form {...registrationForm}>
+                            <form onSubmit={registrationForm.handleSubmit(handleRegistrationSubmit)} className="space-y-4">
+                                <FormField
+                                    control={registrationForm.control}
+                                    name="email"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Email</FormLabel>
+                                            <FormControl>
+                                                <Input type="email" placeholder="vas@email.cz" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={registrationForm.control}
+                                    name="password"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Heslo</FormLabel>
+                                            <FormControl>
+                                                <Input type="password" placeholder="••••••••" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <Button type="submit" className="w-full" disabled={isLoading}>
+                                    {isLoading ? <Loader2 className="animate-spin" /> : 'Dokončit registraci'}
+                                </Button>
+                            </form>
+                        </Form>
+                    </CardContent>
+                </>
+            )}
+        </Card>
+    );
+}
+
+export default function LoginPage() {
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-center p-4">
+      <div className="flex flex-col items-center justify-center text-center mb-8">
+        <Logo className="h-16 w-16 mb-4 text-primary" />
+        <h1 className="text-4xl font-bold text-primary">ŠkolaWeb</h1>
+        <p className="text-muted-foreground">Vítejte v informačním systému</p>
+      </div>
+      
+      {isRegistering ? <RegistrationForm /> : <LoginForm />}
+
+      <Button 
+        variant="link" 
+        className="mt-6 text-muted-foreground"
+        onClick={() => setIsRegistering(!isRegistering)}
+        >
+        {isRegistering ? 'Už mám účet, chci se přihlásit' : 'Jsem v systému poprvé, mám od školy pin a chci se zaregistrovat.'}
+      </Button>
     </main>
   );
 }
