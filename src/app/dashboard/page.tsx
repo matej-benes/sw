@@ -45,11 +45,13 @@ function MobileDashboard({ user, scheduleData, udalosti, substitutions }: { user
     const [selectedDay, setSelectedDay] = useState(new Date());
 
     const todaysSchedule = useMemo(() => {
+        if (!scheduleData) return [];
         const scheduleForDay = scheduleData.find(s => isSameDay(parseISO(s.datum), selectedDay) && s.tridaId === user.tridaId);
         return scheduleForDay?.hodiny || [];
     }, [scheduleData, selectedDay, user.tridaId]);
 
     const todaysEvents = useMemo(() => {
+        if (!udalosti) return [];
         return udalosti.filter(e => isSameDay(parseISO(e.datum), selectedDay));
     }, [udalosti, selectedDay]);
     
@@ -182,5 +184,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
