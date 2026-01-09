@@ -12,7 +12,7 @@ import { useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase
 import { collection, query, where, doc, or } from 'firebase/firestore';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useState, useMemo } from 'react';
-import { addDays, format, startOfWeek, isSameDay } from 'date-fns';
+import { addDays, format, startOfWeek, isSameDay, parseISO } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { UserNav } from '@/components/layout/user-nav';
