@@ -11,6 +11,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { PlusCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 const timeSlots = [
     "07:55 - 08:40", "08:55 - 09:40", "09:55 - 10:40", "10:45 - 11:30",
@@ -26,6 +32,29 @@ const dayMapping: { [key: string]: { short: string; date: string } } = {
     'Pátek': { short: 'Pá', date: '3.9.' },
 };
 
+function LessonTooltipContent({ lesson, day, period }: { lesson: Lesson, day: string, period: number }) {
+    return (
+        <div className="p-2 text-sm">
+            <h3 className="font-bold text-base mb-2">{lesson.subject}</h3>
+            <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
+                <span className="text-muted-foreground">Předmět:</span>
+                <span>{lesson.subject}</span>
+
+                <span className="text-muted-foreground">Učitel:</span>
+                <span>{lesson.teacher || 'N/A'}</span>
+
+                <span className="text-muted-foreground">Učebna:</span>
+                <span>{lesson.room}</span>
+
+                <span className="text-muted-foreground">Den (vyuč. hodina):</span>
+                <span>{day.substring(0,2)} {dayMapping[day]?.date || ''} ({period})</span>
+
+                <span className="text-muted-foreground">Komentář:</span>
+                <span>-</span>
+            </div>
+        </div>
+    )
+}
 
 function LessonContextMenu({ children, lesson }: { children: React.ReactNode, lesson: Lesson }) {
     const router = useRouter();
@@ -76,7 +105,7 @@ function EmptySlotContextMenu({ children }: { children: React.ReactNode }) {
 }
 
 
-function LessonBlock({ lesson, isTeacher }: { lesson: Lesson; isTeacher: boolean }) {
+function LessonBlock({ lesson, isTeacher, day, period }: { lesson: Lesson; isTeacher: boolean, day: string, period: number }) {
     const getSubjectColor = (subject: string) => {
         let hash = 0;
         for (let i = 0; i < subject.length; i++) {
@@ -96,12 +125,21 @@ function LessonBlock({ lesson, isTeacher }: { lesson: Lesson; isTeacher: boolean
             <div className="text-muted-foreground">{lesson.room}</div>
         </div>
     );
+    
+    const interactiveBlock = isTeacher ? (
+        <LessonContextMenu lesson={lesson}>{blockContent}</LessonContextMenu>
+    ) : blockContent;
 
-    if (isTeacher) {
-        return <LessonContextMenu lesson={lesson}>{blockContent}</LessonContextMenu>
-    }
-
-    return blockContent;
+    return (
+        <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger asChild>{interactiveBlock}</TooltipTrigger>
+                <TooltipContent>
+                    <LessonTooltipContent lesson={lesson} day={day} period={period} />
+                </TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    )
 }
 
 export function TimetableWidget({ timetableData, isTeacher, studentName, teacherName, className }: { timetableData: Timetable, isTeacher: boolean, studentName: string, teacherName: string, className: string }) {
@@ -141,7 +179,7 @@ export function TimetableWidget({ timetableData, isTeacher, studentName, teacher
                             return (
                                 <div key={index} className="p-0.5 border-b border-r border-border min-h-[60px]">
                                     {lesson ? (
-                                        <LessonBlock lesson={lesson} isTeacher={isTeacher} />
+                                        <LessonBlock lesson={lesson} isTeacher={isTeacher} day={day} period={index + 1}/>
                                     ) : (
                                         isTeacher ? (
                                             <EmptySlotContextMenu>
