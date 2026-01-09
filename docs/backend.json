@@ -21,7 +21,7 @@
         },
         "role": {
           "type": "string",
-          "description": "The user's role (e.g., učitel, rodic, ziak)."
+          "description": "The user's role (e.g., ucitel, rodic, ziak)."
         },
         "tridaId": {
           "type": "string",
