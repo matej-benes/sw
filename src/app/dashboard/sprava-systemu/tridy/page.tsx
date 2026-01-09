@@ -372,20 +372,15 @@ function AdminClassManagement() {
 
 export default function SpravaTridyPage() {
   const { hasRole } = useAuth();
-  const { user, isUserLoading } = useUser();
+  const { isUserLoading } = useUser();
   
-  const showLoading = isUserLoading;
-  const showAccessDenied = !isUserLoading && !hasRole('administrator');
-  const showContent = !isUserLoading && user && hasRole('administrator');
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Správa tříd</h1>
-        <p className="text-muted-foreground">Správa všech tříd v systému.</p>
-      </div>
-
-      {showLoading && (
+  if (isUserLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Správa tříd</h1>
+          <p className="text-muted-foreground">Správa všech tříd v systému.</p>
+        </div>
         <Card>
             <CardHeader>
               <CardTitle>Načítání...</CardTitle>
@@ -397,22 +392,34 @@ export default function SpravaTridyPage() {
                 </div>
             </CardContent>
         </Card>
-      )}
-      
-      {showAccessDenied && (
+      </div>
+    )
+  }
+  
+  if (!hasRole('administrator')) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Správa tříd</h1>
+          <p className="text-muted-foreground">Správa všech tříd v systému.</p>
+        </div>
          <Card>
             <CardHeader>
               <CardTitle>Přístup odepřen</CardTitle>
               <CardDescription>Pro přístup k této stránce nemáte oprávnění.</CardDescription>
             </CardHeader>
         </Card>
-      )}
+      </div>
+    )
+  }
 
-      {showContent && (
-        <AdminClassManagement />
-      )}
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Správa tříd</h1>
+        <p className="text-muted-foreground">Správa všech tříd v systému.</p>
+      </div>
+      <AdminClassManagement />
     </div>
   );
 }
-
-    
