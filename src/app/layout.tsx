@@ -18,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="cs">
+    <html lang="cs" className="dark">
       <body className={`${inter.variable} font-body antialiased`}>
         <FirebaseClientProvider>
           <AuthProvider>

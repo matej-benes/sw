@@ -6,11 +6,14 @@ import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Menu, ChevronDown, BookCopy, Settings, Users, School, Book, FileQuestion, Home } from 'lucide-react';
+import { Menu, ChevronDown, BookCopy, Settings, Users, School, Book, FileQuestion, Home, CalendarDays, MessageSquare, LayoutGrid } from 'lucide-react';
 import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
+import { MobileNav } from '@/components/layout/mobile-nav';
+import { useIsMobile } from '@/hooks/use-mobile';
+
 
 const adminNavLinks = [
     { name: "Rozvrhy a suplování", href: "/dashboard/rozvrhy-suplovani", icon: BookCopy },
@@ -34,6 +37,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const isAdministrator = hasRole('administrator');
+  const isMobile = useIsMobile();
 
 
   useEffect(() => {
@@ -111,7 +115,7 @@ export default function DashboardLayout({
             {sidebarContent}
        </div>
       <div className="flex flex-col">
-        <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
+        <header className="hidden h-14 items-center gap-4 border-b bg-muted/40 px-4 md:flex lg:h-[60px] lg:px-6">
            <Button
                 variant="outline"
                 size="icon"
@@ -138,6 +142,7 @@ export default function DashboardLayout({
         <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 bg-background">
             {children}
         </main>
+        {isMobile && <MobileNav />}
       </div>
     </div>
   );
