@@ -43,7 +43,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -142,19 +142,28 @@ function ClassForm({
 }
 
 export default function SpravaTridyPage() {
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, loading: authLoading } = useAuth();
   const firestore = useFirestore();
-  const isAdmin = hasRole('administrator');
+  const [isAdmin, setIsAdmin] = useState(false);
+  
+  useEffect(() => {
+    if (!authLoading) {
+      setIsAdmin(hasRole('administrator'));
+    }
+  }, [authLoading, hasRole]);
+
   const classesCollection = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'tridy') : null),
     [firestore, isAdmin]
   );
-  const { data: classes, isLoading } = useCollection<Class>(classesCollection);
+  const { data: classes, isLoading: classesLoading } = useCollection<Class>(classesCollection);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<Class | null>(null);
   const [deletingClass, setDeletingClass] = useState<Class | null>(null);
   const { toast } = useToast();
+  
+  const isLoading = authLoading || (isAdmin && classesLoading);
 
   const handleSaveClass = async (formData: ClassFormData) => {
     if (!firestore) return;
@@ -208,6 +217,15 @@ export default function SpravaTridyPage() {
     setEditingClass(classData);
     setIsDialogOpen(true);
   };
+
+  if (authLoading) {
+    return (
+        <div className="space-y-6">
+            <h1 className="text-3xl font-bold tracking-tight">Načítání...</h1>
+            <p className="text-muted-foreground">Ověřování oprávnění.</p>
+        </div>
+    )
+  }
 
   if (!isAdmin) {
     return (
@@ -333,3 +351,5 @@ export default function SpravaTridyPage() {
     </div>
   );
 }
+
+    

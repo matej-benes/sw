@@ -43,7 +43,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -142,19 +142,28 @@ function SubjectForm({
 }
 
 export default function PredmetyPage() {
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, loading: authLoading } = useAuth();
   const firestore = useFirestore();
-  const isAdmin = hasRole('administrator');
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    if (!authLoading) {
+      setIsAdmin(hasRole('administrator'));
+    }
+  }, [authLoading, hasRole]);
+
   const subjectsCollection = useMemoFirebase(
     () => (firestore && isAdmin ? collection(firestore, 'predmety') : null),
     [firestore, isAdmin]
   );
-  const { data: subjects, isLoading } = useCollection<Subject>(subjectsCollection);
+  const { data: subjects, isLoading: subjectsLoading } = useCollection<Subject>(subjectsCollection);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [deletingSubject, setDeletingSubject] = useState<Subject | null>(null);
   const { toast } = useToast();
+  
+  const isLoading = authLoading || (isAdmin && subjectsLoading);
 
   const handleSaveSubject = async (formData: SubjectFormData) => {
     if (!firestore) return;
@@ -208,6 +217,15 @@ export default function PredmetyPage() {
     setEditingSubject(subject);
     setIsDialogOpen(true);
   };
+
+  if (authLoading) {
+    return (
+        <div className="space-y-6">
+            <h1 className="text-3xl font-bold tracking-tight">Načítání...</h1>
+            <p className="text-muted-foreground">Ověřování oprávnění.</p>
+        </div>
+    )
+  }
 
   if (!isAdmin) {
     return (
@@ -337,3 +355,5 @@ export default function PredmetyPage() {
     </div>
   );
 }
+
+    
