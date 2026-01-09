@@ -172,17 +172,10 @@ function UserForm({
 export default function EvidenceOsobPage() {
   const { user, hasRole, loading: authLoading } = useAuth();
   const firestore = useFirestore();
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    if (!authLoading) {
-      setIsAdmin(hasRole('administrator'));
-    }
-  }, [authLoading, hasRole]);
   
   const usersCollection = useMemoFirebase(
-    () => (firestore && isAdmin && !authLoading ? collection(firestore, 'users') : null),
-    [firestore, isAdmin, authLoading]
+    () => (firestore && !authLoading && hasRole('administrator') ? collection(firestore, 'users') : null),
+    [firestore, authLoading, hasRole]
   );
   const { data: users, isLoading: usersLoading } = useCollection<User>(usersCollection);
 
@@ -191,7 +184,7 @@ export default function EvidenceOsobPage() {
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
   const { toast } = useToast();
   
-  const isLoading = authLoading || (isAdmin && usersLoading);
+  const isLoading = authLoading || (hasRole('administrator') && usersLoading);
 
   const handleSaveUser = async (formData: Partial<User>) => {
     if (!firestore) return;
@@ -204,11 +197,14 @@ export default function EvidenceOsobPage() {
           description: `Uživatel ${formData.name} byl úspěšně aktualizován.`,
         });
       } else {
-        await addDoc(collection(firestore, 'users'), {
+        // In a real app, you would create a user in Firebase Auth first
+        // and use the UID as the document ID.
+        const newUser = {
           ...formData,
-          id: `user-${Date.now()}`, // Simple unique ID
-          avatarUrl: `https://picsum.photos/seed/${Date.now()}/100/100`, 
-        });
+          avatarUrl: `https://picsum.photos/seed/${Date.now()}/100/100`,
+        };
+        const docRef = await addDoc(collection(firestore, 'users'), newUser);
+        await updateDoc(docRef, { id: docRef.id }); // Store the ID within the document
         toast({
           title: 'Uživatel přidán',
           description: `Uživatel ${formData.name} byl úspěšně přidán.`,
@@ -259,7 +255,7 @@ export default function EvidenceOsobPage() {
     )
   }
 
-  if (!isAdmin) {
+  if (!hasRole('administrator')) {
     return (
         <div className="space-y-6">
             <h1 className="text-3xl font-bold tracking-tight">Přístup odepřen</h1>

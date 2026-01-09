@@ -144,17 +144,10 @@ function SubjectForm({
 export default function PredmetyPage() {
   const { user, hasRole, loading: authLoading } = useAuth();
   const firestore = useFirestore();
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    if (!authLoading) {
-      setIsAdmin(hasRole('administrator'));
-    }
-  }, [authLoading, hasRole]);
 
   const subjectsCollection = useMemoFirebase(
-    () => (firestore && isAdmin && !authLoading ? collection(firestore, 'predmety') : null),
-    [firestore, isAdmin, authLoading]
+    () => (firestore && !authLoading && hasRole('administrator') ? collection(firestore, 'predmety') : null),
+    [firestore, authLoading, hasRole]
   );
   const { data: subjects, isLoading: subjectsLoading } = useCollection<Subject>(subjectsCollection);
 
@@ -163,7 +156,7 @@ export default function PredmetyPage() {
   const [deletingSubject, setDeletingSubject] = useState<Subject | null>(null);
   const { toast } = useToast();
   
-  const isLoading = authLoading || (isAdmin && subjectsLoading);
+  const isLoading = authLoading || (hasRole('administrator') && subjectsLoading);
 
   const handleSaveSubject = async (formData: SubjectFormData) => {
     if (!firestore) return;
@@ -176,7 +169,8 @@ export default function PredmetyPage() {
           description: `Předmět ${formData.name} byl úspěšně uložen.`,
         });
       } else {
-        await addDoc(collection(firestore, 'predmety'), formData);
+        const docRef = await addDoc(collection(firestore, 'predmety'), formData);
+        await updateDoc(docRef, { id: docRef.id });
         toast({
           title: 'Předmět přidán',
           description: `Předmět ${formData.name} byl úspěšně přidán.`,
@@ -227,7 +221,7 @@ export default function PredmetyPage() {
     )
   }
 
-  if (!isAdmin) {
+  if (!hasRole('administrator')) {
     return (
         <div className="space-y-6">
             <h1 className="text-3xl font-bold tracking-tight">Přístup odepřen</h1>

@@ -144,17 +144,10 @@ function ClassForm({
 export default function SpravaTridyPage() {
   const { user, hasRole, loading: authLoading } = useAuth();
   const firestore = useFirestore();
-  const [isAdmin, setIsAdmin] = useState(false);
   
-  useEffect(() => {
-    if (!authLoading) {
-      setIsAdmin(hasRole('administrator'));
-    }
-  }, [authLoading, hasRole]);
-
   const classesCollection = useMemoFirebase(
-    () => (firestore && isAdmin && !authLoading ? collection(firestore, 'tridy') : null),
-    [firestore, isAdmin, authLoading]
+    () => (firestore && !authLoading && hasRole('administrator') ? collection(firestore, 'tridy') : null),
+    [firestore, authLoading, hasRole]
   );
   const { data: classes, isLoading: classesLoading } = useCollection<Class>(classesCollection);
 
@@ -163,7 +156,7 @@ export default function SpravaTridyPage() {
   const [deletingClass, setDeletingClass] = useState<Class | null>(null);
   const { toast } = useToast();
   
-  const isLoading = authLoading || (isAdmin && classesLoading);
+  const isLoading = authLoading || (hasRole('administrator') && classesLoading);
 
   const handleSaveClass = async (formData: ClassFormData) => {
     if (!firestore) return;
@@ -176,7 +169,8 @@ export default function SpravaTridyPage() {
           description: `Třída ${formData.name} byla úspěšně uložena.`,
         });
       } else {
-        await addDoc(collection(firestore, 'tridy'), formData);
+        const docRef = await addDoc(collection(firestore, 'tridy'), formData);
+        await updateDoc(docRef, { id: docRef.id });
         toast({
           title: 'Třída přidána',
           description: `Třída ${formData.name} byla úspěšně přidána.`,
@@ -227,7 +221,7 @@ export default function SpravaTridyPage() {
     )
   }
 
-  if (!isAdmin) {
+  if (!hasRole('administrator')) {
     return (
         <div className="space-y-6">
             <h1 className="text-3xl font-bold tracking-tight">Přístup odepřen</h1>
@@ -351,5 +345,3 @@ export default function SpravaTridyPage() {
     </div>
   );
 }
-
-    
