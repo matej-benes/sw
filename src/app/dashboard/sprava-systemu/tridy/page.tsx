@@ -235,11 +235,10 @@ function AdminClassManagement() {
           description: `Třída ${formData.nazev} byla úspěšně uložena.`,
         });
       } else {
-        const docRef = await addDoc(collection(firestore, 'tridy'), {
+        await addDoc(collection(firestore, 'tridy'), {
             ...dataToSave,
             ziaciIds: [], // initialize with empty students array
         });
-        await updateDoc(docRef, { id: docRef.id });
         toast({
           title: 'Třída přidána',
           description: `Třída ${formData.nazev} byla úspěšně přidána.`,
@@ -372,7 +371,7 @@ function AdminClassManagement() {
 
 export default function SpravaTridyPage() {
   const { hasRole } = useAuth();
-  const { isUserLoading } = useUser();
+  const { user, isUserLoading } = useUser();
   
   if (isUserLoading) {
     return (
@@ -396,7 +395,7 @@ export default function SpravaTridyPage() {
     )
   }
   
-  if (!hasRole('administrator')) {
+  if (!user || !hasRole('administrator')) {
     return (
       <div className="space-y-6">
         <div>

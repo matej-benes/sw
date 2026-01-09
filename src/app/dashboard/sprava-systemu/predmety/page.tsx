@@ -176,7 +176,7 @@ function SubjectRow({ subject, onEdit, onDelete }: { subject: Subject; onEdit: (
 function AdminSubjectManagement() {
   const firestore = useFirestore();
   const { hasRole } = useAuth();
-  const subjectsCollection = useMemoFirebase(() => (firestore && hasRole('administrator')) ? collection(firestore, 'predmety') : null, [firestore, hasRole]);
+  const subjectsCollection = useMemoFirebase(() => (firestore) ? collection(firestore, 'predmety') : null, [firestore]);
   const { data: subjects, isLoading: subjectsLoading } = useCollection<Subject>(subjectsCollection);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -195,8 +195,7 @@ function AdminSubjectManagement() {
           description: `Předmět ${formData.name} byl úspěšně uložen.`,
         });
       } else {
-        const docRef = await addDoc(collection(firestore, 'predmety'), formData);
-        await updateDoc(docRef, { id: docRef.id });
+        await addDoc(collection(firestore, 'predmety'), formData);
         toast({
           title: 'Předmět přidán',
           description: `Předmět ${formData.name} byl úspěšně přidán.`,
@@ -330,11 +329,11 @@ function AdminSubjectManagement() {
 
 export default function PredmetyPage() {
   const { hasRole } = useAuth();
-  const { isUserLoading } = useUser();
+  const { user, isUserLoading } = useUser();
   
   const showLoading = isUserLoading;
-  const showAccessDenied = !isUserLoading && !hasRole('administrator');
-  const showContent = !isUserLoading && hasRole('administrator');
+  const showAccessDenied = !isUserLoading && (!user || !hasRole('administrator'));
+  const showContent = !isUserLoading && user && hasRole('administrator');
 
   return (
     <div className="space-y-6">

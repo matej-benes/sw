@@ -237,8 +237,8 @@ function AdminUserManagement() {
     const { hasRole } = useAuth();
     
     const usersCollection = useMemoFirebase(
-      () => (firestore && hasRole('administrator')) ? collection(firestore, 'users') : null,
-      [firestore, hasRole]
+      () => (firestore) ? collection(firestore, 'users') : null,
+      [firestore]
     );
 
     const { data: users, isLoading: usersLoading } = useCollection<User>(usersCollection);
@@ -263,8 +263,7 @@ function AdminUserManagement() {
             ...formData,
             avatarUrl: `https://picsum.photos/seed/${Date.now()}/100/100`,
           };
-          const docRef = await addDoc(collection(firestore, 'users'), newUser);
-          await updateDoc(docRef, { id: docRef.id }); 
+          await addDoc(collection(firestore, 'users'), newUser);
           toast({
             title: 'Uživatel přidán',
             description: `Uživatel ${formData.name} byl úspěšně přidán.`,
@@ -400,7 +399,7 @@ function AdminUserManagement() {
 
 export default function EvidenceOsobPage() {
   const { hasRole } = useAuth();
-  const { isUserLoading } = useUser();
+  const { user, isUserLoading } = useUser();
   
   if (isUserLoading) {
     return (
@@ -424,7 +423,7 @@ export default function EvidenceOsobPage() {
     )
   }
 
-  if (!hasRole('administrator')) {
+  if (!user || !hasRole('administrator')) {
     return (
       <div className="space-y-6">
          <div>
