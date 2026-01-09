@@ -224,7 +224,8 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
             const firebaseUser = userCredential.user;
 
-            // 2. Create the user document in Firestore with the data from the pre-seeded document
+            // 2. Create the user document in Firestore with the data from the pre-seeded document,
+            // using the new Firebase Auth UID as the document ID.
             const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
             await setDoc(newUserDocRef, {
                 name: registrationData.user.name,
