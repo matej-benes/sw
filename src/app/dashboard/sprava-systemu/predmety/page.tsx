@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { PlusCircle, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -85,6 +85,29 @@ function SubjectForm({ subject, onSave, closeDialog }: { subject?: Subject | nul
     );
 }
 
+function DeleteSubjectDialog({ subject, onDelete }: { subject: Subject, onDelete: (id: string) => void}) {
+    return (
+        <AlertDialog>
+            <AlertDialogTrigger asChild>
+                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Smazat
+                </DropdownMenuItem>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Opravdu chcete smazat předmět?</AlertDialogTitle>
+                    <AlertDialogDescription>Tato akce je nevratná a trvale smaže předmět "{subject.name}".</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Zrušit</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => onDelete(subject.id)} className="bg-destructive hover:bg-destructive/90">Smazat</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+}
+
 export default function PredmetyPage() {
     const [subjects, setSubjects] = useState<Subject[]>(initialSubjects);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -158,24 +181,7 @@ export default function PredmetyPage() {
                                                         <Pencil className="mr-2 h-4 w-4" />
                                                         Upravit
                                                     </DropdownMenuItem>
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <DropdownMenuItem onSelect={e => e.preventDefault()} className="text-destructive">
-                                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                                Smazat
-                                                            </DropdownMenuItem>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>Opravdu chcete smazat předmět?</AlertDialogTitle>
-                                                                <AlertDialogDescription>Tato akce je nevratná a trvale smaže předmět "{subject.name}".</AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Zrušit</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={() => handleDeleteSubject(subject.id)} className="bg-destructive hover:bg-destructive/90">Smazat</AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
+                                                    <DeleteSubjectDialog subject={subject} onDelete={handleDeleteSubject} />
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
                                         </TableCell>

@@ -8,7 +8,7 @@ import { mockUsers as initialUsers } from "@/lib/mock-data";
 import type { User, Role } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -107,6 +107,30 @@ function UserForm({ user, onSave, closeDialog }: { user?: User | null, onSave: (
     );
 }
 
+function DeleteUserDialog({ user, onDelete }: { user: User, onDelete: (id: string) => void}) {
+    return (
+        <AlertDialog>
+            <AlertDialogTrigger asChild>
+                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Smazat
+                </DropdownMenuItem>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Opravdu chcete smazat uživatele?</AlertDialogTitle>
+                    <AlertDialogDescription>Tato akce je nevratná a trvale smaže uživatele "{user.name}".</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Zrušit</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => onDelete(user.id)} className="bg-destructive hover:bg-destructive/90">Smazat</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+}
+
+
 export default function EvidenceOsobPage() {
     const [users, setUsers] = useState<User[]>(initialUsers);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -188,24 +212,7 @@ export default function EvidenceOsobPage() {
                                                         <Pencil className="mr-2 h-4 w-4" />
                                                         Upravit
                                                     </DropdownMenuItem>
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
-                                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                                Smazat
-                                                            </DropdownMenuItem>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>Opravdu chcete smazat uživatele?</AlertDialogTitle>
-                                                                <AlertDialogDescription>Tato akce je nevratná a trvale smaže uživatele "{user.name}".</AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Zrušit</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={() => handleDeleteUser(user.id)} className="bg-destructive hover:bg-destructive/90">Smazat</AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
+                                                    <DeleteUserDialog user={user} onDelete={handleDeleteUser} />
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
                                         </TableCell>
