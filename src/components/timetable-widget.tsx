@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { PlusCircle, Info } from 'lucide-react';
+import { PlusCircle, Info, XCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   Tooltip,
@@ -171,7 +171,7 @@ function LessonBlockCmp({ lesson, isTeacher, day, period, isSubstituted = false 
 
     const blockContent = (
          <div 
-            className={cn("h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer", isSubstituted && 'opacity-50')}
+            className={cn("h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer", isSubstituted && 'opacity-50 line-through')}
             style={{ backgroundColor: getSubjectColor(lesson.subjectId) }}
         >
             <div className="font-bold">{lesson.subjectShortcut}</div>
@@ -218,6 +218,33 @@ function EventBlock({ event }: { event: Udalost }) {
     )
 }
 
+function CancelledLessonBlock({ substitution }: { substitution: Substitution }) {
+     const blockContent = (
+         <div 
+            className="h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer bg-destructive/10 border border-dashed border-destructive"
+        >
+             <XCircle className="h-4 w-4 text-destructive mb-1" />
+            <div className="font-bold text-destructive">Odpadá</div>
+            <div className="text-muted-foreground text-xs">{substitution.originalLesson.lessonBlock.subjectShortcut}</div>
+        </div>
+    );
+
+     return (
+        <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger asChild>{blockContent}</TooltipTrigger>
+                <TooltipContent>
+                   <div className="p-2 text-sm">
+                        <h3 className="font-bold text-base mb-2 text-destructive">Zrušená hodina</h3>
+                        <p>Hodina předmětu {substitution.originalLesson.lessonBlock.subjectName} byla zrušena.</p>
+                        {substitution.changes.note && <p className="mt-1">Poznámka: {substitution.changes.note}</p>}
+                   </div>
+                </TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    )
+}
+
 export function TimetableWidget({ schedules, eventsData, substitutionsData, isTeacher, userId }: { schedules: Rozvrh[], eventsData: Udalost[], substitutionsData: Substitution[], isTeacher: boolean, userId: string }) {
     
     const timeSlots = schedules[0]?.timeSlots || defaultTimeSlots;
@@ -231,8 +258,6 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
             const isSame = isSameDay(eventDate, dayInfo.fullDate);
             if (!isSame) return false;
             
-            // This is a simplification. It checks if the event time falls within the lesson slot.
-            // A more robust solution would parse times properly.
             const lessonStartTime = timeSlots[periodIndex]?.split('-')[0];
             return event.cas === lessonStartTime;
         });
@@ -259,7 +284,8 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
                  if (isTeacher) {
                     if (lesson.teacherId === userId) return { lesson, classId: schedule.id };
                 } else {
-                    return { lesson, classId: schedule.id };
+                    // For students/parents, we need to check if they are part of the class for this lesson
+                    if(schedule.id === userId) return { lesson, classId: schedule.id };
                 }
             }
         }
@@ -312,6 +338,8 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
                                 <div key={periodIndex} className="p-0.5 border-b border-r border-border min-h-[70px] relative">
                                     {isCancelledByEvent ? (
                                          <EventBlock event={event!} />
+                                    ) : isCancelledBySub && substitution ? (
+                                        <CancelledLessonBlock substitution={substitution} />
                                     ) : (
                                         <>
                                             {lesson && (
@@ -322,9 +350,7 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
                                                     <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} day={day} period={periodIndex + 1} />
                                                 </div>
                                             )}
-                                            {isCancelledBySub && (
-                                                 <div className="absolute inset-0 flex items-center justify-center text-destructive font-bold text-xs bg-destructive/10">Odpadá</div>
-                                            )}
+                                            
                                             {!lesson && !event && isTeacher && (
                                                 <EmptySlotContextMenu>
                                                     <div className="h-full w-full cursor-pointer"></div>
@@ -341,5 +367,3 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
         </div>
     );
 }
-
-    

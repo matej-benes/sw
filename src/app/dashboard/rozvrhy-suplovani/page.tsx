@@ -20,6 +20,7 @@ import { format, startOfDay } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 
 const lessonSchema = z.object({
     subjectId: z.string().min(1, "Předmět je povinný"),
@@ -123,13 +124,13 @@ function SubstitutionManagement() {
     const handleSaveSubstitution = async (changes: any) => {
         if (!firestore || !selectedLessonForSub) return;
         
-        const subData = {
+        const subData: Omit<Substitution, 'id'> = {
             date: format(selectedDate, 'yyyy-MM-dd'),
             originalLesson: {
                 day: selectedLessonForSub.day,
                 period: selectedLessonForSub.period,
                 classId: selectedLessonForSub.classInfo.id,
-                lessonBlock: selectedLessonForSub.lesson
+                lessonBlock: selectedLessonForSub.lesson!
             },
             changes: changes
         };
@@ -204,9 +205,17 @@ function SubstitutionDialog({ isOpen, setIsOpen, lessonData, onSave, teachers, c
     const [note, setNote] = useState('');
     const [isCancelled, setIsCancelled] = useState(false);
 
+    useEffect(() => {
+        setSubTeacherId(lessonData.lesson?.teacherId);
+        setSubUcebnaId(lessonData.lesson?.ucebnaId);
+        setNote('');
+        setIsCancelled(false);
+    }, [lessonData]);
+
+
     const handleSave = () => {
-        const changes: any = {};
-        const types: Substitution['changes']['type'] = [];
+        const changes: Partial<Substitution['changes']> = {};
+        const types: ('zmena-ucitele' | 'zmena-ucebny' | 'zruseno' | 'spojeno')[] = [];
 
         if(isCancelled) {
             types.push('zruseno');
@@ -220,7 +229,7 @@ function SubstitutionDialog({ isOpen, setIsOpen, lessonData, onSave, teachers, c
             changes.ucebnaId = subUcebnaId;
         }
         changes.type = types;
-        changes.note = note;
+        if (note) changes.note = note;
 
         onSave(changes);
     }
@@ -237,14 +246,14 @@ function SubstitutionDialog({ isOpen, setIsOpen, lessonData, onSave, teachers, c
                 <div className="py-4 space-y-4">
                      <div className="grid gap-1.5">
                         <Label>Učitel</Label>
-                        <Select onValueChange={setSubTeacherId} defaultValue={subTeacherId}>
+                        <Select onValueChange={setSubTeacherId} defaultValue={subTeacherId} disabled={isCancelled}>
                             <SelectTrigger><SelectValue placeholder="Vyberte učitele" /></SelectTrigger>
                             <SelectContent>{teachers.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
                         </Select>
                     </div>
                      <div className="grid gap-1.5">
                         <Label>Učebna</Label>
-                        <Select onValueChange={setSubUcebnaId} defaultValue={subUcebnaId}>
+                        <Select onValueChange={setSubUcebnaId} defaultValue={subUcebnaId} disabled={isCancelled}>
                             <SelectTrigger><SelectValue placeholder="Vyberte učebnu" /></SelectTrigger>
                             <SelectContent>{classrooms.map(u => <SelectItem key={u.id} value={u.id}>{u.nazev}</SelectItem>)}</SelectContent>
                         </Select>
@@ -253,7 +262,7 @@ function SubstitutionDialog({ isOpen, setIsOpen, lessonData, onSave, teachers, c
                         <Label>Poznámka</Label>
                         <Textarea value={note} onChange={(e) => setNote(e.target.value)} />
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 pt-2">
                         <Button variant={isCancelled ? "destructive" : "outline"} onClick={() => setIsCancelled(!isCancelled)}>
                             <X className="mr-2 h-4 w-4" />
                             Hodina odpadá
@@ -606,26 +615,69 @@ function ScheduleEditor() {
 export default function RozvrhySuplovaniPage() {
     const firestore = useFirestore();
     const [selectedClassForSchedule, setSelectedClassForSchedule] = useState<string>('');
+    const [currentSchedule, setCurrentSchedule] = useState<ScheduleGrid>(initialSchedule);
+    const [currentTimeSlots, setCurrentTimeSlots] = useState<string[]>(initialTimeSlots);
     const { toast } = useToast();
 
     // Data fetching
     const tridyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]);
     const { data: tridy } = useCollection<Trida>(tridyCollection);
 
-    const handleSaveSchedule = async (schedule: ScheduleGrid, timeSlots: string[]) => {
+    const handleSaveSchedule = async () => {
         if (!selectedClassForSchedule || !firestore) {
             toast({ variant: 'destructive', title: 'Chyba', description: 'Prosím, vyberte třídu pro uložení rozvrhu.' });
             return;
         }
         try {
             const scheduleRef = doc(firestore, 'rozvrhy', selectedClassForSchedule);
-            await setDoc(scheduleRef, { scheduleData: schedule, timeSlots });
+            await setDoc(scheduleRef, { scheduleData: currentSchedule, timeSlots: currentTimeSlots });
             toast({ title: 'Rozvrh uložen', description: `Rozvrh pro třídu byl úspěšně uložen.` });
         } catch (error) {
             console.error("Save schedule error: ", error)
             toast({ variant: 'destructive', title: 'Chyba při ukládání', description: 'Nepodařilo se uložit rozvrh.' });
         }
     };
+    
+    const handleLoadSchedule = async (classId: string) => {
+        setSelectedClassForSchedule(classId);
+        if (!classId || !firestore) {
+            setCurrentTimeSlots(initialTimeSlots);
+            setCurrentSchedule(buildInitialSchedule(initialTimeSlots));
+            return;
+        };
+        try {
+            const scheduleRef = doc(firestore, 'rozvrhy', classId);
+            const docSnap = await getDoc(scheduleRef);
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                const loadedSchedule = data.scheduleData;
+                const loadedTimeSlots = data.timeSlots || initialTimeSlots;
+                
+                setCurrentTimeSlots(loadedTimeSlots);
+                const fullSchedule = buildInitialSchedule(loadedTimeSlots);
+
+                daysOfWeek.forEach(day => {
+                    if (loadedSchedule[day]) {
+                        for (const period in loadedSchedule[day]) {
+                            if (fullSchedule[day].hasOwnProperty(period)) {
+                                fullSchedule[day][parseInt(period)] = loadedSchedule[day][period];
+                            }
+                        }
+                    }
+                });
+
+                setCurrentSchedule(fullSchedule);
+                toast({ title: 'Rozvrh načten', description: `Rozvrh pro vybranou třídu byl načten.` });
+            } else {
+                setCurrentTimeSlots(initialTimeSlots);
+                setCurrentSchedule(buildInitialSchedule(initialTimeSlots));
+                toast({ title: 'Nový rozvrh', description: 'Pro tuto třídu zatím neexistuje žádný rozvrh.' });
+            }
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Chyba při načítání', description: 'Nepodařilo se načíst rozvrh.' });
+        }
+    };
+
 
     return (
         <div className="space-y-6">
@@ -635,7 +687,7 @@ export default function RozvrhySuplovaniPage() {
                     <p className="text-muted-foreground">Vytvářejte a upravujte týdenní rozvrhy pro třídy a spravujte suplování.</p>
                 </div>
                  <div className="flex gap-2">
-                     <Select onValueChange={setSelectedClassForSchedule} value={selectedClassForSchedule}>
+                     <Select onValueChange={handleLoadSchedule} value={selectedClassForSchedule}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="Vyberte třídu" />
                         </SelectTrigger>
@@ -643,7 +695,10 @@ export default function RozvrhySuplovaniPage() {
                             {tridy?.map(t => <SelectItem key={t.id} value={t.id}>{t.nazev}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    {/* Save button will be inside the editor component */}
+                     <Button onClick={handleSaveSchedule} disabled={!selectedClassForSchedule}>
+                        <Save className="mr-2 h-4 w-4" />
+                        Uložit rozvrh
+                    </Button>
                 </div>
             </div>
 
