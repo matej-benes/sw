@@ -18,12 +18,12 @@ export default function DashboardPage() {
 
   const isTeacher = hasRole('ucitel');
 
-  // Fetch all schedules. The widget will filter them based on role.
+  // Fetch all schedules for all classes. The widget will filter them.
+  // This is simpler and often efficient enough for a school context.
   const schedulesCollectionRef = useMemoFirebase(() => {
     if (!firestore) return null;
     return collection(firestore, 'rozvrhy');
   }, [firestore]);
-
   const { data: scheduleData } = useCollection<Rozvrh>(schedulesCollectionRef);
 
 
@@ -88,3 +88,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    

@@ -1,19 +1,23 @@
 'use client';
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Trash2, Save, Edit, Plus, Minus } from "lucide-react";
+import { PlusCircle, Trash2, Save, Edit, Plus, Minus, Copy, ArrowLeft, ArrowRight } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
-import { collection, doc, getDoc, setDoc, query, where, getDocs, writeBatch } from 'firebase/firestore';
-import type { Trida, User, Predmet, Ucebna, LessonBlock, ScheduleGrid, Rozvrh } from '@/lib/types';
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, doc, getDocs, writeBatch, query } from 'firebase/firestore';
+import type { Trida, User, Predmet, Ucebna, LessonBlock, DailySchedule, Rozvrh } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
-
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { CalendarIcon } from 'lucide-react';
+import { format, startOfWeek, addDays, eachDayOfInterval, isSameDay } from 'date-fns';
+import { cs } from 'date-fns/locale';
 
 const lessonSchema = z.object({
     subjectId: z.string().min(1, "Předmět je povinný"),
@@ -28,122 +32,86 @@ const initialTimeSlots = [
     "7:55-8:40", "8:55-9:40", "9:55-10:40", "10:45-11:30",
     "11:35-12:20", "12:30-13:15", "13:20-14:05", "14:15-15:00"
 ];
-const daysOfWeek = ["Pondělí", "Úterý", "Středa", "Čtvrtek", "Pátek"];
 
-const buildInitialSchedule = (slots: string[]): ScheduleGrid => {
-    return daysOfWeek.reduce((acc, day) => {
-      acc[day] = {};
-      slots.forEach((_, index) => {
-        acc[day][index] = null;
-      });
-      return acc;
-    }, {} as ScheduleGrid);
-}
-
-const initialSchedule = buildInitialSchedule(initialTimeSlots);
-
+const buildInitialWeekSchedule = (week: Date[]): DailySchedule[] => {
+    return week.map(date => ({
+        date,
+        timeSlots: [...initialTimeSlots],
+        lessons: Array(initialTimeSlots.length).fill(null),
+    }));
+};
 
 export default function RozvrhySuplovaniPage() {
     const firestore = useFirestore();
-    const [selectedClassId, setSelectedClassId] = useState<string>('');
     const { toast } = useToast();
+    const [selectedClassId, setSelectedClassId] = useState<string>();
+    
+    // Week navigation
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
+    const weekDays = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 4) });
 
     // Data fetching
-    const predmetyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'predmety') : null, [firestore]);
-    const { data: predmety } = useCollection<Predmet>(predmetyCollection);
-
-    const tridyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]);
-    const { data: tridy } = useCollection<Trida>(tridyCollection);
-
-    const uciteleQuery = useMemoFirebase(() => firestore ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore]);
-    const { data: ucitele } = useCollection<User>(uciteleQuery);
-    
-    const ucebnyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'ucebny') : null, [firestore]);
-    const { data: ucebny } = useCollection<Ucebna>(ucebnyCollection);
+    const { data: predmety } = useCollection<Predmet>(useMemoFirebase(() => firestore ? collection(firestore, 'predmety') : null, [firestore]));
+    const { data: tridy } = useCollection<Trida>(useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]));
+    const { data: ucitele } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore]));
+    const { data: ucebny } = useCollection<Ucebna>(useMemoFirebase(() => firestore ? collection(firestore, 'ucebny') : null, [firestore]));
 
     // State
-    const [timeSlots, setTimeSlots] = useState(initialTimeSlots);
-    const [isEditingTimes, setIsEditingTimes] = useState(false);
+    const [weekSchedule, setWeekSchedule] = useState<DailySchedule[]>(() => buildInitialWeekSchedule(weekDays));
     const [lessonBlocks, setLessonBlocks] = useState<LessonBlock[]>([]);
-    const [schedule, setSchedule] = useState<ScheduleGrid>(initialSchedule);
+    const [isLoading, setIsLoading] = useState(false);
+    const [sourceWeek, setSourceWeek] = useState<Date | undefined>();
 
     const { control, handleSubmit, reset, watch } = useForm<LessonFormData>({
         resolver: zodResolver(lessonSchema),
         defaultValues: { subjectId: '', teacherId: '', classId: '', ucebnaId: '' }
     });
     
-    const subjectId = watch('subjectId');
-    const teacherId = watch('teacherId');
-    const classId = watch('classId');
-    const ucebnaId = watch('ucebnaId');
+    const { subjectId, teacherId, classId, ucebnaId } = watch();
 
-    // Effect to load schedule when selectedClassId changes
-    useEffect(() => {
-        const loadSchedule = async (classId: string) => {
-            if (!classId || !firestore) {
-                const newSchedule = buildInitialSchedule(initialTimeSlots);
-                setSchedule(newSchedule);
-                setTimeSlots(initialTimeSlots);
-                return;
-            };
+    const loadScheduleForWeek = useCallback(async (classId: string, week: Date[]) => {
+        if (!firestore) return;
+        setIsLoading(true);
 
-            const batch = writeBatch(firestore);
-            const schedulePromises = daysOfWeek.map(day => getDoc(doc(firestore, 'rozvrhy', `${classId}-${day}`)));
+        const newWeekSchedule = buildInitialWeekSchedule(week);
+        
+        try {
+            const docIds = week.map(day => `${classId}-${format(day, 'yyyy-MM-dd')}`);
+            const scheduleQuery = query(collection(firestore, 'rozvrhy'), where('__name__', 'in', docIds));
+            const querySnapshot = await getDocs(scheduleQuery);
+
+            querySnapshot.forEach(docSnap => {
+                const data = docSnap.data() as Rozvrh;
+                const date = new Date(data.datum + 'T00:00:00'); // Ensure correct date parsing
+                const dayIndex = newWeekSchedule.findIndex(d => isSameDay(d.date, date));
+                
+                if (dayIndex !== -1) {
+                    newWeekSchedule[dayIndex] = {
+                        date: date,
+                        timeSlots: data.timeSlots || initialTimeSlots,
+                        lessons: data.hodiny
+                    };
+                }
+            });
             
-            try {
-                const scheduleSnapshots = await Promise.all(schedulePromises);
-                
-                let loadedSomething = false;
-                let newScheduleGrid: ScheduleGrid = buildInitialSchedule(initialTimeSlots);
-                let newTimeSlots: string[] | null = null;
-                
-                scheduleSnapshots.forEach((docSnap, index) => {
-                    const day = daysOfWeek[index];
-                    if (docSnap.exists()) {
-                        loadedSomething = true;
-                        const data = docSnap.data() as Rozvrh;
-                        if (!newTimeSlots) newTimeSlots = data.timeSlots; // Take from first available
-                        
-                        data.hodiny.forEach((lesson, period) => {
-                            newScheduleGrid[day][period] = lesson;
-                        });
-                    }
-                });
-
-                const finalTimeSlots = newTimeSlots || initialTimeSlots;
-                if(newTimeSlots) {
-                  // Rebuild grid if timeslots were different
-                  newScheduleGrid = buildInitialSchedule(finalTimeSlots);
-                  scheduleSnapshots.forEach((docSnap, index) => {
-                    const day = daysOfWeek[index];
-                    if(docSnap.exists()){
-                      const data = docSnap.data() as Rozvrh;
-                       data.hodiny.forEach((lesson, period) => {
-                            if(newScheduleGrid[day] && newScheduleGrid[day].hasOwnProperty(period)) {
-                                newScheduleGrid[day][period] = lesson;
-                            }
-                        });
-                    }
-                  });
-                }
-                
-                setSchedule(newScheduleGrid);
-                setTimeSlots(finalTimeSlots);
-
-                if (loadedSomething) {
-                    toast({ title: 'Rozvrh načten', description: `Rozvrh pro vybranou třídu byl načten.` });
-                } else {
-                    toast({ title: 'Nový rozvrh', description: 'Pro tuto třídu zatím neexistuje žádný rozvrh.' });
-                }
-            } catch (error) {
-                console.error("Error loading schedule: ", error);
-                toast({ variant: 'destructive', title: 'Chyba při načítání', description: 'Nepodařilo se načíst rozvrh.' });
-            }
-        };
-
-        loadSchedule(selectedClassId);
-    }, [selectedClassId, firestore, toast]);
-
+            setWeekSchedule(newWeekSchedule);
+            toast({ title: 'Rozvrh načten', description: `Rozvrh pro třídu na vybraný týden byl načten.` });
+        } catch (error) {
+            console.error("Error loading week schedule: ", error);
+            toast({ variant: 'destructive', title: 'Chyba při načítání', description: 'Nepodařilo se načíst rozvrh.' });
+        } finally {
+            setIsLoading(false);
+        }
+    }, [firestore, toast]);
+    
+    useEffect(() => {
+        if (selectedClassId) {
+            loadScheduleForWeek(selectedClassId, weekDays);
+        } else {
+            setWeekSchedule(buildInitialWeekSchedule(weekDays));
+        }
+    }, [selectedClassId, weekDays, loadScheduleForWeek]);
 
     const handleCreateLessonBlock = (data: LessonFormData) => {
         const subject = predmety?.find(p => p.id === data.subjectId);
@@ -164,7 +132,7 @@ export default function RozvrhySuplovaniPage() {
             ucebnaId: aUcebna?.id,
             subjectName: subject.name,
             subjectShortcut: subject.shortcut,
-            teacherName: teacher.name.split(' ').pop() || teacher.name, // Last name
+            teacherName: teacher.name.split(' ').pop() || teacher.name,
             className: aClass.nazev,
             ucebnaName: aUcebna?.nazev
         };
@@ -175,68 +143,92 @@ export default function RozvrhySuplovaniPage() {
     
     const handleSaveSchedule = async () => {
         if (!selectedClassId || !firestore) {
-            toast({ variant: 'destructive', title: 'Chyba', description: 'Prosím, vyberte třídu pro uložení rozvrhu.' });
+            toast({ variant: 'destructive', title: 'Chyba', description: 'Prosím, vyberte třídu.' });
             return;
         }
         try {
             const batch = writeBatch(firestore);
             
-            daysOfWeek.forEach(day => {
-                const docId = `${selectedClassId}-${day}`;
+            weekSchedule.forEach(daySchedule => {
+                const docId = `${selectedClassId}-${format(daySchedule.date, 'yyyy-MM-dd')}`;
                 const scheduleRef = doc(firestore, 'rozvrhy', docId);
 
-                const hodiny: (LessonBlock | null)[] = [];
-                for(let i=0; i < timeSlots.length; i++) {
-                    hodiny.push(schedule[day]?.[i] || null)
-                }
-
-                const dayScheduleData: Omit<Rozvrh, 'id'> = {
+                const scheduleData: Omit<Rozvrh, 'id'> = {
                     tridaId: selectedClassId,
-                    den: day,
-                    timeSlots: timeSlots,
-                    hodiny: hodiny
+                    datum: format(daySchedule.date, 'yyyy-MM-dd'),
+                    timeSlots: daySchedule.timeSlots,
+                    hodiny: daySchedule.lessons,
                 };
                 
-                batch.set(scheduleRef, dayScheduleData);
+                batch.set(scheduleRef, scheduleData);
             });
 
             await batch.commit();
             toast({ title: 'Rozvrh uložen', description: `Rozvrh pro třídu byl úspěšně uložen.` });
         } catch (error) {
-            console.error("Save schedule error: ", error)
+            console.error("Save schedule error: ", error);
             toast({ variant: 'destructive', title: 'Chyba při ukládání', description: 'Nepodařilo se uložit rozvrh.' });
         }
     };
+    
+    const handleCopyWeek = async () => {
+        if (!sourceWeek || !selectedClassId || !firestore) {
+            toast({ variant: "destructive", title: "Chyba", description: "Vyberte prosím zdrojový týden a třídu." });
+            return;
+        }
+        
+        setIsLoading(true);
+        const sourceWeekStart = startOfWeek(sourceWeek, { weekStartsOn: 1 });
+        const sourceWeekDays = eachDayOfInterval({ start: sourceWeekStart, end: addDays(sourceWeekStart, 4) });
+        
+        const docIds = sourceWeekDays.map(day => `${selectedClassId}-${format(day, 'yyyy-MM-dd')}`);
+        const scheduleQuery = query(collection(firestore, 'rozvrhy'), where('__name__', 'in', docIds));
+        const querySnapshot = await getDocs(scheduleQuery);
 
+        const newWeekSchedule = buildInitialWeekSchedule(weekDays);
+
+        querySnapshot.forEach(docSnap => {
+            const data = docSnap.data() as Rozvrh;
+            const sourceDate = new Date(data.datum + 'T00:00:00');
+            const dayOfWeek = sourceDate.getDay(); // 0=Sun, 1=Mon
+            const targetDayIndex = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // adjust for our Mon-Fri array
+            
+            if (targetDayIndex >= 0 && targetDayIndex < 5) {
+                newWeekSchedule[targetDayIndex].lessons = data.hodiny;
+                newWeekSchedule[targetDayIndex].timeSlots = data.timeSlots;
+            }
+        });
+        
+        setWeekSchedule(newWeekSchedule);
+        setIsLoading(false);
+        toast({ title: "Rozvrh zkopírován", description: "Nyní můžete provést úpravy a uložit." });
+    };
 
     const handleDragStart = (e: React.DragEvent, block: LessonBlock) => {
         e.dataTransfer.setData("lessonBlock", JSON.stringify(block));
     };
 
-    const handleDrop = (e: React.DragEvent, day: string, period: number) => {
+    const handleDrop = (e: React.DragEvent, dayIndex: number, periodIndex: number) => {
         e.preventDefault();
         const lessonData = e.dataTransfer.getData("lessonBlock");
         if (lessonData) {
             const block = JSON.parse(lessonData) as LessonBlock;
-            setSchedule(prev => ({
-                ...prev,
-                [day]: {
-                    ...prev[day],
-                    [period]: block
-                }
-            }));
+            setWeekSchedule(prev => {
+                const newWeek = [...prev];
+                newWeek[dayIndex].lessons[periodIndex] = block;
+                return newWeek;
+            });
         }
     };
     
-    const handleDragOver = (e: React.DragEvent) => {
-        e.preventDefault();
-    };
+    const handleDragOver = (e: React.DragEvent) => e.preventDefault();
 
-    const removeLessonFromSchedule = (day: string, period: number) => {
-        setSchedule(prev => ({
-            ...prev,
-            [day]: { ...prev[day], [period]: null }
-        }));
+    const removeLessonFromSchedule = (dayIndex: number, periodIndex: number) => {
+        setWeekSchedule(prev => {
+            const newWeek = [...prev];
+            newWeek[dayIndex].lessons[periodIndex] = null;
+            return newWeek;
+        });
     };
     
     const getSubjectColor = (subjectId?: string) => {
@@ -249,49 +241,6 @@ export default function RozvrhySuplovaniPage() {
         return `hsl(${h}, 70%, 80%)`;
     };
 
-    const handleTimeChange = (index: number, value: string) => {
-        const newTimes = [...timeSlots];
-        newTimes[index] = value;
-        setTimeSlots(newTimes);
-    };
-
-    const addTimeSlot = () => {
-        const newTime = "16:00-16:45"; // Default new time
-        const newTimeSlots = [...timeSlots, newTime];
-        const newSchedule = buildInitialSchedule(newTimeSlots);
-        // copy old data
-        Object.keys(schedule).forEach(day => {
-          Object.keys(schedule[day]).forEach(period => {
-              const pIdx = parseInt(period);
-              if (newSchedule[day] && newSchedule[day].hasOwnProperty(pIdx)) {
-                 newSchedule[day][pIdx] = schedule[day][pIdx];
-              }
-          })
-        });
-
-        setTimeSlots(newTimeSlots);
-        setSchedule(newSchedule);
-    };
-
-    const removeTimeSlot = () => {
-        if (timeSlots.length > 1) {
-            const newTimeSlots = timeSlots.slice(0, -1);
-            const newSchedule = buildInitialSchedule(newTimeSlots);
-             // copy old data
-            Object.keys(schedule).forEach(day => {
-                Object.keys(schedule[day]).forEach(period => {
-                    const pIdx = parseInt(period);
-                    if (newSchedule[day] && newSchedule[day].hasOwnProperty(pIdx)) {
-                        newSchedule[day][pIdx] = schedule[day][pIdx];
-                    }
-                })
-            });
-
-            setTimeSlots(newTimeSlots);
-            setSchedule(newSchedule);
-        }
-    };
-    
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-start">
@@ -300,7 +249,7 @@ export default function RozvrhySuplovaniPage() {
                     <p className="text-muted-foreground">Vytvářejte a upravujte týdenní rozvrhy pro třídy.</p>
                 </div>
                  <div className="flex gap-2">
-                     <Select onValueChange={setSelectedClassId}>
+                     <Select onValueChange={setSelectedClassId} value={selectedClassId}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="Vyberte třídu" />
                         </SelectTrigger>
@@ -320,72 +269,81 @@ export default function RozvrhySuplovaniPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Editor rozvrhu pro třídu: {tridy?.find(t => t.id === selectedClassId)?.nazev || 'Nevybrána'}</CardTitle>
-                             <CardDescription className="flex justify-between items-center">
-                                <span>Přetáhněte hodiny z panelu vpravo do mřížky.</span>
-                                <div className='flex gap-2'>
-                                     <Button variant="outline" size="sm" onClick={addTimeSlot}><Plus className="mr-2 h-4 w-4"/> Přidat hodinu</Button>
-                                    <Button variant="outline" size="sm" onClick={removeTimeSlot} disabled={timeSlots.length <= 1}><Minus className="mr-2 h-4 w-4"/> Odebrat hodinu</Button>
+                             <CardDescription className="flex flex-wrap justify-between items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                     <Button variant="ghost" size="icon" onClick={() => setCurrentDate(addDays(currentDate, -7))}><ArrowLeft /></Button>
+                                     <h3 className="font-semibold">{format(weekStart, 'd.M.')} - {format(addDays(weekStart, 4), 'd. M. yyyy')}</h3>
+                                     <Button variant="ghost" size="icon" onClick={() => setCurrentDate(addDays(currentDate, 7))}><ArrowRight /></Button>
+                                </div>
+                                <div className='flex items-center gap-2'>
+                                     <Popover>
+                                        <PopoverTrigger asChild>
+                                        <Button variant={"outline"} className="w-[180px] justify-start text-left font-normal">
+                                            <CalendarIcon className="mr-2 h-4 w-4" />
+                                            {sourceWeek ? format(sourceWeek, 'd.M.yyyy') + "..." : <span>Vyberte týden</span>}
+                                        </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0">
+                                            <Calendar mode="single" selected={sourceWeek} onSelect={setSourceWeek} initialFocus locale={cs}/>
+                                        </PopoverContent>
+                                    </Popover>
+                                    <Button onClick={handleCopyWeek} disabled={!sourceWeek || !selectedClassId}><Copy className="mr-2 h-4 w-4" /> Kopírovat týden</Button>
                                 </div>
                             </CardDescription>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="overflow-x-auto">
+                            {isLoading ? <p>Načítání rozvrhu...</p> : (
                              <div className="grid grid-cols-[auto_repeat(5,1fr)] border-t border-l rounded-tl-lg">
                                 {/* Header - Dny */}
                                 <div className="border-b border-r p-2 font-bold bg-muted/50 text-center flex items-center justify-center gap-2">
-                                    Čas
-                                    <Button variant="ghost" size="icon" onClick={() => setIsEditingTimes(!isEditingTimes)}>
-                                        <Edit className="h-4 w-4" />
-                                    </Button>
+                                    Hodina
                                 </div>
-                                {daysOfWeek.map(day => (
-                                    <div key={day} className="border-b border-r p-2 font-bold bg-muted/50 text-center">{day}</div>
+                                {weekDays.map(day => (
+                                    <div key={day.toISOString()} className="border-b border-r p-2 font-bold bg-muted/50 text-center">
+                                       <p>{format(day, 'EEEE', { locale: cs })}</p>
+                                       <p className="text-sm font-normal text-muted-foreground">{format(day, 'd.M.')}</p>
+                                    </div>
                                 ))}
 
                                 {/* Řádky */}
-                                {timeSlots.map((time, periodIndex) => (
+                                {initialTimeSlots.map((time, periodIndex) => (
                                     <React.Fragment key={periodIndex}>
                                         <div className="border-b border-r p-2 font-mono text-xs text-muted-foreground text-center bg-muted/50 flex flex-col justify-center">
                                             <span className='font-bold text-sm'>{periodIndex + 1}.</span>
-                                            {isEditingTimes ? (
-                                                <Input 
-                                                    type="text" 
-                                                    value={time}
-                                                    onChange={(e) => handleTimeChange(periodIndex, e.target.value)}
-                                                    className="h-8 text-center mt-1"
-                                                />
-                                            ) : (
-                                                time
-                                            )}
+                                            {time}
                                         </div>
-                                        {daysOfWeek.map(day => (
+                                        {weekDays.map((day, dayIndex) => {
+                                            const lesson = weekSchedule[dayIndex]?.lessons[periodIndex];
+                                            return (
                                             <div 
-                                                key={`${day}-${periodIndex}`} 
+                                                key={day.toISOString()} 
                                                 className="border-b border-r h-24"
-                                                onDrop={(e) => handleDrop(e, day, periodIndex)}
+                                                onDrop={(e) => handleDrop(e, dayIndex, periodIndex)}
                                                 onDragOver={handleDragOver}
                                             >
-                                                {schedule[day]?.[periodIndex] && (
+                                                {lesson && (
                                                     <div 
                                                         className="h-full p-1 text-xs rounded-sm relative flex flex-col justify-center items-center"
-                                                        style={{ backgroundColor: getSubjectColor(schedule[day][periodIndex]!.subjectId) }}
+                                                        style={{ backgroundColor: getSubjectColor(lesson.subjectId) }}
                                                     >
                                                         <button 
-                                                            onClick={() => removeLessonFromSchedule(day, periodIndex)}
+                                                            onClick={() => removeLessonFromSchedule(dayIndex, periodIndex)}
                                                             className="absolute top-0 right-0 p-0.5 bg-black/20 rounded-full text-white hover:bg-destructive"
                                                         >
                                                             <Trash2 className="w-3 h-3" />
                                                         </button>
-                                                        <div className="font-bold">{schedule[day][periodIndex]!.subjectShortcut}</div>
-                                                        <div>{schedule[day][periodIndex]!.className}</div>
-                                                        <div className="text-muted-foreground">{schedule[day][periodIndex]!.teacherName}</div>
-                                                        <div className="text-muted-foreground">{schedule[day][periodIndex]!.ucebnaName}</div>
+                                                        <div className="font-bold">{lesson.subjectShortcut}</div>
+                                                        <div>{lesson.className}</div>
+                                                        <div className="text-muted-foreground">{lesson.teacherName}</div>
+                                                        <div className="text-muted-foreground">{lesson.ucebnaName}</div>
                                                     </div>
                                                 )}
                                             </div>
-                                        ))}
+                                        )})}
                                     </React.Fragment>
                                 ))}
                             </div>
+                            )}
                         </CardContent>
                     </Card>
                 </div>
@@ -470,3 +428,5 @@ export default function RozvrhySuplovaniPage() {
         </div>
     );
 }
+
+    

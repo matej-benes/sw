@@ -133,9 +133,10 @@
           "type": "string",
           "description": "Reference to Trida. (Relationship: Trida 1:N Rozvrh) The ID of the class for which the schedule is defined."
         },
-        "den": {
+        "datum": {
           "type": "string",
-          "description": "The day of the week for the schedule."
+          "description": "The date for the schedule.",
+          "format": "date"
         },
         "hodiny": {
           "type": "array",
@@ -154,7 +155,7 @@
       "required": [
         "id",
         "tridaId",
-        "den",
+        "datum",
         "hodiny",
         "timeSlots"
       ]
@@ -433,11 +434,11 @@
           "schema": {
             "$ref": "#/backend/entities/Rozvrh"
           },
-          "description": "Stores a single day's schedule for a class. Document ID is a composite key like '{tridaId}-{den}' (e.g., '7A-Pondeli').",
+          "description": "Stores a single day's schedule for a class. Document ID is a composite key like '{tridaId}-{YYYY-MM-DD}' (e.g., '7A-2024-09-02').",
           "params": [
             {
               "name": "rozvrhId",
-              "description": "Composite key for the schedule, e.g., 'classId-dayOfWeek'."
+              "description": "Composite key for the schedule, e.g., 'classId-YYYY-MM-DD'."
             }
           ]
         }
@@ -495,3 +496,5 @@
     "reasoning": "The Firestore structure is designed to provide a secure and scalable data model for the ŠkolaWeb application. It addresses the requirements for user management, class management, grade management, scheduling, and announcements. The structure is optimized for role-based access control (učitel, rodic, ziak, administrator) and aims to minimize the need for complex security rules. The key strategy for achieving authorization independence is denormalization. For example, the `tridaId` is included in the `users` collection to avoid `get()` calls in security rules to verify the `trida` of a given `user`. This approach enables atomic operations and simplifies security rule debugging.\n\nTo support the QAPs, the structure leverages structural segregation. User-specific data (grades) are stored in subcollections of the `users` collection, ensuring that only the authenticated user (or a teacher/parent) can access their own (or their child's) data. Announcements are segregated by class, enabling efficient listing of announcements relevant to a specific class. Collaborative data (such as class schedules) resides under the `tridy` collection, using the document ID as the `tridaId`.\n\nMembership maps aren't explicitly used here, but the structure allows for easy extension with membership maps if collaborative features become more complex in the future. For instance, if a more granular role system within a class is needed (e.g., assigning students to groups), a `members` map could be added to the `tridy/{tridaId}` document."
   }
 }
+
+    

@@ -36,7 +36,7 @@ const generateDayMapping = () => {
     daysOfWeek.forEach((day, index) => {
         const date = addDays(monday, index);
         mapping[day] = {
-            short: format(date, 'E', { locale: cs }),
+            short: format(date, 'EEEEEE', { locale: cs }),
             date: format(date, 'd.M.'),
             dayIndex: index + 1,
             fullDate: date,
@@ -247,7 +247,7 @@ function CancelledLessonBlock({ substitution }: { substitution: Substitution }) 
 
 export function TimetableWidget({ schedules, eventsData, substitutionsData, isTeacher, userId, userClassId }: { schedules: Rozvrh[], eventsData: Udalost[], substitutionsData: Substitution[], isTeacher: boolean, userId: string, userClassId?: string }) {
     
-    const timeSlots = schedules.find(s => s.timeSlots)?.timeSlots || defaultTimeSlots;
+    const timeSlots = schedules[0]?.timeSlots || defaultTimeSlots;
     
     const findEventForCell = (day: string, periodIndex: number) => {
         const dayInfo = dayMapping[day];
@@ -277,31 +277,22 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
 
     const getLessonForCell = (day: string, periodIndex: number) => {
         if (!schedules) return null;
+        const dayInfo = dayMapping[day];
+        if (!dayInfo) return null;
 
-        const scheduleForDay = schedules.find(s => s.den === day && (isTeacher || s.tridaId === userClassId));
-        if (scheduleForDay) {
-            const lesson = scheduleForDay.hodiny[periodIndex];
-            if (lesson) {
-                if (isTeacher) {
-                    if (lesson.teacherId === userId) return { lesson, classId: scheduleForDay.tridaId };
-                } else {
-                    if (scheduleForDay.tridaId === userClassId) return { lesson, classId: scheduleForDay.tridaId };
-                }
+        for (const schedule of schedules) {
+            const scheduleDate = new Date(schedule.datum + 'T00:00:00');
+            if (isSameDay(scheduleDate, dayInfo.fullDate)) {
+                 const lesson = schedule.hodiny[periodIndex];
+                 if (lesson) {
+                     if (isTeacher) {
+                         if (lesson.teacherId === userId) return { lesson, classId: schedule.tridaId };
+                     } else {
+                         if (schedule.tridaId === userClassId) return { lesson, classId: schedule.tridaId };
+                     }
+                 }
             }
         }
-
-        // For teachers, search all schedules if not found in their primary class schedule
-        if (isTeacher) {
-             for (const schedule of schedules) {
-                if(schedule.den === day) {
-                    const lesson = schedule.hodiny?.[periodIndex];
-                    if (lesson && lesson.teacherId === userId) {
-                        return { lesson, classId: schedule.tridaId };
-                    }
-                }
-            }
-        }
-
 
         return null;
     };
@@ -382,3 +373,5 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
         </div>
     );
 }
+
+    
