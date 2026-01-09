@@ -13,6 +13,10 @@ import { useEffect, useState } from 'react';
 import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
+import { useFirestore } from '@/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import type { User } from '@/lib/types';
+
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Prosím zadejte platný email.' }),
@@ -20,7 +24,7 @@ const loginSchema = z.object({
 });
 
 const pinSchema = z.object({
-  pin: z.string().min(1, { message: 'Prosím zadejte PIN.' }),
+  pin: z.string().min(6, { message: 'PIN musí mít 6 znaků.' }).max(6),
 });
 
 const registrationSchema = z.object({
@@ -112,8 +116,9 @@ function LoginForm() {
 function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
     const [step, setStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
-    const [registrationData, setRegistrationData] = useState<{ name: string; className: string } | null>(null);
+    const [registrationData, setRegistrationData] = useState<{ user: User, tridaName: string | null } | null>(null);
     const { toast } = useToast();
+    const firestore = useFirestore();
 
     const pinForm = useForm<z.infer<typeof pinSchema>>({
         resolver: zodResolver(pinSchema),
@@ -125,27 +130,49 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
         defaultValues: { email: '', password: '' },
     });
 
-    const handlePinSubmit = (values: z.infer<typeof pinSchema>) => {
+    const handlePinSubmit = async (values: z.infer<typeof pinSchema>) => {
         setIsLoading(true);
-        // Simulate PIN verification and fetching user data
-        setTimeout(() => {
-            if (values.pin === '123456') {
-                // Mock data fetch based on PIN
-                setRegistrationData({ name: 'Adam Volný', className: '4.C' });
-                setStep(2);
-                toast({ title: 'PIN ověřen', description: 'Nyní si můžete vytvořit účet.' });
-            } else {
-                toast({ variant: 'destructive', title: 'Chyba', description: 'Neplatný PIN kód.' });
-            }
+        if (!firestore) {
+            toast({ variant: 'destructive', title: 'Chyba', description: 'Databáze není dostupná.' });
             setIsLoading(false);
-        }, 1000);
+            return;
+        }
+
+        try {
+            const usersRef = collection(firestore, 'users');
+            const q = query(usersRef, where("pin", "==", values.pin));
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                toast({ variant: 'destructive', title: 'Chyba', description: 'Neplatný PIN kód.' });
+                setIsLoading(false);
+                return;
+            }
+
+            const userDoc = querySnapshot.docs[0];
+            const userData = { ...userDoc.data(), id: userDoc.id } as User;
+            
+            // For now, we mock the class name
+            const tridaName = "4.C";
+
+            setRegistrationData({ user: userData, tridaName });
+            setStep(2);
+            toast({ title: 'PIN ověřen', description: 'Nyní si můžete vytvořit účet.' });
+
+        } catch (error) {
+            console.error("PIN verification error:", error);
+            toast({ variant: 'destructive', title: 'Chyba', description: 'Při ověřování PINu došlo k chybě.' });
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleRegistrationSubmit = (values: z.infer<typeof registrationSchema>) => {
         setIsLoading(true);
-        // Simulate user registration
+        // Here would be Firebase Auth registration logic.
+        // For now, we simulate it.
         setTimeout(() => {
-            console.log('Registrace s daty:', values);
+            console.log('Registrace s daty:', values, registrationData?.user);
             toast({ title: 'Registrace úspěšná', description: 'Váš účet byl vytvořen, nyní se můžete přihlásit.' });
             onLoginClick(); // Switch back to login form
             setIsLoading(false);
@@ -192,8 +219,8 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                     </CardHeader>
                     <CardContent>
                         <div className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm">
-                            <p><strong>Jméno:</strong> {registrationData.name}</p>
-                            <p><strong>Třída:</strong> {registrationData.className}</p>
+                            <p><strong>Jméno:</strong> {registrationData.user.name}</p>
+                            <p><strong>Třída:</strong> {registrationData.tridaName || 'Neznámá'}</p>
                         </div>
                         <Form {...registrationForm}>
                             <form onSubmit={registrationForm.handleSubmit(handleRegistrationSubmit)} className="space-y-4">
@@ -204,7 +231,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                                         <FormItem>
                                             <FormLabel>Email</FormLabel>
                                             <FormControl>
-                                                <Input type="email" placeholder="vas@email.cz" {...field} />
+                                                <Input type="email" placeholder="vas@email.cz" {...field} defaultValue={registrationData.user.email} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>

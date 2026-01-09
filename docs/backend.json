@@ -33,6 +33,10 @@
         "studentId": {
           "type": "string",
           "description": "For parents, the ID of their child student."
+        },
+        "pin": {
+          "type": "string",
+          "description": "A 6-digit PIN for initial user registration."
         }
       },
       "required": [

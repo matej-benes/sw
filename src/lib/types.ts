@@ -8,6 +8,7 @@ export interface User {
   avatarUrl?: string;
   tridaId?: string; // Class for student or teacher
   studentId?: string; // For parent role
+  pin?: string; // 6-digit PIN for registration
 }
 
 export interface Grade {

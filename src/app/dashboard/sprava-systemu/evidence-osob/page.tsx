@@ -8,7 +8,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Pencil, Trash2, ShieldCheck } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -45,7 +45,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -76,6 +76,7 @@ const userSchema = z.object({
   name: z.string().min(1, 'Jméno je povinné'),
   email: z.string().email('Neplatný formát emailu'),
   roles: z.array(z.string()).min(1, 'Uživatel musí mít alespoň jednu roli'),
+  pin: z.string().optional(),
 });
 
 type UserFormData = z.infer<typeof userSchema>;
@@ -93,6 +94,8 @@ function UserForm({
     register,
     handleSubmit,
     control,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<UserFormData>({
     resolver: zodResolver(userSchema),
@@ -100,6 +103,7 @@ function UserForm({
       name: user?.name || '',
       email: user?.email || '',
       roles: user?.roles || [],
+      pin: user?.pin || '',
     },
   });
 
@@ -107,6 +111,14 @@ function UserForm({
     onSave(data);
     closeDialog();
   };
+
+  const generatePin = () => {
+    const newPin = Math.floor(100000 + Math.random() * 900000).toString();
+    setValue('pin', newPin, { shouldValidate: true });
+  };
+  
+  const currentPin = watch('pin');
+
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
@@ -154,6 +166,18 @@ function UserForm({
         {errors.roles && (
           <p className="text-sm text-destructive">{errors.roles.message}</p>
         )}
+      </div>
+
+       <div className="space-y-2">
+        <Label htmlFor="pin">Registrační PIN</Label>
+        <div className="flex items-center gap-2">
+          <Input id="pin" {...register('pin')} readOnly placeholder="PIN není vygenerován" />
+          <Button type="button" variant="outline" onClick={generatePin}>
+            <ShieldCheck className="mr-2 h-4 w-4" />
+            Generovat
+          </Button>
+        </div>
+        {currentPin && <p className="text-xs text-muted-foreground">Tento PIN slouží pro první registraci uživatele.</p>}
       </div>
 
       <DialogFooter>
@@ -213,8 +237,8 @@ function AdminUserManagement() {
     const { hasRole } = useAuth();
     
     const usersCollection = useMemoFirebase(
-      () => (firestore && hasRole('administrator')) ? collection(firestore, 'users') : null,
-      [firestore, hasRole]
+      () => (firestore) ? collection(firestore, 'users') : null,
+      [firestore]
     );
 
     const { data: users, isLoading: usersLoading } = useCollection<User>(usersCollection);
@@ -376,11 +400,11 @@ function AdminUserManagement() {
 
 export default function EvidenceOsobPage() {
   const { hasRole } = useAuth();
-  const { isUserLoading } = useUser();
+  const { user, isUserLoading } = useUser();
   
   const showLoading = isUserLoading;
   const showAccessDenied = !isUserLoading && !hasRole('administrator');
-  const showContent = !isUserLoading && hasRole('administrator');
+  const showContent = !isUserLoading && user && hasRole('administrator');
 
   return (
     <div className="space-y-6">
