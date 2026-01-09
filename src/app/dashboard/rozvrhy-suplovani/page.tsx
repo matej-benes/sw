@@ -53,7 +53,7 @@ const buildInitialWeekSchedule = (week: Date[]): DailySchedule[] => {
 export default function RozvrhySuplovaniPage() {
     const firestore = useFirestore();
     const { toast } = useToast();
-    const [selectedClassId, setSelectedClassId] = useState<string>();
+    const [selectedClassId, setSelectedClassId] = useState<string | undefined>();
     
     // Week navigation
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -78,32 +78,35 @@ export default function RozvrhySuplovaniPage() {
     });
     
     const { subjectId, teacherId, classId, ucebnaId } = watch();
-
+    
     useEffect(() => {
         if (!selectedClassId || !firestore) {
             setWeekSchedule(buildInitialWeekSchedule(weekDays));
             return;
-        };
-        setIsLoading(true);
-        
+        }
+
         const loadScheduleForWeek = async () => {
+            setIsLoading(true);
             const newWeekSchedule = buildInitialWeekSchedule(weekDays);
             const docIds = weekDays.map(day => `${selectedClassId}-${format(day, 'yyyy-MM-dd')}`);
             
             try {
-                const scheduleQuery = query(collection(firestore, 'rozvrhy'), where('id', 'in', docIds));
+                const scheduleQuery = query(collection(firestore, 'rozvrhy'), where('__name__', 'in', docIds));
                 const querySnapshot = await getDocs(scheduleQuery);
 
                 querySnapshot.forEach(docSnap => {
                     const data = docSnap.data() as Rozvrh;
-                    const dayIndex = newWeekSchedule.findIndex(d => isSameDay(d.date, new Date(data.datum + 'T00:00:00')));
-                    
-                    if (dayIndex !== -1) {
-                        newWeekSchedule[dayIndex] = {
-                            ...newWeekSchedule[dayIndex],
-                            timeSlots: data.timeSlots || initialTimeSlots,
-                            lessons: data.hodiny
-                        };
+                    // Ensure data.datum is valid before creating a Date object
+                    if (data.datum) {
+                        const dayIndex = newWeekSchedule.findIndex(d => isSameDay(d.date, new Date(data.datum + 'T00:00:00')));
+                        
+                        if (dayIndex !== -1) {
+                            newWeekSchedule[dayIndex] = {
+                                ...newWeekSchedule[dayIndex],
+                                timeSlots: data.timeSlots || initialTimeSlots,
+                                lessons: data.hodiny
+                            };
+                        }
                     }
                 });
                 setWeekSchedule(newWeekSchedule);
@@ -116,7 +119,6 @@ export default function RozvrhySuplovaniPage() {
         };
 
         loadScheduleForWeek();
-
     }, [selectedClassId, weekDays, firestore, toast]);
 
 
@@ -190,14 +192,16 @@ export default function RozvrhySuplovaniPage() {
         
         try {
             const sourceDocIds = sourceWeekDays.map(day => `${selectedClassId}-${format(day, 'yyyy-MM-dd')}`);
-            const scheduleQuery = query(collection(firestore, 'rozvrhy'), where('id', 'in', sourceDocIds));
+            const scheduleQuery = query(collection(firestore, 'rozvrhy'), where('__name__', 'in', sourceDocIds));
             const querySnapshot = await getDocs(scheduleQuery);
 
             const sourceSchedules: { [key: string]: Rozvrh } = {};
              querySnapshot.forEach(docSnap => {
                 const data = docSnap.data() as Rozvrh;
-                const dayOfWeek = format(new Date(data.datum + 'T00:00:00'), 'EEEE', { locale: cs });
-                sourceSchedules[dayOfWeek] = data;
+                if(data.datum) {
+                    const dayOfWeek = format(new Date(data.datum + 'T00:00:00'), 'EEEE', { locale: cs });
+                    sourceSchedules[dayOfWeek] = data;
+                }
             });
             
             const newWeekSchedule = buildInitialWeekSchedule(weekDays).map(daySchedule => {
