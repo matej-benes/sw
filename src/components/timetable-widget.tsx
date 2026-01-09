@@ -26,10 +26,12 @@ const defaultTimeSlots = [
 ];
 const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek'];
 
+type DayMappingInfo = { short: string; date: string; dayIndex: number, fullDate: Date };
+
 const generateDayMapping = () => {
     const today = new Date();
     const monday = startOfWeek(today, { weekStartsOn: 1 });
-    const mapping: { [key: string]: { short: string; date: string; dayIndex: number, fullDate: Date } } = {};
+    const mapping: { [key: string]: DayMappingInfo } = {};
 
     daysOfWeek.forEach((day, index) => {
         const date = addDays(monday, index);
@@ -46,8 +48,7 @@ const generateDayMapping = () => {
 const dayMapping = generateDayMapping();
 
 
-function LessonTooltipContent({ lesson, day, period }: { lesson: LessonBlock, day: string, period: number }) {
-    const dayInfo = Object.values(dayMapping).find(d => d.short === day.substring(0,2));
+function LessonTooltipContent({ lesson, dayInfo, period }: { lesson: LessonBlock, dayInfo: DayMappingInfo, period: number }) {
     return (
         <div className="p-2 text-sm">
             <h3 className="font-bold text-base mb-2">{lesson.subjectName}</h3>
@@ -62,7 +63,7 @@ function LessonTooltipContent({ lesson, day, period }: { lesson: LessonBlock, da
                 <span>{lesson.className}</span>
 
                 <span className="text-muted-foreground">Den (vyuč. hodina):</span>
-                <span>{day.substring(0,2)} {dayInfo?.date || ''} ({period})</span>
+                <span>{dayInfo.short} {dayInfo.date} ({period})</span>
 
                 <span className="text-muted-foreground">Komentář:</span>
                 <span>-</span>
@@ -92,10 +93,9 @@ function EventTooltipContent({ event }: { event: Udalost }) {
     )
 }
 
-function LessonContextMenu({ children, lesson, day, period }: { children: React.ReactNode, lesson: LessonBlock, day: string, period: number }) {
+function LessonContextMenu({ children, lesson, dayInfo, period }: { children: React.ReactNode, lesson: LessonBlock, dayInfo: DayMappingInfo, period: number }) {
     const router = useRouter();
-    const dayInfo = Object.values(dayMapping).find(d => d.short === day.substring(0,2));
-
+    
     const handleClassBookEntry = () => {
         if (!dayInfo) return;
         const query = new URLSearchParams({
@@ -158,7 +158,7 @@ function EmptySlotContextMenu({ children }: { children: React.ReactNode }) {
 }
 
 
-function LessonBlockCmp({ lesson, isTeacher, day, period, isSubstituted = false }: { lesson: LessonBlock; isTeacher: boolean, day: string, period: number, isSubstituted?: boolean }) {
+function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, isSubstituted = false }: { lesson: LessonBlock; isTeacher: boolean, dayInfo: DayMappingInfo, period: number, isSubstituted?: boolean }) {
     const getSubjectColor = (subjectId: string) => {
         if (!subjectId) return `hsl(0, 0%, 85%)`;
         let hash = 0;
@@ -181,7 +181,7 @@ function LessonBlockCmp({ lesson, isTeacher, day, period, isSubstituted = false 
     );
     
     const interactiveBlock = isTeacher ? (
-        <LessonContextMenu lesson={lesson} day={day} period={period}>{blockContent}</LessonContextMenu>
+        <LessonContextMenu lesson={lesson} dayInfo={dayInfo} period={period}>{blockContent}</LessonContextMenu>
     ) : blockContent;
 
     return (
@@ -189,7 +189,7 @@ function LessonBlockCmp({ lesson, isTeacher, day, period, isSubstituted = false 
             <Tooltip>
                 <TooltipTrigger asChild>{interactiveBlock}</TooltipTrigger>
                 <TooltipContent>
-                    <LessonTooltipContent lesson={lesson} day={day} period={period} />
+                    <LessonTooltipContent lesson={lesson} dayInfo={dayInfo} period={period} />
                 </TooltipContent>
             </Tooltip>
         </TooltipProvider>
@@ -315,6 +315,7 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
                            <div className="text-xs text-muted-foreground">{dayMapping[day]?.date || ''}</div>
                         </div>
                         {timeSlots.map((_, periodIndex) => {
+                            const dayInfo = dayMapping[day];
                             const lessonInfo = getLessonForCell(day, periodIndex);
                             const lesson = lessonInfo?.lesson;
                             
@@ -342,12 +343,12 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
                                         <CancelledLessonBlock substitution={substitution} />
                                     ) : (
                                         <>
-                                            {lesson && (
-                                                <LessonBlockCmp lesson={lesson} isTeacher={isTeacher} day={day} period={periodIndex + 1} isSubstituted={isSubstituted}/>
+                                            {lesson && dayInfo && (
+                                                <LessonBlockCmp lesson={lesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} isSubstituted={isSubstituted}/>
                                             )}
-                                            {substitutedLesson && (
+                                            {substitutedLesson && dayInfo && (
                                                 <div className="absolute inset-0.5">
-                                                    <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} day={day} period={periodIndex + 1} />
+                                                    <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} />
                                                 </div>
                                             )}
                                             
