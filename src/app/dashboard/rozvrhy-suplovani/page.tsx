@@ -665,7 +665,7 @@ function ScheduleEditor({ selectedClassId, onScheduleChange }: { selectedClassId
 
 export default function RozvrhySuplovaniPage() {
     const firestore = useFirestore();
-    const [selectedClassForSchedule, setSelectedClassForSchedule] = useState<string | undefined>();
+    const [selectedClassForSchedule, setSelectedClassForSchedule] = useState<string>('');
     const [currentSchedule, setCurrentSchedule] = useState<ScheduleGrid>(initialSchedule);
     const [currentTimeSlots, setCurrentTimeSlots] = useState<string[]>(initialTimeSlots);
     const { toast } = useToast();
@@ -722,7 +722,7 @@ export default function RozvrhySuplovaniPage() {
                     <p className="text-muted-foreground">Vytvářejte a upravujte týdenní rozvrhy pro třídy a spravujte suplování.</p>
                 </div>
                  <div className="flex gap-2">
-                     <Select onValueChange={setSelectedClassForSchedule}>
+                     <Select value={selectedClassForSchedule} onValueChange={setSelectedClassForSchedule}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="Vyberte třídu" />
                         </SelectTrigger>
@@ -743,7 +743,7 @@ export default function RozvrhySuplovaniPage() {
                     <TabsTrigger value="substitution">Správa suplování</TabsTrigger>
                 </TabsList>
                 <TabsContent value="editor" className="mt-4">
-                   <ScheduleEditor selectedClassId={selectedClassForSchedule || ''} onScheduleChange={handleScheduleChange} />
+                   <ScheduleEditor selectedClassId={selectedClassForSchedule} onScheduleChange={handleScheduleChange} />
                 </TabsContent>
                 <TabsContent value="substitution" className="mt-4">
                    <SubstitutionManagement />
