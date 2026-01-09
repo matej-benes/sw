@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { generateCommunicationMessage } from '@/ai/flows/generate-communication-message';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,15 +9,42 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { mockStudents } from '@/lib/mock-data';
 import { Loader2, Send, Wand2 } from 'lucide-react';
+import { useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
+import { collection, doc, query, where } from 'firebase/firestore';
+import type { Trida, User } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 export default function ZpravyPage() {
   const { user, hasRole } = useAuth();
+  const firestore = useFirestore();
   const { toast } = useToast();
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const isTeacher = hasRole('ucitel');
+  const isStudent = hasRole('ziak');
+
+  // Fetch all teachers
+  const teachersQuery = useMemoFirebase(() => {
+    if (!firestore || !isStudent) return null;
+    return query(collection(firestore, "users"), where("roles", "array-contains", "ucitel"));
+  }, [firestore, isStudent]);
+  const { data: teachers } = useCollection<User>(teachersQuery);
+
+  // Fetch student's class to find the class teacher
+  const tridaRef = useMemoFirebase(() => {
+    if (!firestore || !user?.tridaId) return null;
+    return doc(firestore, 'tridy', user.tridaId);
+  }, [firestore, user?.tridaId]);
+  const { data: tridaData } = useDoc<Trida>(tridaRef);
+  
+  // Fetch students for teacher view
+  const studentsCollection = useMemoFirebase(() => {
+    if (!firestore || !isTeacher) return null;
+    return query(collection(firestore, "users"), where("roles", "array-contains", "ziak"));
+  }, [firestore, isTeacher]);
+  const { data: students } = useCollection<User>(studentsCollection);
+
 
   const handleGenerateMessage = async () => {
     if (!user || !isTeacher) return;
@@ -94,21 +121,43 @@ export default function ZpravyPage() {
                       <SelectValue placeholder="Vyberte studenta nebo rodiče" />
                     </SelectTrigger>
                     <SelectContent>
-                      {mockStudents.map((s) => (
+                      {students?.map((s) => (
                         <SelectItem key={s.id} value={s.id}>{s.name} (Žák)</SelectItem>
                       ))}
-                       {mockStudents.map((s) => (
-                        <SelectItem key={`${s.id}-rodic`} value={`${s.parentId}`}>Rodič - {s.name}</SelectItem>
+                       {students?.map((s) => (
+                        <SelectItem key={`${s.id}-rodic`} value={`${s.studentId}`}>Rodič - {s.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               )}
-                {!isTeacher && (
+                {isStudent && (
                 <div className="space-y-2">
                   <Label htmlFor="teacher-select">Příjemce</Label>
-                  <Input id="teacher-select" value="Mgr. Robert Bartošek" readOnly />
+                  <Select>
+                    <SelectTrigger id="teacher-select">
+                      <SelectValue placeholder="Vyberte učitele" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teachers?.map((t) => {
+                        const isClassTeacher = t.id === tridaData?.ucitelId;
+                        return (
+                            <SelectItem key={t.id} value={t.id}>
+                               <span className={cn(isClassTeacher && "text-destructive")}>
+                                    {t.name} {isClassTeacher && "(třídní učitel)"}
+                               </span>
+                            </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
                 </div>
+                )}
+                {!isTeacher && !isStudent && (
+                    <div className="space-y-2">
+                        <Label htmlFor="teacher-select">Příjemce</Label>
+                        <Input id="teacher-select" value="Není specifikováno" readOnly />
+                    </div>
                 )}
               <div className="space-y-2">
                 <Label htmlFor="message-content">Zpráva</Label>
