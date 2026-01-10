@@ -252,12 +252,12 @@ export default function DashboardPage() {
                       </p>
                       {classInfo.substitutes.length > 0 && (
                          <p>
-                           <span className="font-semibold">Zástupci:</span> {classInfo.substitutes.join(', ')}
+                           <span className="font-semibold">{classInfo.substitutes.length > 1 ? 'Zástupci třídního učitele:' : 'Zástupce třídního učitele:'}</span> {classInfo.substitutes.join(', ')}
                          </p>
                       )}
                       {classInfo.assistants.length > 0 && (
                         <p>
-                          <span className="font-semibold">Asistenti:</span> {classInfo.assistants.join(', ')}
+                          <span className="font-semibold">{classInfo.assistants.length > 1 ? 'Asistenti pedagoga:' : 'Asistent pedagoga:'}</span> {classInfo.assistants.join(', ')}
                         </p>
                       )}
                     </div>
