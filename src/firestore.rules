@@ -31,16 +31,22 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow get: if isAuthenticated();
-      allow list: if isAuthenticated();
+      allow get, list: if isAuthenticated();
       allow create: if isAdmin();
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
 
       match /znamky/{znamkaId} {
-         allow get, list: if isAuthenticated() && (isOwner(userId) || isMyStudent(userId) || hasAnyRole(['ucitel', 'administrator']));
-         allow write: if hasAnyRole(['ucitel', 'administrator']);
+         allow get: if isAuthenticated() && (isOwner(userId) || isMyStudent(userId) || hasAnyRole(['ucitel', 'administrator']));
+         allow list: if isAuthenticated() && (isOwner(userId) || isMyStudent(userId));
+         allow create: if hasAnyRole(['ucitel', 'administrator']);
+         allow update, delete: if hasAnyRole(['ucitel', 'administrator']) && resource.data.ucitelId == request.auth.uid;
       }
+    }
+    
+    // Allow teachers to query their own grades across all students
+    match /{path=**}/znamky/{znamkaId} {
+      allow get, list: if hasAnyRole(['ucitel', 'administrator']);
     }
 
     match /tridy/{tridaId} {
@@ -97,7 +103,7 @@ service cloud.firestore {
     }
 
     match /zapisyHodin/{zapisId} {
-        allow get, list: if isAuthenticated();
+        allow get, list: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator', 'ziak', 'rodic']));
         allow write: if isAdmin() || hasAnyRole(['ucitel']);
     }
 
@@ -116,6 +122,10 @@ service cloud.firestore {
     match /ukoly/{ukolId} {
         allow get, list: if isAuthenticated();
         allow create, update, delete: if isAdmin() || hasAnyRole(['ucitel']);
+    }
+
+    match /zapisy/{zapisId} {
+        allow get, list, write: if isAdmin();
     }
   }
 }
