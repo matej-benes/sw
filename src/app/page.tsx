@@ -190,7 +190,6 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             const userWithPinDoc = querySnapshot.docs[0];
             const userWithPin = { id: userWithPinDoc.id, ...userWithPinDoc.data() } as User;
             
-            // If the PIN belongs directly to a parent account, it's the wrong PIN.
             if (userWithPin.roles.includes('rodic')) {
                 toast({ 
                     variant: 'destructive', 
@@ -204,7 +203,6 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             let userToRegister = userWithPin;
             let studentData: User | null = null;
             
-            // If the PIN belongs to a student who has a parent linked, we should register the parent.
             if (userWithPin.roles.includes('ziak') && userWithPin.studentId) {
                 studentData = userWithPin;
                 const parentDocRef = doc(firestore, 'users', userWithPin.studentId);
@@ -212,7 +210,6 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 if (parentDoc.exists()) {
                       userToRegister = { id: parentDoc.id, ...parentDoc.data() } as User;
                 } else {
-                    // This case should ideally not happen if data is consistent
                       throw new Error("Propojený rodičovský účet nebyl nalezen.");
                 }
             }
@@ -250,11 +247,9 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
         try {
             const batch = writeBatch(firestore);
             
-            // 1. Create Firebase Auth user
             const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
             const firebaseUser = userCredential.user;
 
-            // 2. Create the new user document in Firestore with the Firebase Auth UID.
             const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
             batch.set(newUserDocRef, {
                 id: firebaseUser.uid,
@@ -266,33 +261,29 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 studentId: registrationData.user.studentId || null,
             });
 
-            // 3. Delete the original pre-seeded document to prevent duplication.
             const originalUserDocRef = doc(firestore, 'users', registrationData.user.id);
             batch.delete(originalUserDocRef);
 
-            // 4. If the user is a student, we must update the ziaciIds in the trida document with the new UID.
             if (registrationData.user.roles.includes('ziak') && registrationData.user.tridaId) {
                 const tridaRef = doc(firestore, 'tridy', registrationData.user.tridaId);
                 const tridaDoc = await getDoc(tridaRef);
                 if (tridaDoc.exists()) {
                     const ziaciIds = tridaDoc.data().ziaciIds || [];
-                    // Remove the old ID and add the new UID
                     const updatedZiaciIds = ziaciIds.filter((id: string) => id !== registrationData.user.id);
                     updatedZiaciIds.push(firebaseUser.uid);
                     batch.update(tridaRef, { ziaciIds: updatedZiaciIds });
                 }
             }
-             // 5. If the user being registered is a PARENT, we need to update the parent's ID on the STUDENT's document
-             // This is a correction: The student's document should hold a reference to the parent's NEW UID.
+            
             if(registrationData.user.roles.includes('rodic') && registrationData.user.studentId) {
                 const studentRef = doc(firestore, 'users', registrationData.user.studentId);
-                batch.update(studentRef, { studentId: firebaseUser.uid }); // Here studentId field on student doc holds parent's new UID
+                batch.update(studentRef, { studentId: firebaseUser.uid });
             }
             
             await batch.commit();
 
             toast({ title: 'Registrace úspěšná', description: 'Váš účet byl vytvořen, nyní se můžete přihlásit.' });
-            onLoginClick(); // Switch back to login form
+            onLoginClick();
         } catch (error: any) {
             console.error("Registration error:", error);
             let description = 'Při registraci došlo k chybě.';
