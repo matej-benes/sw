@@ -6,6 +6,8 @@ import { format, getDay, isSameDay, parseISO } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { Info } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+
 
 const dayNames = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
 const defaultTimeSlots = [
@@ -100,32 +102,40 @@ export function MobileTimetable({
                 {lessonsForDay.map((item, idx) => {
                      if (!item) return null;
                      const timeRange = timeSlots[item.period];
-                     const [startTime, endTime] = timeRange ? timeRange.split('-') : ['',''];
                      
                      if (item.type === 'lesson' || item.type === 'substituted') {
                         const lesson = item.type === 'substituted' ? item.substituted : item.lesson;
                         const originalLesson = item.type === 'substituted' ? item.original : null;
                         
                         return (
-                             <div key={idx} className={cn("flex gap-4 p-3 rounded-lg bg-card border", originalLesson && "border-primary/50")}>
-                                <div className="text-center w-12 flex-shrink-0">
-                                    <p className="font-bold text-lg">{item.period + 1}</p>
-                                    <p className="text-xs text-muted-foreground">{startTime}</p>
-                                    <div className="h-1 w-2 mx-auto my-0.5 bg-border"></div>
-                                    <p className="text-xs text-muted-foreground">{endTime}</p>
+                             <Collapsible key={idx} asChild>
+                                <div className={cn("flex gap-4 rounded-lg bg-card border", originalLesson && "border-primary/50")}>
+                                     <CollapsibleTrigger className="flex-grow flex items-center text-left p-3">
+                                        <div className="text-center w-12 flex-shrink-0">
+                                            <p className="font-bold text-lg">{item.period + 1}</p>
+                                            <p className="text-xs text-muted-foreground">{timeRange?.split('-')[0]}</p>
+                                        </div>
+                                        <div className="flex-grow">
+                                            <p className="font-semibold">{lesson.subjectName}</p>
+                                            <p className="text-sm text-muted-foreground">
+                                                {isTeacher ? lesson.className : lesson.teacherName} | {lesson.ucebnaName || 'N/A'}
+                                            </p>
+                                            {originalLesson && (
+                                            <p className="text-xs text-primary/80 line-through">
+                                                    Původně: {originalLesson.subjectShortcut} s {originalLesson.teacherName}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </CollapsibleTrigger>
+                                     <CollapsibleContent className="px-3 pb-3 w-full">
+                                         <div className="border-t pt-2 space-y-1 text-sm text-muted-foreground">
+                                             <p><span className="font-medium text-foreground">Vyučující:</span> {lesson.teacherName}</p>
+                                             <p><span className="font-medium text-foreground">Třída:</span> {lesson.className}</p>
+                                             <p><span className="font-medium text-foreground">Čas výuky:</span> {timeRange}</p>
+                                         </div>
+                                     </CollapsibleContent>
                                 </div>
-                                <div className="flex-grow">
-                                    <p className="font-semibold">{lesson.subjectName}</p>
-                                    <p className="text-sm text-muted-foreground">
-                                        {isTeacher ? lesson.className : lesson.teacherName} | {lesson.ucebnaName || 'N/A'}
-                                    </p>
-                                    {originalLesson && (
-                                       <p className="text-xs text-primary/80 line-through">
-                                            Původně: {originalLesson.subjectShortcut} s {originalLesson.teacherName}
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
+                             </Collapsible>
                         )
                      }
                      if (item.type === 'event') {
@@ -133,9 +143,7 @@ export function MobileTimetable({
                              <div key={idx} className="flex gap-4 p-3 rounded-lg bg-card border border-accent">
                                <div className="text-center w-12 flex-shrink-0">
                                     <p className="font-bold text-lg">{item.period + 1}</p>
-                                    <p className="text-xs text-muted-foreground">{startTime}</p>
-                                    <div className="h-1 w-2 mx-auto my-0.5 bg-border"></div>
-                                    <p className="text-xs text-muted-foreground">{endTime}</p>
+                                    <p className="text-xs text-muted-foreground">{timeRange?.split('-')[0]}</p>
                                 </div>
                                 <div className="flex-grow">
                                     <p className="font-semibold">{item.event.nazev}</p>
@@ -149,9 +157,7 @@ export function MobileTimetable({
                              <div key={idx} className="flex gap-4 p-3 rounded-lg bg-card border border-destructive/50">
                                <div className="text-center w-12 flex-shrink-0">
                                     <p className="font-bold text-lg">{item.period + 1}</p>
-                                    <p className="text-xs text-muted-foreground">{startTime}</p>
-                                    <div className="h-1 w-2 mx-auto my-0.5 bg-border"></div>
-                                    <p className="text-xs text-muted-foreground">{endTime}</p>
+                                    <p className="text-xs text-muted-foreground">{timeRange?.split('-')[0]}</p>
                                 </div>
                                 <div className="flex-grow">
                                     <p className="font-semibold text-destructive line-through">
