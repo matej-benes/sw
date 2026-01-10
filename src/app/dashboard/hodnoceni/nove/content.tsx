@@ -6,8 +6,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format, parseISO } from 'date-fns';
 import { cs } from 'date-fns/locale';
-import { useFirestore, useCollection, useDoc, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
-import { collection, doc, query, where, Timestamp } from 'firebase/firestore';
+import { useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
+import { collection, doc, query, where, Timestamp, addDoc } from 'firebase/firestore';
 import type { Trida, User, Predmet, Rozvrh, Znamka } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 
@@ -127,15 +127,14 @@ function NewGradingContent() {
                     studentId: student.studentId,
                     predmet: predmety?.find(p => p.id === data.predmetId)?.name || 'Neznámý',
                     hodnota: parseInt(student.znamka, 10),
-                    datum: Timestamp.fromDate(data.datum), // Correct format for Firestore
+                    datum: Timestamp.fromDate(data.datum),
                     ucitelId: teacherUser.id,
                     slovniHodnoceni: student.slovniHodnoceni,
                     tema: data.tema,
                     druhHodnoceni: 'písemné', // example
                 };
-                // Correct path to subcollection
                 const znamkyCollectionRef = collection(firestore, 'users', student.studentId, 'znamky');
-                await addDocumentNonBlocking(znamkyCollectionRef, newZnamka);
+                await addDoc(znamkyCollectionRef, newZnamka);
             }
         }
         

@@ -25,6 +25,10 @@ service cloud.firestore {
         let parentData = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
         return parentData.roles.hasAny(['rodic']) && parentData.studentId == studentId;
     }
+    
+    function hasAnyRole(roles) {
+        return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(roles);
+    }
 
     match /users/{userId} {
       allow get: if isAuthenticated();
@@ -34,6 +38,11 @@ service cloud.firestore {
       allow create: if isAdmin();
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
+
+      match /znamky/{znamkaId} {
+         allow get, list: if isAuthenticated() && (isOwner(userId) || isMyStudent(userId) || hasAnyRole(['ucitel', 'administrator']));
+         allow write: if hasAnyRole(['ucitel', 'administrator']);
+      }
     }
 
     match /tridy/{tridaId} {
@@ -63,12 +72,12 @@ service cloud.firestore {
      
      match /oznameni/{oznameniId} {
         allow get, list: if isAuthenticated();
-        allow write: if isAdmin() || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(['ucitel']);
+        allow write: if isAdmin() || hasAnyRole(['ucitel']);
     }
     
     match /poznamky-zaku/{poznamkaId} {
         allow get, list: if isAuthenticated();
-        allow write: if isAdmin() || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(['ucitel']);
+        allow write: if isAdmin() || hasAnyRole(['ucitel']);
     }
     
     match /udalosti/{udalostId} {
@@ -81,16 +90,7 @@ service cloud.firestore {
         allow write: if isAdmin();
     }
     
-    match /users/{studentId}/znamky/{znamkaId} {
-       allow get, list: if isAuthenticated() && (isOwner(studentId) || isMyStudent(studentId) || hasAnyRole(['ucitel', 'administrator']));
-       allow write: if hasAnyRole(['ucitel', 'administrator']);
-
-       function hasAnyRole(roles) {
-         return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(roles);
-       }
-    }
-
-    match /messages/{document=**} {
+    match /messages/{messageId} {
       allow list: if isAuthenticated();
       allow get: if isAuthenticated() && (request.auth.uid == resource.data.senderId || request.auth.uid in resource.data.recipientIds);
       allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid;
@@ -100,7 +100,7 @@ service cloud.firestore {
 
     match /zapisyHodin/{zapisId} {
         allow get, list: if isAuthenticated();
-        allow write: if isAdmin() || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(['ucitel']);
+        allow write: if isAdmin() || hasAnyRole(['ucitel']);
     }
 
     match /absences/{absenceId} {
@@ -117,7 +117,7 @@ service cloud.firestore {
     
     match /ukoly/{ukolId} {
         allow get, list: if isAuthenticated();
-        allow create, update, delete: if isAdmin() || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(['ucitel']);
+        allow create, update, delete: if isAdmin() || hasAnyRole(['ucitel']);
     }
   }
 }
