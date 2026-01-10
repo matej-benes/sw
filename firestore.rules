@@ -13,7 +13,11 @@ service cloud.firestore {
     }
     
     function hasRole(role) {
-      return request.auth.token.role.hasAny([role]);
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny([role]);
+    }
+    
+    function isAdmin() {
+      return hasRole('administrator');
     }
     
     function isClassTeacher(classId) {
@@ -27,54 +31,54 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get, list: if isAuthenticated();
-      allow create: if hasRole('administrator');
-      allow update: if isOwner(userId) || hasRole('administrator');
-      allow delete: if hasRole('administrator');
+      allow create: if isAdmin();
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /tridy/{tridaId} {
       allow get, list: if isAuthenticated();
-      allow write: if hasRole('administrator');
+      allow write: if isAdmin();
     }
     
     match /predmety/{predmetId} {
       allow get, list: if isAuthenticated();
-      allow write: if hasRole('administrator');
+      allow write: if isAdmin();
     }
     
     match /ucebny/{ucebnaId} {
       allow get, list: if isAuthenticated();
-      allow write: if hasRole('administrator');
+      allow write: if isAdmin();
     }
     
     match /rozvrhy/{rozvrhId} {
         allow get, list: if isAuthenticated();
-        allow write: if hasRole('administrator');
+        allow write: if isAdmin();
     }
     
     match /scheduleTemplates/{templateId} {
         allow get, list: if isAuthenticated();
-        allow write: if hasRole('administrator');
+        allow write: if isAdmin();
     }
      
      match /oznameni/{oznameniId} {
         allow get, list: if isAuthenticated();
-        allow write: if hasRole('ucitel') || hasRole('administrator');
+        allow write: if hasRole('ucitel') || isAdmin();
     }
     
     match /poznamky-zaku/{poznamkaId} {
         allow get, list: if isAuthenticated();
-        allow write: if hasRole('ucitel') || hasRole('administrator');
+        allow write: if hasRole('ucitel') || isAdmin();
     }
     
     match /udalosti/{udalostId} {
         allow get, list: if isAuthenticated();
-        allow create, delete: if hasRole('administrator');
+        allow create, delete: if isAdmin();
     }
      
      match /suplovani/{substitutionId} {
         allow get, list: if isAuthenticated();
-        allow write: if hasRole('administrator');
+        allow write: if isAdmin();
     }
     
     match /users/{userId}/znamky/{znamkaId} {
@@ -96,14 +100,14 @@ service cloud.firestore {
     }
 
     match /absences/{absenceId} {
-        allow get, list, create, update, delete: if hasRole('administrator');
+        allow get, list, create, update, delete: if isAdmin();
     }
     
     match /omluvenky/{omluvenkaId} {
-        allow get: if isAuthenticated() && (isMyStudent(resource.data.studentId) || isClassTeacher(resource.data.tridaId) || hasRole('administrator'));
+        allow get: if isAuthenticated() && (isMyStudent(resource.data.studentId) || isClassTeacher(resource.data.tridaId) || isAdmin());
         allow list: if isAuthenticated();
         allow create: if isAuthenticated() && isMyStudent(request.resource.data.studentId);
-        allow update: if isAuthenticated() && (isClassTeacher(request.resource.data.tridaId) || hasRole('administrator'));
+        allow update: if isAuthenticated() && (isClassTeacher(request.resource.data.tridaId) || isAdmin());
         allow delete: if false;
     }
     
