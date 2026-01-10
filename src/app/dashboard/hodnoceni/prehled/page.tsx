@@ -1,8 +1,8 @@
 'use client';
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, collectionGroup, query, where, doc, getDoc } from 'firebase/firestore';
+import { collection, collectionGroup, query, where, doc } from 'firebase/firestore';
 import type { Znamka, User } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -51,18 +51,10 @@ type GradeEditFormData = z.infer<typeof gradeEditSchema>;
 
 
 function EditGradeDialog({ grade, isOpen, onClose, onSave }: { grade: Znamka | null; isOpen: boolean; onClose: () => void; onSave: (data: GradeEditFormData) => void }) {
-  const { handleSubmit, control, reset } = useForm<GradeEditFormData>({
-    resolver: zodResolver(gradeEditSchema),
-    defaultValues: {
-      hodnota: 1,
-      tema: '',
-      slovniHodnoceni: '',
-    }
-  });
+  const { handleSubmit, control, reset } = useForm<GradeEditFormData>();
 
-  useEffect(() => {
-    // Only reset the form when the dialog is open and a grade is selected
-    if (isOpen && grade) {
+   useEffect(() => {
+    if (grade && isOpen) {
       reset({
         hodnota: grade.hodnota,
         tema: grade.tema || '',
@@ -71,7 +63,7 @@ function EditGradeDialog({ grade, isOpen, onClose, onSave }: { grade: Znamka | n
     }
   }, [grade, isOpen, reset]);
   
-  if (!isOpen || !grade) return null;
+  if (!isOpen) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -82,15 +74,15 @@ function EditGradeDialog({ grade, isOpen, onClose, onSave }: { grade: Znamka | n
         <form onSubmit={handleSubmit(onSave)} className="space-y-4 py-4">
            <div className="space-y-1">
              <Label htmlFor="hodnota">Známka</Label>
-             <Controller name="hodnota" control={control} render={({ field }) => <Input {...field} type="number" min="1" max="5" />} />
+             <Controller name="hodnota" control={control} defaultValue={grade?.hodnota || 1} render={({ field }) => <Input {...field} type="number" min="1" max="5" />} />
            </div>
            <div className="space-y-1">
              <Label htmlFor="tema">Téma</Label>
-             <Controller name="tema" control={control} render={({ field }) => <Input {...field} />} />
+             <Controller name="tema" control={control} defaultValue={grade?.tema || ''} render={({ field }) => <Input {...field} />} />
            </div>
            <div className="space-y-1">
              <Label htmlFor="slovniHodnoceni">Slovní hodnocení</Label>
-             <Controller name="slovniHodnoceni" control={control} render={({ field }) => <Textarea {...field} />} />
+             <Controller name="slovniHodnoceni" control={control} defaultValue={grade?.slovniHodnoceni || ''} render={({ field }) => <Textarea {...field} />} />
            </div>
            <DialogFooter>
              <DialogClose asChild><Button variant="outline">Zrušit</Button></DialogClose>
@@ -116,27 +108,19 @@ export default function HodnoceniPrehledPage() {
   }, [firestore, user?.id]);
 
   const { data: grades, isLoading: gradesLoading } = useCollection<Znamka>(teacherGradesQuery);
-  
-  const studentIds = useMemo(() => {
-    if (!grades) return [];
-    return [...new Set(grades.map(g => g.studentId))];
-  }, [grades]);
 
+  // Fetch ALL users once. This is simpler and safer than reactive queries based on grades.
   const usersQuery = useMemoFirebase(() => {
-    if (!firestore || studentIds.length === 0) return null;
-    return query(collection(firestore, 'users'), where('id', 'in', studentIds));
-  }, [firestore, studentIds]);
-
+      if (!firestore) return null;
+      return query(collection(firestore, 'users'));
+  }, [firestore]);
   const { data: users, isLoading: usersLoading } = useCollection<User>(usersQuery);
 
-  const studentNames = useMemo(() => {
+  const studentNameMap = useMemo(() => {
     if (!users) return new Map<string, string>();
     return new Map(users.map(u => [u.id, u.name]));
   }, [users]);
 
-  const getStudentName = useCallback((studentId: string) => {
-    return studentNames.get(studentId) || 'Načítání...';
-  }, [studentNames]);
 
   const handleSave = async (data: GradeEditFormData) => {
     if (!firestore || !editingGrade) return;
@@ -155,7 +139,7 @@ export default function HodnoceniPrehledPage() {
     setDeletingGrade(null);
   };
   
-  const isLoading = userLoading || gradesLoading || (studentIds.length > 0 && usersLoading);
+  const isLoading = userLoading || gradesLoading || usersLoading;
 
   return (
     <>
@@ -182,7 +166,7 @@ export default function HodnoceniPrehledPage() {
               {!isLoading && grades && grades.length > 0 ? (
                 grades.map(grade => (
                   <TableRow key={grade.id}>
-                    <TableCell className="font-medium">{getStudentName(grade.studentId)}</TableCell>
+                    <TableCell className="font-medium">{studentNameMap.get(grade.studentId) || 'Neznámý žák'}</TableCell>
                     <TableCell>{grade.predmet}</TableCell>
                     <TableCell className="text-center font-bold">{grade.hodnota}</TableCell>
                     <TableCell>{format(grade.datum.toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
