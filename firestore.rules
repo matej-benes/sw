@@ -12,12 +12,8 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
     
-    function hasRole(role) {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny([role]);
-    }
-    
     function isAdmin() {
-      return hasRole('administrator');
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(['administrator']);
     }
     
     function isClassTeacher(classId) {
