@@ -111,7 +111,6 @@ function TeacherExcuseManagement() {
     const firestore = useFirestore();
     const { toast } = useToast();
     
-    // Get all classes this user is a teacher of
     const teacherClassesQuery = useMemoFirebase(() => {
         if (!firestore || !user) return null;
         return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
@@ -119,14 +118,13 @@ function TeacherExcuseManagement() {
     const { data: teacherClasses } = useCollection<Trida>(teacherClassesQuery);
     const teacherClassIds = useMemo(() => teacherClasses?.map(c => c.id) || [], [teacherClasses]);
     
-    // Get excuses for those classes
     const omluvenkyQuery = useMemoFirebase(() => {
         if (!firestore || teacherClassIds.length === 0) return null;
         return query(collection(firestore, 'omluvenky'), where('tridaId', 'in', teacherClassIds));
     }, [firestore, teacherClassIds]);
     const { data: omluvenky, isLoading: omluvenkyLoading } = useCollection<Omluvenka>(omluvenkyQuery);
 
-    const { data: studentsData, isLoading: studentsLoading } = useCollection<User>(useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]));
+    const { data: studentsData, isLoading: studentsLoading } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, 'users'), where('roles', 'array-contains', 'ziak')) : null, [firestore]));
 
     const handleUpdateStatus = async (id: string, status: 'approved' | 'rejected') => {
         if (!firestore) return;
@@ -234,5 +232,7 @@ export default function OmluvenkyPage() {
         </div>
     );
 }
+
+    
 
     
