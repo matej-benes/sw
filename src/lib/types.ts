@@ -227,5 +227,3 @@ export interface DomaciUkol {
     terminOdevzdani: string; // YYYY-MM-DD
     prilohy?: string[];
 }
-
-    
