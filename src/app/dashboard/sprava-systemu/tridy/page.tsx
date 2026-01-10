@@ -224,9 +224,9 @@ function ClassForm({
 }
 
 function ClassRow({ classData, allUsers, onEdit, onDelete }: { classData: Class, allUsers: User[], onEdit: (classData: Class) => void, onDelete: (classData: Class) => void }) {
-    const teacher = allUsers.find(t => t.id === classData.ucitelId);
-    const substituteTeachers = classData.zastupciIds?.map(id => allUsers.find(t => t.id === id)?.name).filter(Boolean) || [];
-    const assistants = classData.asistentiIds?.map(id => allUsers.find(t => t.id === id)?.name).filter(Boolean) || [];
+    const teacher = allUsers?.find(t => t.id === classData.ucitelId);
+    const substituteTeachers = classData.zastupciIds?.map(id => allUsers?.find(t => t.id === id)?.name).filter(Boolean) || [];
+    const assistants = classData.asistentiIds?.map(id => allUsers?.find(t => t.id === id)?.name).filter(Boolean) || [];
     
     return (
         <TableRow>
