@@ -24,7 +24,7 @@ export default function LessonDetailPage() {
         return doc(firestore, 'rozvrhy', `${classId}-${dateStr}`);
     }, [firestore, dateStr, classId]);
 
-    const zapisId = `${classId}-${dateStr}-${periodStr}`;
+    const zapisId = `${classId}-${dateStr}-${parseInt(periodStr, 10) + 1}`;
     const zapisRef = useMemoFirebase(() => {
         if (!firestore || !zapisId) return null;
         return doc(firestore, 'zapisyHodin', zapisId);
