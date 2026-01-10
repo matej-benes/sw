@@ -119,7 +119,7 @@ function TeacherExcuseManagement() {
     const teacherClassIds = useMemo(() => teacherClasses?.map(c => c.id) || [], [teacherClasses]);
     
     const omluvenkyQuery = useMemoFirebase(() => {
-        if (!firestore || teacherClassIds.length === 0) return null;
+        if (!firestore || !teacherClassIds || teacherClassIds.length === 0) return null;
         return query(collection(firestore, 'omluvenky'), where('tridaId', 'in', teacherClassIds));
     }, [firestore, teacherClassIds]);
     const { data: omluvenky, isLoading: omluvenkyLoading } = useCollection<Omluvenka>(omluvenkyQuery);
