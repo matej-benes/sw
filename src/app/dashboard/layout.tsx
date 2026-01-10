@@ -35,7 +35,7 @@ const adminNavLinks = [
 const teacherNavLinks = [
     { name: "Rozvrhy a suplování", href: "/dashboard/rozvrhy-suplovani", icon: Replace },
     { name: "Zadat hodnocení", href: "/dashboard/hodnoceni/nove", icon: PencilRuler },
-    { name: "Přehled hodnocení", href: "/dashboard/hodnoceni/prehled", icon: Book },
+    { name: "Přehled hodnocení", href: "/dashboard/hodnoceni/prehled-hodnoceni", icon: Book },
     { name: 'Domácí úkoly', href: '/dashboard/ukoly', icon: Backpack },
     { name: 'Omluvenky', href: '/dashboard/omluvenky', icon: ClipboardCheck },
 ]

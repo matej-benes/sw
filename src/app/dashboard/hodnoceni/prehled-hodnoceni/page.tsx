@@ -1,8 +1,8 @@
 'use client';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { useFirestore, useCollection, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, collectionGroup, query, where, doc, getDoc, getDocs } from 'firebase/firestore';
+import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { collection, query, where, doc, getDocs, orderBy, Timestamp } from 'firebase/firestore';
 import type { Znamka, User, Trida } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -50,7 +50,7 @@ const gradeEditSchema = z.object({
 type GradeEditFormData = z.infer<typeof gradeEditSchema>;
 
 
-function EditGradeDialog({ grade, isOpen, onClose, onSave }: { grade: Znamka | null; isOpen: boolean; onClose: () => void; onSave: (data: GradeEditFormData) => void }) {
+function EditGradeDialog({ grade, isOpen, onClose, onSave }: { grade: Znamka & { studentName?: string } | null; isOpen: boolean; onClose: () => void; onSave: (data: GradeEditFormData) => void }) {
   const { handleSubmit, control, reset } = useForm<GradeEditFormData>();
 
    useEffect(() => {
@@ -69,7 +69,7 @@ function EditGradeDialog({ grade, isOpen, onClose, onSave }: { grade: Znamka | n
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Upravit známku</DialogTitle>
+          <DialogTitle>Upravit známku pro {grade?.studentName}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSave)} className="space-y-4 py-4">
            <div className="space-y-1">
@@ -94,91 +94,60 @@ function EditGradeDialog({ grade, isOpen, onClose, onSave }: { grade: Znamka | n
   )
 }
 
-function StudentName({ studentId, users }: { studentId: string, users: User[] | null }) {
-    const studentName = useMemo(() => {
-        if (!users) return 'Načítání...';
-        return users.find(u => u.id === studentId)?.name || 'Neznámý žák';
-    }, [users, studentId]);
-
-    return <span>{studentName}</span>;
-}
-
-
 export default function HodnoceniPrehledPage() {
   const { user, loading: userLoading } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  const [grades, setGrades] = useState<Znamka[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [grades, setGrades] = useState<(Znamka & { studentName?: string })[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
-  const [editingGrade, setEditingGrade] = useState<Znamka | null>(null);
+  const [editingGrade, setEditingGrade] = useState<(Znamka & { studentName?: string }) | null>(null);
   const [deletingGrade, setDeletingGrade] = useState<Znamka | null>(null);
   
   const fetchTeacherData = useCallback(async () => {
     if (!firestore || !user?.id) return;
-
     setDataLoading(true);
     
     try {
-      // 1. Find all classes where the user is a teacher, substitute or assistant
-      const classesQuery = query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
-      const substituteClassesQuery = query(collection(firestore, 'tridy'), where('zastupciIds', 'array-contains', user.id));
-      // Not including assistants for now, can be added if needed
-      
-      const [classesSnap, substituteClassesSnap] = await Promise.all([
-        getDocs(classesQuery),
-        getDocs(substituteClassesQuery)
-      ]);
-      
-      const allTeacherClasses = [...classesSnap.docs, ...substituteClassesSnap.docs]
-          .map(doc => ({ id: doc.id, ...doc.data() } as Trida))
-          .filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i); // unique classes
-      
-      if (allTeacherClasses.length === 0) {
-        setGrades([]);
-        setUsers([]);
-        setDataLoading(false);
-        return;
-      }
+        const gradesQuery = query(
+            collection(firestore, 'znamky'), 
+            where('ucitelId', '==', user.id),
+            orderBy('datum', 'desc')
+        );
 
-      // 2. Get all student IDs from these classes
-      const allStudentIds = allTeacherClasses.flatMap(c => c.ziaciIds);
-      if (allStudentIds.length === 0) {
-        setGrades([]);
-        setUsers([]);
-        setDataLoading(false);
-        return;
-      }
-      
-      // 3. Fetch all grades created by this teacher for students in their classes
-      const allTeacherGrades: Znamka[] = [];
-      // To avoid hitting 'in' query limit of 30, we might need to batch this.
-      // For now, assuming student count is reasonable.
-      if (allStudentIds.length > 0) {
-          const gradesQuery = query(
-            collectionGroup(firestore, 'znamky'), 
-            where('studentId', 'in', allStudentIds),
-            where('ucitelId', '==', user.id)
-          );
-          const gradesSnap = await getDocs(gradesQuery);
-          gradesSnap.forEach(doc => {
-            allTeacherGrades.push({ id: doc.id, ...doc.data() } as Znamka);
-          });
-      }
-      
-      // 4. Fetch the user data for the relevant students
-      const uniqueStudentIds = [...new Set(allTeacherGrades.map(g => g.studentId))];
-      if (uniqueStudentIds.length > 0) {
-        const usersQuery = query(collection(firestore, 'users'), where('__name__', 'in', uniqueStudentIds));
-        const usersSnap = await getDocs(usersQuery);
-        setUsers(usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)));
-      } else {
-        setUsers([]);
-      }
-      
-      setGrades(allTeacherGrades);
+        const gradesSnap = await getDocs(gradesQuery);
+        const teacherGrades = gradesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Znamka));
+
+        if (teacherGrades.length === 0) {
+            setGrades([]);
+            setDataLoading(false);
+            return;
+        }
+
+        const studentIds = [...new Set(teacherGrades.map(g => g.studentId))];
+        const studentNames: { [id: string]: string } = {};
+        
+        // Firestore 'in' query is limited to 30 elements. We might need to batch this.
+        const idChunks: string[][] = [];
+        for (let i = 0; i < studentIds.length; i += 30) {
+            idChunks.push(studentIds.slice(i, i + 30));
+        }
+
+        for (const chunk of idChunks) {
+            const usersQuery = query(collection(firestore, 'users'), where('__name__', 'in', chunk));
+            const usersSnap = await getDocs(usersQuery);
+            usersSnap.forEach(doc => {
+                studentNames[doc.id] = (doc.data() as User).name;
+            });
+        }
+        
+        const gradesWithStudentNames = teacherGrades.map(grade => ({
+            ...grade,
+            studentName: studentNames[grade.studentId] || 'Neznámý žák'
+        }));
+
+        setGrades(gradesWithStudentNames);
       
     } catch(error) {
       console.error("Error fetching teacher grades:", error);
@@ -186,12 +155,14 @@ export default function HodnoceniPrehledPage() {
     } finally {
       setDataLoading(false);
     }
-    
   }, [firestore, user?.id, toast]);
 
+
   useEffect(() => {
-    fetchTeacherData();
-  }, [fetchTeacherData]);
+    if (user && firestore) {
+      fetchTeacherData();
+    }
+  }, [user, firestore, fetchTeacherData]);
 
 
   const handleSave = async (data: GradeEditFormData) => {
@@ -201,7 +172,7 @@ export default function HodnoceniPrehledPage() {
     await updateDocumentNonBlocking(gradeRef, data);
     toast({ title: "Známka aktualizována." });
     setEditingGrade(null);
-    fetchTeacherData(); // Re-fetch data
+    fetchTeacherData();
   };
 
   const handleDelete = async () => {
@@ -210,7 +181,7 @@ export default function HodnoceniPrehledPage() {
     await deleteDocumentNonBlocking(gradeRef);
     toast({ title: "Známka smazána." });
     setDeletingGrade(null);
-    fetchTeacherData(); // Re-fetch data
+    fetchTeacherData();
   };
   
   const isLoading = userLoading || dataLoading;
@@ -220,17 +191,17 @@ export default function HodnoceniPrehledPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Přehled zadaného hodnocení</h1>
-        <p className="text-muted-foreground">Správa všech známek, které jste zadali.</p>
+        <p className="text-muted-foreground">Chronologický seznam všech známek, které jste zadali.</p>
       </div>
       <Card>
         <CardContent className="pt-6">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Datum</TableHead>
                 <TableHead>Žák</TableHead>
                 <TableHead>Předmět</TableHead>
                 <TableHead className="text-center">Známka</TableHead>
-                <TableHead>Datum</TableHead>
                 <TableHead>Téma</TableHead>
                 <TableHead className="text-right">Akce</TableHead>
               </TableRow>
@@ -240,10 +211,10 @@ export default function HodnoceniPrehledPage() {
               {!isLoading && grades && grades.length > 0 ? (
                 grades.map(grade => (
                   <TableRow key={grade.id}>
-                    <TableCell className="font-medium"><StudentName studentId={grade.studentId} users={users} /></TableCell>
+                    <TableCell>{(grade.datum as Timestamp)?.toDate ? format((grade.datum as Timestamp).toDate(), 'd. M. yyyy', { locale: cs }) : 'N/A'}</TableCell>
+                    <TableCell className="font-medium">{grade.studentName}</TableCell>
                     <TableCell>{grade.predmet}</TableCell>
                     <TableCell className="text-center font-bold">{grade.hodnota}</TableCell>
-                    <TableCell>{grade.datum.toDate ? format(grade.datum.toDate(), 'd. M. yyyy', { locale: cs }) : 'N/A'}</TableCell>
                     <TableCell>{grade.tema || '-'}</TableCell>
                     <TableCell className="text-right">
                        <DropdownMenu>
