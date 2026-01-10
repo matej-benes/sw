@@ -29,6 +29,7 @@ import {
   isSameDay,
   isWithinInterval,
   parseISO,
+  getDay,
 } from 'date-fns';
 import { cs } from 'date-fns/locale';
 
@@ -110,12 +111,20 @@ export default function DashboardPage() {
 
   // Memoized derived data
   const weekDays = useMemo(() => {
+    const start = startOfWeek(currentDate, { weekStartsOn: 1 });
     if (isFullWeekView) {
-        const start = startOfWeek(currentDate, { weekStartsOn: 1 });
         return Array.from({ length: 7 }, (_, i) => addDays(start, i));
     }
-    // Compact view: today and tomorrow
-    return [currentDate, addDays(currentDate, 1)];
+    // Compact view logic
+    const today = new Date();
+    const isSunday = getDay(today) === 0; // 0 for Sunday
+    if (isSunday) {
+        // If it's Sunday, show Monday and Tuesday of the next week
+        const nextMonday = addDays(start, 7);
+        return [nextMonday, addDays(nextMonday, 1)];
+    }
+    // Default: today and tomorrow
+    return [today, addDays(today, 1)];
   }, [currentDate, isFullWeekView]);
 
   const weekLabel = useMemo(() => {
@@ -238,7 +247,7 @@ export default function DashboardPage() {
   }, [schedulesData, selectedClassId, hasRole, user]);
 
   const classInfo = useMemo(() => {
-    if (!user || !tridy || !allStaff || hasRole('ucitel')) {
+    if (!user || !tridy || !allStaff) {
       return { studentClassName: null, classTeacherName: null, substitutes: [], assistants: [] };
     }
     const studentClass = tridy.find(t => t.id === user.tridaId);
@@ -256,7 +265,7 @@ export default function DashboardPage() {
       substitutes,
       assistants,
     };
-  }, [user, tridy, allStaff, hasRole]);
+  }, [user, tridy, allStaff]);
 
 
   const isDataLoading = !schedulesData || !eventsData || !substitutionsData || !tridy || isUserLoading;
