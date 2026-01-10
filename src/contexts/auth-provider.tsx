@@ -4,99 +4,188 @@ import type { User, Role } from '@/lib/types';
 import { useRouter, usePathname } from 'next/navigation';
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useUser as useFirebaseUser, useFirestore } from '@/firebase';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, signOut as firebaseSignOut, onIdTokenChanged, type User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
+type StoredUser = {
+  uid: string;
+  email: string;
+  refreshToken: string;
+};
 
 interface AuthContextType {
   user: User | null;
+  activeAccount: StoredUser | null;
+  accounts: StoredUser[];
   signIn: (email: string, pass: string) => Promise<void>;
-  signOut: () => void;
+  signOut: () => Promise<void>;
   loading: boolean;
   hasRole: (role: Role) => boolean;
+  switchUser: (uid: string) => Promise<void>;
+  removeUser: (uid: string) => Promise<void>;
+  addUser: (email: string, pass: string) => Promise<StoredUser>;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
 
+const ACCOUNTS_STORAGE_KEY = 'firebase_accounts';
+const ACTIVE_ACCOUNT_STORAGE_KEY = 'firebase_active_account';
+
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { user: firebaseUser, isUserLoading: firebaseUserLoading } = useFirebaseUser();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
   const firestore = useFirestore();
+  const auth = getAuth();
+
+  const [accounts, setAccounts] = useState<StoredUser[]>([]);
+  const [activeAccount, setActiveAccount] = useState<StoredUser | null>(null);
+
+
+   useEffect(() => {
+    const storedAccounts = JSON.parse(localStorage.getItem(ACCOUNTS_STORAGE_KEY) || '[]') as StoredUser[];
+    const storedActiveAccount = JSON.parse(localStorage.getItem(ACTIVE_ACCOUNT_STORAGE_KEY) || 'null') as StoredUser | null;
+    setAccounts(storedAccounts);
+    setActiveAccount(storedActiveAccount);
+  }, []);
+
+  const updateStoredAccounts = (newAccounts: StoredUser[], newActive: StoredUser | null) => {
+    setAccounts(newAccounts);
+    setActiveAccount(newActive);
+    localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(newAccounts));
+    localStorage.setItem(ACTIVE_ACCOUNT_STORAGE_KEY, JSON.stringify(newActive));
+  }
+
 
   useEffect(() => {
-    const fetchUserProfile = async (uid: string) => {
-        if (!firestore) return;
-        const userDocRef = doc(firestore, 'users', uid);
-        try {
-            const docSnap = await getDoc(userDocRef);
-            if (docSnap.exists()) {
-                const userData = { id: docSnap.id, ...docSnap.data() } as User;
-                setUser(userData);
-            } else {
-                console.error("Firestore profile doesn't exist for authenticated user.");
-                signOut();
-            }
-        } catch (error) {
-            console.error("Error fetching user profile:", error);
-            signOut();
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    if (firebaseUserLoading) {
+    const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
       setLoading(true);
-    } else {
       if (firebaseUser) {
-        fetchUserProfile(firebaseUser.uid);
+        if (activeAccount && firebaseUser.uid === activeAccount.uid) {
+           const userDocRef = doc(firestore, 'users', firebaseUser.uid);
+           const docSnap = await getDoc(userDocRef);
+           if (docSnap.exists()) {
+             setUser({ id: docSnap.id, ...docSnap.data() } as User);
+           } else {
+             setUser(null);
+           }
+        }
       } else {
         setUser(null);
-        setLoading(false);
       }
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [auth, firestore, activeAccount]);
+
+
+  const signIn = async (email: string, pass: string): Promise<void> => {
+    setLoading(true);
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+      const { user: fbUser } = userCredential;
+      const newAccount: StoredUser = { uid: fbUser.uid, email: fbUser.email!, refreshToken: fbUser.refreshToken };
+      updateStoredAccounts([newAccount], newAccount);
+      // The onIdTokenChanged listener will handle setting the user state
+    } catch (error) {
+      console.error("Sign in error", error);
+      setLoading(false);
+      throw new Error('Nesprávný email nebo heslo.');
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firebaseUser, firebaseUserLoading, firestore]);
+  };
+
+  const addUser = async (email: string, pass: string): Promise<StoredUser> => {
+    setLoading(true);
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+      const { user: fbUser } = userCredential;
+
+      const newAccount: StoredUser = { uid: fbUser.uid, email: fbUser.email!, refreshToken: fbUser.refreshToken };
+      
+      const newAccounts = [...accounts.filter(a => a.uid !== newAccount.uid), newAccount];
+      updateStoredAccounts(newAccounts, activeAccount);
+      
+      // We don't switch to the new user, just add them
+      await switchUser(activeAccount!.uid); // Re-authenticate as the original user
+
+      return newAccount;
+
+    } catch (error) {
+       console.error("Add user error", error);
+       throw new Error('Nepodařilo se přidat účet. Zkontrolujte přihlašovací údaje.');
+    } finally {
+        setLoading(false);
+    }
+  };
+
+
+  const switchUser = async (uid: string) => {
+    setLoading(true);
+    const accountToSwitch = accounts.find(a => a.uid === uid);
+    if (!accountToSwitch) {
+        setLoading(false);
+        throw new Error("Účet nenalezen.");
+    }
+    
+    try {
+        await firebaseSignOut(auth); // Sign out first
+        // HACK: This is a way to sign in with a refresh token, not officially documented for client-side but works.
+        const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${firebaseConfig.apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ grant_type: 'refresh_token', refresh_token: accountToSwitch.refreshToken })
+        });
+        
+        if (!res.ok) {
+            throw new Error('Přepnutí selhalo, zkuste se přihlásit znovu.');
+        }
+
+        // We don't need the response, onIdTokenChanged will handle the new user
+        updateStoredAccounts(accounts, accountToSwitch);
+        
+    } catch (error) {
+         console.error("Switch user error", error);
+        // If switch fails, try to log back in with the original active user
+        if(activeAccount) {
+            await switchUser(activeAccount.uid);
+        }
+        throw error;
+    } finally {
+        setLoading(false);
+    }
+  };
   
-   useEffect(() => {
-    if (!loading && !user && pathname.startsWith('/dashboard')) {
-      router.push('/');
+  const removeUser = async (uid: string) => {
+    const newAccounts = accounts.filter(a => a.uid !== uid);
+    if (activeAccount?.uid === uid) {
+      const nextUser = newAccounts.length > 0 ? newAccounts[0] : null;
+      if (nextUser) {
+        await switchUser(nextUser.uid);
+      } else {
+        await signOut();
+      }
+       updateStoredAccounts(newAccounts, nextUser);
+    } else {
+      updateStoredAccounts(newAccounts, activeAccount);
     }
-    if (!loading && user && pathname === '/') {
-      router.push('/dashboard');
-    }
-  }, [user, loading, pathname, router]);
+  };
+
+  const signOut = async () => {
+    await firebaseSignOut(auth);
+    updateStoredAccounts([], null);
+    setUser(null);
+    router.push('/');
+  };
 
   const hasRole = useCallback((role: Role) => {
     return user?.roles.includes(role) ?? false;
   }, [user]);
 
-  const signIn = async (email: string, pass: string): Promise<void> => {
-    setLoading(true);
-    const auth = getAuth();
-    try {
-      await signInWithEmailAndPassword(auth, email, pass);
-      // The useEffect hook will handle fetching the profile and updating the state
-    } catch (error) {
-      console.error("Sign in error", error);
-      setLoading(false); // Make sure to stop loading on error
-      throw new Error('Nesprávný email nebo heslo.');
-    }
-  };
+  const value = { user, activeAccount, accounts, signIn, signOut, loading, hasRole, switchUser, removeUser, addUser };
 
-  const signOut = () => {
-    const auth = getAuth();
-    auth.signOut();
-    setUser(null);
-    router.push('/');
-  };
-
-  const value = { user, signIn, signOut, loading, hasRole };
-
-  // Use the loading state from this provider, which is synced with firebaseUserLoading.
-  if (loading && pathname !== '/') { // Avoid showing loader on the login page during initial load
+   if (loading && pathname !== '/') {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <div className="h-16 w-16 animate-spin rounded-full border-4 border-dashed border-primary"></div>
@@ -106,6 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={value}>
+      <FirebaseErrorListener />
       {children}
     </AuthContext.Provider>
   );

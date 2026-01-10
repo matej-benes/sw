@@ -1,11 +1,56 @@
 'use client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
+
+const addAccountSchema = z.object({
+  email: z.string().email({ message: 'Prosím zadejte platný email.' }),
+  password: z.string().min(1, { message: 'Prosím zadejte heslo.' }),
+});
 
 export default function AddProfilePage() {
     const router = useRouter();
+    const { addUser } = useAuth();
+    const { toast } = useToast();
+    const [isLoading, setIsLoading] = useState(false);
+
+    const form = useForm<z.infer<typeof addAccountSchema>>({
+        resolver: zodResolver(addAccountSchema),
+        defaultValues: {
+            email: '',
+            password: '',
+        },
+    });
+
+    async function onSubmit(values: z.infer<typeof addAccountSchema>) {
+        setIsLoading(true);
+        try {
+            await addUser(values.email, values.password);
+            toast({
+                title: 'Účet přidán',
+                description: 'Nový účet byl úspěšně přidán do seznamu.',
+            });
+            router.push('/dashboard/profil/prepnout');
+        } catch (error) {
+            toast({
+                variant: 'destructive',
+                title: 'Chyba při přidávání účtu',
+                description: (error as Error).message,
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
 
     return (
         <div className="space-y-6">
@@ -20,10 +65,43 @@ export default function AddProfilePage() {
             </div>
             <Card>
                 <CardHeader>
-                    <CardTitle>Funkce se připravuje</CardTitle>
+                    <CardTitle>Přihlášení dalšího účtu</CardTitle>
+                    <CardDescription>Zadejte přihlašovací údaje existujícího účtu, který chcete přidat.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <p className="text-muted-foreground">Možnost přidat další účet bude dostupná brzy.</p>
+                     <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                        <FormField
+                            control={form.control}
+                            name="email"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Email</FormLabel>
+                                <FormControl>
+                                <Input placeholder="vas@email.cz" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="password"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Heslo</FormLabel>
+                                <FormControl>
+                                <Input type="password" placeholder="••••••••" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        <Button type="submit" className="w-full" disabled={isLoading}>
+                            {isLoading ? <Loader2 className="animate-spin" /> : 'Přidat a přihlásit účet'}
+                        </Button>
+                        </form>
+                    </Form>
                 </CardContent>
             </Card>
         </div>

@@ -11,17 +11,19 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/use-auth';
-import { LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut, User as UserIcon, Users, UserPlus } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import type { Trida, User } from '@/lib/types';
 import { Separator } from '../ui/separator';
+import { useRouter } from 'next/navigation';
 
 export function UserNav() {
   const { user, signOut, hasRole } = useAuth();
   const firestore = useFirestore();
   const isZiak = hasRole('ziak');
+  const router = useRouter();
 
   const tridaRef = useMemoFirebase(() => {
     if (!firestore || !user?.tridaId) return null;
@@ -81,7 +83,7 @@ export function UserNav() {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56" align="end" forceMount>
-          <DropdownMenuLabel className="font-normal md:hidden">
+          <DropdownMenuLabel className="font-normal">
             <div className="flex flex-col space-y-1">
               <p className="text-sm font-medium leading-none">{user.name}</p>
               <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
@@ -93,15 +95,23 @@ export function UserNav() {
                 )}
             </div>
           </DropdownMenuLabel>
-          <DropdownMenuSeparator className="md:hidden"/>
+          <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push('/dashboard/profil')}>
               <UserIcon className="mr-2 h-4 w-4" />
               <span>Profil</span>
             </DropdownMenuItem>
+             <DropdownMenuItem onClick={() => router.push('/dashboard/profil/prepnout')}>
+              <Users className="mr-2 h-4 w-4" />
+              <span>Přepnout účet</span>
+            </DropdownMenuItem>
+             <DropdownMenuItem onClick={() => router.push('/dashboard/profil/pridat')}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              <span>Přidat účet</span>
+            </DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={signOut}>
+          <DropdownMenuItem onClick={() => signOut()}>
             <LogOut className="mr-2 h-4 w-4" />
             <span>Odhlásit se</span>
           </DropdownMenuItem>
