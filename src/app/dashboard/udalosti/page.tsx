@@ -262,7 +262,7 @@ export default function ObecnaUdalostPage() {
                                         <AlertDialogHeader>
                                             <AlertDialogTitle>Opravdu chcete smazat událost?</AlertDialogTitle>
                                             <AlertDialogDescription>
-                                                Tato akce trvale smaže událost "{event.nazev}". Pokud událost nahrazovala vyučovací hodinu, tato hodina se z rozvrhu daného dne odstraní, ale neobnoví se původní hodina ze šablony.
+                                                Tato akce trvale smaže událost "{event.nazev}". Tato akce je nevratná.
                                             </AlertDialogDescription>
                                         </AlertDialogHeader>
                                         <AlertDialogFooter>
