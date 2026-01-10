@@ -232,7 +232,3 @@ export default function OmluvenkyPage() {
         </div>
     );
 }
-
-    
-
-    
