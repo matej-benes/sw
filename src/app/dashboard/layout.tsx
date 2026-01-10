@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Menu, ChevronDown, BookCopy, Settings, Users, School, Book, FileQuestion, Home, CalendarDays, MessageSquare, LayoutGrid, Replace, PencilRuler } from 'lucide-react';
+import { Menu, ChevronDown, BookCopy, Settings, Users, School, Book, FileQuestion, Home, CalendarDays, MessageSquare, LayoutGrid, Replace, PencilRuler, ClipboardCheck, Backpack } from 'lucide-react';
 import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
@@ -21,6 +21,11 @@ const mainNavLinks = [
     { name: 'Komunikace', href: '/dashboard/zpravy', icon: MessageSquare },
 ];
 
+const studentParentLinks = [
+    { name: 'Domácí úkoly', href: '/dashboard/ukoly', icon: Backpack },
+    { name: 'Omluvenky', href: '/dashboard/omluvenky', icon: ClipboardCheck },
+];
+
 const adminNavLinks = [
     { name: 'Studijní materiály', href: '/dashboard/materialy', icon: FileQuestion },
 ];
@@ -28,6 +33,8 @@ const adminNavLinks = [
 const teacherNavLinks = [
     { name: "Rozvrhy a suplování", href: "/dashboard/rozvrhy-suplovani", icon: Replace },
     { name: "Hodnocení", href: "/dashboard/hodnoceni/nove", icon: PencilRuler },
+    { name: 'Domácí úkoly', href: '/dashboard/ukoly', icon: Backpack },
+    { name: 'Omluvenky', href: '/dashboard/omluvenky', icon: ClipboardCheck },
 ]
 
 const spravaSystemuLinks = [
@@ -49,6 +56,7 @@ export default function DashboardLayout({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const isAdministrator = hasRole('administrator');
   const isTeacher = hasRole('ucitel');
+  const isParentOrStudent = hasRole('rodic') || hasRole('ziak');
   const isMobile = useIsMobile();
   usePageTitleUpdater();
 
@@ -105,7 +113,13 @@ export default function DashboardLayout({
         <div className="flex-1">
             <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
                  {renderNavLinks(mainNavLinks)}
-                 {(isTeacher || isAdministrator) && (
+                 {isParentOrStudent && (
+                    <>
+                        <div className='my-2'></div>
+                        {renderNavLinks(studentParentLinks)}
+                    </>
+                 )}
+                 {(isTeacher) && (
                     <>
                         <div className='my-2'></div>
                         {renderNavLinks(teacherNavLinks)}
@@ -173,3 +187,5 @@ export default function DashboardLayout({
     </div>
   );
 }
+
+    

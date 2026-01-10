@@ -432,6 +432,41 @@
         "reason": { "type": "string" }
       },
       "required": ["id", "teacherId", "startDate", "endDate"]
+    },
+     "Omluvenka": {
+      "title": "Omluvenka",
+      "type": "object",
+      "description": "Represents an excuse for a student's absence submitted by a parent.",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "parentId": { "type": "string" },
+        "tridaId": { "type": "string" },
+        "datumOd": { "type": "string", "format": "date" },
+        "datumDo": { "type": "string", "format": "date" },
+        "duvod": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "datumPodani": { "type": "string", "format": "date-time" },
+        "vyjadreniUcitele": { "type": "string", "description": "Teacher's comment on the excuse." }
+      },
+      "required": ["id", "studentId", "parentId", "tridaId", "datumOd", "datumDo", "duvod", "status", "datumPodani"]
+    },
+    "DomaciUkol": {
+      "title": "DomaciUkol",
+      "type": "object",
+      "description": "Represents a homework assignment.",
+      "properties": {
+        "id": { "type": "string" },
+        "tridaId": { "type": "string" },
+        "predmetId": { "type": "string" },
+        "ucitelId": { "type": "string" },
+        "nazev": { "type": "string" },
+        "popis": { "type": "string" },
+        "datumZadani": { "type": "string", "format": "date" },
+        "terminOdevzdani": { "type": "string", "format": "date" },
+        "prilohy": { "type": "array", "items": { "type": "string" }, "description": "Array of URLs to attachments." }
+      },
+      "required": ["id", "tridaId", "predmetId", "ucitelId", "nazev", "popis", "datumZadani", "terminOdevzdani"]
     }
   },
   "auth": {
@@ -634,8 +669,32 @@
             { "name": "absenceId", "description": "The unique ID of the absence record." }
           ]
         }
+      },
+      {
+        "path": "/omluvenky/{omluvenkaId}",
+        "definition": {
+          "entityName": "Omluvenka",
+          "schema": { "$ref": "#/backend/entities/Omluvenka" },
+          "description": "Stores absence excuses from parents.",
+          "params": [
+            { "name": "omluvenkaId", "description": "The unique ID of the excuse record." }
+          ]
+        }
+      },
+      {
+        "path": "/ukoly/{ukolId}",
+        "definition": {
+          "entityName": "DomaciUkol",
+          "schema": { "$ref": "#/backend/entities/DomaciUkol" },
+          "description": "Stores homework assignments.",
+          "params": [
+            { "name": "ukolId", "description": "The unique ID of the homework." }
+          ]
+        }
       }
     ],
     "reasoning": "The Firestore structure is designed to provide a secure and scalable data model for the ŠkolaWeb application. It addresses the requirements for user management, class management, grade management, scheduling, and announcements. The structure is optimized for role-based access control (učitel, rodic, ziak, administrator) and aims to minimize the need for complex security rules. The key strategy for achieving authorization independence is denormalization. For example, the `tridaId` is included in the `users` collection to avoid `get()` calls in security rules to verify the `trida` of a given `user`. This approach enables atomic operations and simplifies security rule debugging.\n\nTo support the QAPs, the structure leverages structural segregation. User-specific data (grades) are stored in subcollections of the `users` collection, ensuring that only the authenticated user (or a teacher/parent) can access their own (or their child's) data. Announcements are segregated by class, enabling efficient listing of announcements relevant to a specific class. Collaborative data (such as class schedules) resides under the `tridy` collection, using the document ID as the `tridaId`.\n\nMembership maps aren't explicitly used here, but the structure allows for easy extension with membership maps if collaborative features become more complex in the future. For instance, if a more granular role system within a class is needed (e.g., assigning students to groups), a `members` map could be added to the `tridy/{tridaId}` document."
   }
 }
+
+    

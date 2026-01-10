@@ -202,3 +202,30 @@ export interface Absence {
     endDate: string; // YYYY-MM-DD
     reason?: string;
 }
+
+export interface Omluvenka {
+    id: string;
+    studentId: string;
+    parentId: string;
+    tridaId: string;
+    datumOd: string; // YYYY-MM-DD
+    datumDo: string; // YYYY-MM-DD
+    duvod: string;
+    status: 'pending' | 'approved' | 'rejected';
+    datumPodani: any; // Firestore Timestamp
+    vyjadreniUcitele?: string;
+}
+
+export interface DomaciUkol {
+    id: string;
+    tridaId: string;
+    predmetId: string;
+    ucitelId: string;
+    nazev: string;
+    popis: string;
+    datumZadani: string; // YYYY-MM-DD
+    terminOdevzdani: string; // YYYY-MM-DD
+    prilohy?: string[];
+}
+
+    
