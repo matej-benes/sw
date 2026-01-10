@@ -26,8 +26,8 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if isOwner(userId);
+      allow read, update, delete: if isOwner(userId);
+      allow create: if isRole('administrator');
     }
 
     match /tridy/{tridaId} {
@@ -111,5 +111,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
