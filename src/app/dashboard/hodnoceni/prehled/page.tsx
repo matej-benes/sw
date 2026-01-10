@@ -125,7 +125,7 @@ export default function HodnoceniPrehledPage() {
   }, [grades]);
   
   const usersQuery = useMemoFirebase(() => {
-      if (!firestore || !studentIds || studentIds.length === 0) return null;
+      if (!firestore || studentIds.length === 0) return null;
       return query(collection(firestore, 'users'), where('id', 'in', studentIds));
   }, [firestore, studentIds]);
 
