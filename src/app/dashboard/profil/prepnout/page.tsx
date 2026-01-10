@@ -17,7 +17,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 function getInitials(name: string) {
     if (!name) return '';
@@ -30,6 +31,14 @@ export default function SwitchProfilePage() {
     const { accounts, activeAccount, switchUser, removeUser, loading } = useAuth();
     const { toast } = useToast();
     const [isSwitching, setIsSwitching] = useState<string | null>(null);
+    const isMobile = useIsMobile();
+    
+    useEffect(() => {
+        // Redirect if not mobile
+        if (isMobile === false) { // Check for explicit false to avoid redirect on initial undefined state
+            router.replace('/dashboard');
+        }
+    }, [isMobile, router]);
 
     const handleSwitch = async (uid: string) => {
         setIsSwitching(uid);
@@ -43,6 +52,11 @@ export default function SwitchProfilePage() {
             setIsSwitching(null);
         }
     };
+    
+    // Render nothing or a loading state until mobile check is complete
+    if (isMobile === undefined || isMobile === false) {
+        return null;
+    }
     
     return (
         <div className="space-y-6">

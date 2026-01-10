@@ -10,7 +10,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const addAccountSchema = z.object({
   email: z.string().email({ message: 'Prosím zadejte platný email.' }),
@@ -22,6 +23,14 @@ export default function AddProfilePage() {
     const { addUser } = useAuth();
     const { toast } = useToast();
     const [isLoading, setIsLoading] = useState(false);
+    const isMobile = useIsMobile();
+
+    useEffect(() => {
+        // Redirect if not mobile
+        if (isMobile === false) { // Check for explicit false to avoid redirect on initial undefined state
+            router.replace('/dashboard');
+        }
+    }, [isMobile, router]);
 
     const form = useForm<z.infer<typeof addAccountSchema>>({
         resolver: zodResolver(addAccountSchema),
@@ -49,6 +58,11 @@ export default function AddProfilePage() {
         } finally {
             setIsLoading(false);
         }
+    }
+    
+    // Render nothing or a loading state until mobile check is complete
+    if (isMobile === undefined || isMobile === false) {
+        return null;
     }
 
 

@@ -18,12 +18,14 @@ import { doc } from 'firebase/firestore';
 import type { Trida, User } from '@/lib/types';
 import { Separator } from '../ui/separator';
 import { useRouter } from 'next/navigation';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export function UserNav() {
   const { user, signOut, hasRole } = useAuth();
   const firestore = useFirestore();
   const isZiak = hasRole('ziak');
   const router = useRouter();
+  const isMobile = useIsMobile();
 
   const tridaRef = useMemoFirebase(() => {
     if (!firestore || !user?.tridaId) return null;
@@ -101,14 +103,18 @@ export function UserNav() {
               <UserIcon className="mr-2 h-4 w-4" />
               <span>Profil</span>
             </DropdownMenuItem>
-             <DropdownMenuItem onClick={() => router.push('/dashboard/profil/prepnout')}>
-              <Users className="mr-2 h-4 w-4" />
-              <span>Přepnout účet</span>
-            </DropdownMenuItem>
-             <DropdownMenuItem onClick={() => router.push('/dashboard/profil/pridat')}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              <span>Přidat účet</span>
-            </DropdownMenuItem>
+             {isMobile && (
+                <>
+                    <DropdownMenuItem onClick={() => router.push('/dashboard/profil/prepnout')}>
+                        <Users className="mr-2 h-4 w-4" />
+                        <span>Přepnout účet</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push('/dashboard/profil/pridat')}>
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        <span>Přidat účet</span>
+                    </DropdownMenuItem>
+                </>
+             )}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => signOut()}>

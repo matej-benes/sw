@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { LogOut, PlusCircle, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const roleTranslations: { [key: string]: string } = {
   ucitel: 'Učitel',
@@ -20,6 +21,7 @@ const roleTranslations: { [key: string]: string } = {
 export default function ProfilPage() {
     const { user, signOut } = useAuth();
     const router = useRouter();
+    const isMobile = useIsMobile();
 
     if (!user) {
         return (
@@ -64,16 +66,18 @@ export default function ProfilPage() {
                     )}
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                        <Button className="w-full" variant="outline" onClick={() => router.push('/dashboard/profil/prepnout')}>
-                            <Users className="mr-2 h-4 w-4" />
-                            Přepnout účet
-                        </Button>
-                         <Button className="w-full" variant="outline" onClick={() => router.push('/dashboard/profil/pridat')}>
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Přidat účet
-                        </Button>
-                    </div>
+                    {isMobile && (
+                        <div className="space-y-2">
+                            <Button className="w-full" variant="outline" onClick={() => router.push('/dashboard/profil/prepnout')}>
+                                <Users className="mr-2 h-4 w-4" />
+                                Přepnout účet
+                            </Button>
+                            <Button className="w-full" variant="outline" onClick={() => router.push('/dashboard/profil/pridat')}>
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Přidat účet
+                            </Button>
+                        </div>
+                    )}
                      <Button className="w-full" variant="destructive" onClick={signOut}>
                         <LogOut className="mr-2 h-4 w-4" />
                         Odhlásit se
