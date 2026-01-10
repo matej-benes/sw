@@ -15,17 +15,14 @@ export default function LessonDetailPage() {
     const router = useRouter();
     const params = useParams();
     const slug = Array.isArray(params.slug) ? params.slug : [params.slug];
-    const [dateStr, periodStr, lessonId] = slug;
+    const [dateStr, periodStr, classId, lessonId] = slug;
 
     const firestore = useFirestore();
 
-    const rozvrhId = `9.A-${dateStr}`;
-
     const rozvrhRef = useMemoFirebase(() => {
-        if (!firestore || !dateStr) return null;
-        const potentialClassId = '9.A';
-        return doc(firestore, 'rozvrhy', `${potentialClassId}-${dateStr}`);
-    }, [firestore, dateStr]);
+        if (!firestore || !dateStr || !classId) return null;
+        return doc(firestore, 'rozvrhy', `${classId}-${dateStr}`);
+    }, [firestore, dateStr, classId]);
 
     const { data: schedule, isLoading: scheduleLoading } = useDoc<Rozvrh>(rozvrhRef);
 

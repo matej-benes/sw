@@ -73,11 +73,15 @@ export function MobileTimetable({
         return { type: 'lesson', lesson, period: index };
     }).filter(Boolean) || [];
 
-    const handleLessonClick = (lessonData: any) => {
+    const handleLessonClick = (lessonData: any, classId: string) => {
+        const lesson = lessonData.lesson || lessonData.substituted;
+        if (!lesson) return;
+        
         const slug = [
             format(selectedDate, 'yyyy-MM-dd'),
             lessonData.period,
-            lessonData.lesson.id,
+            classId,
+            lesson.id,
         ];
         router.push(`/dashboard/hodina/${slug.join('/')}`);
     };
@@ -111,7 +115,7 @@ export function MobileTimetable({
                     </div>
                 )}
                 {lessonsForDay.map((item, idx) => {
-                     if (!item) return null;
+                     if (!item || !selectedDaySchedule) return null;
                      const timeRange = timeSlots[item.period];
                      
                      if (item.type === 'lesson' || item.type === 'substituted') {
@@ -122,7 +126,7 @@ export function MobileTimetable({
                             <div 
                                 key={idx} 
                                 className={cn("flex gap-4 rounded-lg bg-card border p-3", originalLesson && "border-primary/50")}
-                                onClick={() => handleLessonClick(item)}
+                                onClick={() => handleLessonClick(item, selectedDaySchedule.tridaId)}
                             >
                                 <div className="text-center w-12 flex-shrink-0">
                                     <p className="font-bold text-lg">{item.period + 1}</p>
@@ -131,7 +135,7 @@ export function MobileTimetable({
                                 <div className="flex-grow">
                                     <p className="font-semibold">{lesson.subjectName}</p>
                                     <p className="text-sm text-muted-foreground">
-                                        {lesson.className} | {lesson.ucebnaName || 'N/A'}
+                                        {lesson.className}
                                     </p>
                                     {originalLesson && (
                                     <p className="text-xs text-primary/80 line-through">

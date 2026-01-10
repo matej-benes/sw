@@ -77,29 +77,12 @@ function EventTooltipContent({ event }: { event: Udalost }) {
     )
 }
 
-function LessonContextMenu({ children, lesson, dayInfo, period }: { children: React.ReactNode, lesson: LessonBlock, dayInfo: DayMappingInfo, period: number }) {
+function LessonContextMenu({ children, lesson, dayInfo, period, classId }: { children: React.ReactNode, lesson: LessonBlock, dayInfo: DayMappingInfo, period: number, classId: string }) {
     const router = useRouter();
     
-    const handleClassBookEntry = () => {
-        if (!dayInfo || !lesson) return;
-        const query = new URLSearchParams({
-            tridaId: lesson.classId,
-            datum: format(dayInfo.fullDate, 'yyyy-MM-dd'),
-            hodina: (period).toString(),
-            predmetId: lesson.subjectId,
-        }).toString();
-        router.push(`/dashboard/tridni-kniha/zapis?${query}`);
-    }
-
-    const handleNewGrading = () => {
-        if(!dayInfo || !lesson) return;
-        const query = new URLSearchParams({
-            tridaId: lesson.classId,
-            predmetId: lesson.subjectId,
-            datum: format(dayInfo.fullDate, 'yyyy-MM-dd'),
-            hodina: period.toString()
-        }).toString();
-        router.push(`/dashboard/hodnoceni/nove?${query}`);
+    const handleNavigation = (path: string, params: Record<string, string>) => {
+        const query = new URLSearchParams(params).toString();
+        router.push(`${path}?${query}`);
     }
 
     return (
@@ -108,8 +91,18 @@ function LessonContextMenu({ children, lesson, dayInfo, period }: { children: Re
                 {children}
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-                <DropdownMenuItem onClick={handleClassBookEntry}>Zapsat do třídní knihy</DropdownMenuItem>
-                <DropdownMenuItem onClick={handleNewGrading}>Nové hodnocení</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleNavigation('/dashboard/tridni-kniha/zapis', {
+                    tridaId: lesson.classId,
+                    datum: format(dayInfo.fullDate, 'yyyy-MM-dd'),
+                    hodina: (period).toString(),
+                    predmetId: lesson.subjectId,
+                })}>Zapsat do třídní knihy</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleNavigation('/dashboard/hodnoceni/nove', {
+                     tridaId: lesson.classId,
+                    predmetId: lesson.subjectId,
+                    datum: format(dayInfo.fullDate, 'yyyy-MM-dd'),
+                    hodina: period.toString()
+                })}>Nové hodnocení</DropdownMenuItem>
                 <DropdownMenuItem>Probrané učivo</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => router.push('/dashboard/poznamky-zaka')}>Poznámka dítěte/žáka/studenta do třídní knihy</DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -142,7 +135,7 @@ function EmptySlotContextMenu({ children }: { children: React.ReactNode }) {
 }
 
 
-function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, isSubstituted = false }: { lesson: LessonBlock; isTeacher: boolean, dayInfo: DayMappingInfo, period: number, isSubstituted?: boolean }) {
+function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, isSubstituted = false }: { lesson: LessonBlock; isTeacher: boolean, dayInfo: DayMappingInfo, period: number, classId: string, isSubstituted?: boolean }) {
     const getSubjectColor = (subjectId: string) => {
         if (!subjectId) return `hsl(0, 0%, 85%)`;
         let hash = 0;
@@ -160,12 +153,12 @@ function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, isSubstituted = fa
         >
             <div className="font-bold">{lesson.subjectShortcut}</div>
             <div>{isTeacher ? lesson.className : lesson.teacherName}</div>
-            <div className="text-muted-foreground">{lesson.className}</div>
+            <div className="text-muted-foreground">{lesson.ucebnaName}</div>
         </div>
     );
     
     const interactiveBlock = isTeacher ? (
-        <LessonContextMenu lesson={lesson} dayInfo={dayInfo} period={period}>{blockContent}</LessonContextMenu>
+        <LessonContextMenu lesson={lesson} dayInfo={dayInfo} period={period} classId={classId}>{blockContent}</LessonContextMenu>
     ) : blockContent;
 
     return (
@@ -311,9 +304,10 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
                             {timeSlots.map((_, periodIndex) => {
                                 const lessonInfo = getLessonForCell(dayDate, periodIndex);
                                 const lesson = lessonInfo?.lesson;
+                                const classId = lessonInfo?.classId;
                                 
                                 const event = findEventForCell(dayDate, periodIndex);
-                                const substitution = lesson ? findSubstitutionForCell(dayDate, periodIndex, lessonInfo.classId) : null;
+                                const substitution = lesson && classId ? findSubstitutionForCell(dayDate, periodIndex, classId) : null;
                                 
                                 const isCancelledByEvent = event && event.nahrazujeHodiny;
 
@@ -321,9 +315,9 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
                                 const isCancelledBySub = substitution?.changes.type.includes('zruseno');
 
                                 let substitutedLesson: LessonBlock | null = null;
-                                if (isSubstituted && !isCancelledBySub) {
+                                if (isSubstituted && !isCancelledBySub && lesson) {
                                     // This is a simplified representation. A full implementation would fetch new teacher/subject names.
-                                    substitutedLesson = { ...lesson!, ...substitution!.changes };
+                                    substitutedLesson = { ...lesson, ...substitution!.changes };
                                     if (substitution!.changes.teacherId) substitutedLesson.teacherName = "Zástup"; // Placeholder
                                 }
 
@@ -336,12 +330,12 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
                                             <CancelledLessonBlock substitution={substitution} />
                                         ) : (
                                             <>
-                                                {lesson && dayInfo && (
-                                                    <LessonBlockCmp lesson={lesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} isSubstituted={isSubstituted}/>
+                                                {lesson && dayInfo && classId && (
+                                                    <LessonBlockCmp lesson={lesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} isSubstituted={isSubstituted}/>
                                                 )}
-                                                {substitutedLesson && dayInfo && (
+                                                {substitutedLesson && dayInfo && classId && (
                                                     <div className="absolute inset-0.5">
-                                                        <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} />
+                                                        <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} />
                                                     </div>
                                                 )}
                                                 
