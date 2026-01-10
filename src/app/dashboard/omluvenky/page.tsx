@@ -126,17 +126,20 @@ function TeacherExcuseManagement() {
     }, [firestore, teacherClassIds]);
     const { data: omluvenky, isLoading: omluvenkyLoading } = useCollection<Omluvenka>(omluvenkyQuery);
 
-    const { data: students } = useCollection<User>(useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]));
+    const { data: studentsData, isLoading: studentsLoading } = useCollection<User>(useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]));
 
     const handleUpdateStatus = async (id: string, status: 'approved' | 'rejected') => {
+        if (!firestore) return;
         await updateDocumentNonBlocking(doc(firestore, 'omluvenky', id), { status });
         toast({ title: `Omluvenka ${status === 'approved' ? 'schválena' : 'zamítnuta'}.` });
     };
     
-    const getStudentName = (id: string) => students?.find(s => s.id === id)?.name || 'Neznámý žák';
+    const getStudentName = (id: string) => studentsData?.find(s => s.id === id)?.name || 'Neznámý žák';
 
     const pendingOmluvenky = useMemo(() => omluvenky?.filter(o => o.status === 'pending') || [], [omluvenky]);
     const processedOmluvenky = useMemo(() => omluvenky?.filter(o => o.status !== 'pending') || [], [omluvenky]);
+    
+    const isLoading = omluvenkyLoading || studentsLoading;
 
     const statusBadge = (status: 'pending' | 'approved' | 'rejected') => {
         switch (status) {
@@ -169,8 +172,8 @@ function TeacherExcuseManagement() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {omluvenkyLoading ? <TableRow><TableCell colSpan={4}>Načítání...</TableCell></TableRow> : null}
-                                {!omluvenkyLoading && pendingOmluvenky.map(o => (
+                                {isLoading ? <TableRow><TableCell colSpan={4}>Načítání...</TableCell></TableRow> : null}
+                                {!isLoading && pendingOmluvenky.map(o => (
                                     <TableRow key={o.id}>
                                         <TableCell>{getStudentName(o.studentId)}</TableCell>
                                         <TableCell>{format(new Date(o.datumOd), 'd.M.y')} - {format(new Date(o.datumDo), 'd.M.y')}</TableCell>
