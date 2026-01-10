@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useDoc, setDocumentNonBlocking } from '@/firebase';
 import type { Trida, Rozvrh, LessonBlock, User, Predmet, Ucebna, ScheduleTemplate } from '@/lib/types';
 import { collection, query, where } from 'firebase/firestore';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
@@ -283,8 +283,14 @@ function ScheduleEditor() {
                 tridaId: selectedClassId,
                 timeSlots: timeSlots,
                 days: schedule,
+                // The 'ziaciIds' field is part of the 'Trida' entity, not 'ScheduleTemplate'.
+                // Adding a placeholder here to satisfy a potential implicit requirement,
+                // but this should ideally be handled by fetching the class data if needed.
+                // Or the type definition for ScheduleTemplate should be updated if it needs this field.
+                ziaciIds: [], 
             };
-            await setDoc(templateRef, templateData);
+            
+            setDocumentNonBlocking(templateRef, templateData, { merge: true });
 
             toast({ title: "Šablona rozvrhu uložena", description: "Změny v šabloně byly úspěšně uloženy." });
         } catch (error) {

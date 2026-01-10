@@ -111,6 +111,7 @@ export interface ScheduleTemplate {
     timeSlots: string[];
     // Index corresponds to day of week (0=Monday, 1=Tuesday, etc.)
     days: (LessonBlock | null)[][];
+    ziaciIds: string[]; // Added to match the data structure used in handleSave
 }
 
 

@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Menu, ChevronDown, BookCopy, Settings, Users, School, Book, FileQuestion, Home, CalendarDays, MessageSquare, LayoutGrid, Replace } from 'lucide-react';
+import { Menu, ChevronDown, BookCopy, Settings, Users, School, Book, FileQuestion, Home, CalendarDays, MessageSquare, LayoutGrid, Replace, PencilRuler } from 'lucide-react';
 import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
@@ -21,6 +21,7 @@ const adminNavLinks = [
 
 const teacherNavLinks = [
     { name: "Rozvrhy a suplování", href: "/dashboard/rozvrhy-suplovani", icon: Replace },
+    { name: "Hodnocení", href: "/dashboard/hodnoceni/nove", icon: PencilRuler },
 ]
 
 const spravaSystemuLinks = [
@@ -60,7 +61,7 @@ export default function DashboardLayout({
 
   const renderNavLinks = (links: {name: string, href: string, icon?: any}[], isSubMenu = false) => (
     links.map(link => {
-        const isActive = pathname === link.href;
+        const isActive = pathname.startsWith(link.href);
         const LinkIcon = link.icon;
         return (
             <Link 
