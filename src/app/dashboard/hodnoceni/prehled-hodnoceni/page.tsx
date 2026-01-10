@@ -39,7 +39,6 @@ export default function HodnoceniPrehledPage() {
 
   const gradingsQuery = useMemoFirebase(() => {
     if (!firestore || !user?.id) return null;
-    // Query the subcollection for the specific user (teacher)
     return query(
       collection(firestore, `users/${user.id}/gradings`),
       orderBy('datum', 'desc')
@@ -50,10 +49,14 @@ export default function HodnoceniPrehledPage() {
 
   const handleDelete = async (gradingId: string) => {
     if (!firestore || !user) return;
-    // Correctly reference the document in the subcollection
     const docRef = doc(firestore, `users/${user.id}/gradings`, gradingId);
-    await deleteDocumentNonBlocking(docRef);
-    toast({ title: "Hodnocení smazáno." });
+    try {
+        await deleteDocumentNonBlocking(docRef);
+        toast({ title: "Hodnocení smazáno." });
+    } catch (e) {
+        console.error(e);
+        toast({ variant: "destructive", title: "Chyba při mazání."})
+    }
   };
   
   const allStudentIds = useMemo(() => {
@@ -67,7 +70,16 @@ export default function HodnoceniPrehledPage() {
 
   const usersQuery = useMemoFirebase(() => {
       if (!firestore || allStudentIds.length === 0) return null;
-      return query(collection(firestore, 'users'), where('__name__', 'in', allStudentIds));
+      // Firestore 'in' query is limited to 30 elements. Chunking is needed for larger sets.
+      const chunks: string[][] = [];
+      let i = 0;
+      while(i < allStudentIds.length) {
+          chunks.push(allStudentIds.slice(i, i += 30));
+      }
+      if (chunks.length > 1) {
+          console.warn("Querying for more than 30 users, this might require multiple queries in a real app.");
+      }
+      return query(collection(firestore, 'users'), where('__name__', 'in', chunks[0] || []));
   }, [firestore, allStudentIds]);
 
   const { data: users, isLoading: usersLoading } = useCollection<User>(usersQuery);
