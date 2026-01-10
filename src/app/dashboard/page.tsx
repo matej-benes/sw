@@ -41,10 +41,11 @@ import type {
   Substitution,
 } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
+import { Input } from '@/components/ui/input';
 
 export default function DashboardPage() {
   const firestore = useFirestore();
-  const { user, hasRole, isUserLoading } = useAuth();
+  const { user, hasRole, loading: isUserLoading } = useAuth();
   
   // Data fetching
   const { data: predmety } = useCollection<Predmet>(
@@ -148,27 +149,35 @@ export default function DashboardPage() {
 
 
   const filteredSchedules = useMemo(() => {
-    if (!schedulesData || !selectedClassId) return [];
+    if (!schedulesData) return [];
+
+    if (!user) return [];
     
-    // For non-teachers, always filter by their own class
-    const targetClassId = hasRole('ucitel') ? selectedClassId : (user?.tridaId || selectedClassId);
+    // For teachers, filter by selected class ID. For others, filter by their own class ID.
+    const targetClassId = hasRole('ucitel') ? selectedClassId : user.tridaId;
+
+    if (!targetClassId) return [];
 
     return schedulesData.filter((s) => s.tridaId === targetClassId);
-  }, [schedulesData, selectedClassId, hasRole, user?.tridaId]);
+  }, [schedulesData, selectedClassId, hasRole, user]);
 
 
   const isDataLoading = !schedulesData || !eventsData || !substitutionsData || !tridy || isUserLoading;
 
   if (isDataLoading) {
-    return <div className="flex h-full w-full items-center justify-center">Načítání dat rozvrhu...</div>;
+    return <div className="flex h-full w-full items-center justify-center">Načítání dat...</div>;
+  }
+  
+  if (!user) {
+     return <div className="flex h-full w-full items-center justify-center">Uživatel nenalezen.</div>;
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Rozvrhy a Suplování</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Kalendář</h1>
         <p className="text-muted-foreground">
-          Týdenní přehled rozvrhů, suplování a událostí.
+          Váš týdenní přehled událostí.
         </p>
       </div>
 
@@ -221,7 +230,6 @@ export default function DashboardPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {user && (
              <TimetableWidget
                 schedules={filteredSchedules}
                 eventsData={eventsData || []}
@@ -230,7 +238,6 @@ export default function DashboardPage() {
                 userId={user.id}
                 userClassId={user.tridaId}
             />
-          )}
         </CardContent>
       </Card>
     </div>
