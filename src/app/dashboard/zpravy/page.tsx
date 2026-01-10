@@ -33,6 +33,8 @@ import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Separator } from '@/components/ui/separator';
+import { Label } from '@/components/ui/label';
 
 function getInitials(name: string) {
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
@@ -204,7 +206,7 @@ export default function ZpravyPage() {
       const classInfo = allClasses.find(c => c.id === id);
       if (classInfo) {
         // It's a class ID, add all students
-        finalRecipientIds.push(...classInfo.ziaciIds);
+        finalRecipientIds.push(...(classInfo.ziaciIds || []));
       } else {
         // It's a user ID
         finalRecipientIds.push(id);
@@ -270,6 +272,12 @@ export default function ZpravyPage() {
     if (!user) return false;
     return message.readBy.includes(user.id);
   }, [user]);
+  
+  const getRecipientNames = useCallback((recipientIds: string[]) => {
+      if (!allUsers) return '';
+      return recipientIds.map(id => allUsers.find(u => u.id === id)?.name || 'Neznámý').join(', ');
+  }, [allUsers]);
+
 
   return (
     <>
@@ -373,7 +381,7 @@ export default function ZpravyPage() {
                                 ) : (
                                     sentMessages?.map(msg => (
                                         <TableRow key={msg.id} onClick={() => handleRowClick(msg)} className="cursor-pointer">
-                                            <TableCell className="max-w-[200px] truncate">{msg.recipientIds.map(getSenderName).join(', ')}</TableCell>
+                                            <TableCell className="max-w-[200px] truncate">{getRecipientNames(msg.recipientIds)}</TableCell>
                                             <TableCell className="max-w-sm truncate">{msg.text}</TableCell>
                                             <TableCell className="text-right">{format((msg.createdAt as Timestamp).toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
                                         </TableRow>
