@@ -124,7 +124,10 @@ function TeacherExcuseManagement() {
     }, [firestore, teacherClassIds]);
     const { data: omluvenky, isLoading: omluvenkyLoading } = useCollection<Omluvenka>(omluvenkyQuery);
 
-    const { data: studentsData, isLoading: studentsLoading } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, 'users'), where('roles', 'array-contains', 'ziak')) : null, [firestore]));
+    const { data: studentsData, isLoading: studentsLoading } = useCollection<User>(useMemoFirebase(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, 'users'), where('roles', 'array-contains', 'ziak'));
+    }, [firestore]));
 
     const handleUpdateStatus = async (id: string, status: 'approved' | 'rejected') => {
         if (!firestore) return;

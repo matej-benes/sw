@@ -111,7 +111,7 @@ export default function HodnoceniPage() {
                                 <TableRow key={index}>
                                     <TableCell className="font-medium">{znamka.predmet}</TableCell>
                                     <TableCell className="text-center font-bold text-lg">{znamka.hodnota}</TableCell>
-                                    <TableCell>{format(znamka.datum.toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
+                                    <TableCell>{znamka.datum.toDate ? format(znamka.datum.toDate(), 'd. M. yyyy', { locale: cs }) : 'Neplatné datum'}</TableCell>
                                     <TableCell className="text-muted-foreground">{znamka.tema || '-'}</TableCell>
                                 </TableRow>
                                 ))

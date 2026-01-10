@@ -73,15 +73,24 @@ export default function TridniKnihaZapisContent() {
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch existing entry if it exists
-  const zapisRef = useMemoFirebase(() => zapisId ? doc(firestore, 'zapisyHodin', zapisId) : null, [firestore, zapisId]);
+  const zapisRef = useMemoFirebase(() => {
+      if(!firestore || !zapisId) return null;
+      return doc(firestore, 'zapisyHodin', zapisId);
+  }, [firestore, zapisId]);
   const { data: existingZapis, isLoading: zapisLoading } = useDoc<ZapisHodiny>(zapisRef);
 
   // Fetch class info
-  const tridaRef = useMemoFirebase(() => tridaId ? doc(firestore, 'tridy', tridaId) : null, [firestore, tridaId]);
+  const tridaRef = useMemoFirebase(() => {
+      if(!firestore || !tridaId) return null;
+      return doc(firestore, 'tridy', tridaId);
+  }, [firestore, tridaId]);
   const { data: tridaData, isLoading: tridaLoading } = useDoc<Trida>(tridaRef);
 
   // Fetch subject info
-  const predmetRef = useMemoFirebase(() => predmetId ? doc(firestore, 'predmety', predmetId) : null, [firestore, predmetId]);
+  const predmetRef = useMemoFirebase(() => {
+      if(!firestore || !predmetId) return null;
+      return doc(firestore, 'predmety', predmetId);
+  }, [firestore, predmetId]);
   const { data: predmetData, isLoading: predmetLoading } = useDoc<Predmet>(predmetRef);
 
   // Fetch students for the class

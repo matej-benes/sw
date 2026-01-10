@@ -79,10 +79,13 @@ function TeacherHomeworkForm() {
     }, [firestore, user]);
     const { data: teacherClasses } = useCollection<Trida>(teacherClassesQuery);
     
-    const { data: predmety } = useCollection<Predmet>(useMemoFirebase(() => firestore ? collection(firestore, 'predmety') : null, [firestore]));
+    const { data: predmety } = useCollection<Predmet>(useMemoFirebase(() => {
+        if(!firestore) return null;
+        return collection(firestore, 'predmety');
+    }, [firestore]));
 
     const onSubmit = async (data: HomeworkFormData) => {
-        if (!user) return;
+        if (!user || !firestore) return;
         
         const newHomework: Omit<DomaciUkol, 'id'> = {
             ...data,
@@ -163,14 +166,20 @@ function HomeworkList() {
     const firestore = useFirestore();
 
     const homeworkQuery = useMemoFirebase(() => {
-        if (!firestore || !user || !user.tridaId) return null;
+        if (!firestore || !user?.tridaId) return null;
         return query(collection(firestore, 'ukoly'), where('tridaId', '==', user.tridaId));
-    }, [firestore, user]);
+    }, [firestore, user?.tridaId]);
 
     const { data: homework, isLoading } = useCollection<DomaciUkol>(homeworkQuery);
     
-    const { data: predmety } = useCollection<Predmet>(useMemoFirebase(() => firestore ? collection(firestore, 'predmety') : null, [firestore]));
-    const { data: teachers } = useCollection<User>(useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]));
+    const { data: predmety } = useCollection<Predmet>(useMemoFirebase(() => {
+        if(!firestore) return null;
+        return collection(firestore, 'predmety');
+    }, [firestore]));
+    const { data: teachers } = useCollection<User>(useMemoFirebase(() => {
+        if(!firestore) return null;
+        return collection(firestore, 'users');
+    }, [firestore]));
 
     const getSubjectName = (id: string) => predmety?.find(p => p.id === id)?.name || 'Neznámý předmět';
     const getTeacherName = (id: string) => teachers?.find(t => t.id === id)?.name || 'Neznámý učitel';
