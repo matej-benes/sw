@@ -13,7 +13,6 @@ service cloud.firestore {
     }
     
     function isAdmin() {
-      // Check if the user is authenticated before trying to access their data
       return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(['administrator']);
     }
     
@@ -35,7 +34,7 @@ service cloud.firestore {
       allow get: if isAuthenticated();
       // Allow unauthenticated users to query ONLY by a non-empty PIN for registration.
       // Allow authenticated admins to list users for management purposes.
-      allow list: if (request.query.where[0][0] == "pin" && request.query.where[0][2] != "") || isAdmin();
+      allow list: if (request.query.where.size() == 1 && request.query.where[0][0] == 'pin' && request.query.where[0][2] != '') || isAdmin();
       allow create: if isAdmin();
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
