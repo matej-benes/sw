@@ -163,9 +163,9 @@ function HomeworkList() {
     const firestore = useFirestore();
 
     const homeworkQuery = useMemoFirebase(() => {
-        if (!firestore || !user?.tridaId) return null;
+        if (!firestore || !user || !user.tridaId) return null;
         return query(collection(firestore, 'ukoly'), where('tridaId', '==', user.tridaId));
-    }, [firestore, user?.tridaId]);
+    }, [firestore, user]);
 
     const { data: homework, isLoading } = useCollection<DomaciUkol>(homeworkQuery);
     
