@@ -31,8 +31,7 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow get: if isAuthenticated();
-      allow list: if isAuthenticated();
+      allow get, list: if isAuthenticated();
       allow create: if isAdmin();
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
@@ -97,7 +96,7 @@ service cloud.firestore {
     }
 
     match /zapisyHodin/{zapisId} {
-        allow get, list: if isAuthenticated();
+        allow get, list: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator', 'ziak', 'rodic']));
         allow write: if isAdmin() || hasAnyRole(['ucitel']);
     }
 
