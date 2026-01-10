@@ -17,16 +17,16 @@ export function MobileNav() {
 
     return (
         <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur-sm md:hidden">
-            <nav className="flex items-center justify-around h-16">
+            <nav className="grid h-16 grid-cols-4 items-center justify-around">
                 {navItems.map(item => {
-                    const isActive = pathname === item.href;
+                    const isActive = pathname.startsWith(item.href);
                     return (
                         <Link 
                             key={item.href}
                             href={item.href}
                             className={cn(
                                 "flex flex-col items-center justify-center gap-1 transition-colors w-full h-full",
-                                isActive ? 'text-accent' : 'text-muted-foreground'
+                                isActive ? 'text-primary' : 'text-muted-foreground hover:text-primary'
                             )}
                         >
                             <item.icon className="h-6 w-6" />
