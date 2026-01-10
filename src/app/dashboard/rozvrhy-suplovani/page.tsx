@@ -448,6 +448,48 @@ function ScheduleEditor() {
     );
 }
 
+// Placeholder for new components
+function SubstitutionPlanner() {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Plánování suplování</CardTitle>
+                <CardDescription>Zde můžete zadávat a spravovat suplování za chybějící učitele.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <p>Obsah pro plánování suplování bude brzy doplněn.</p>
+            </CardContent>
+        </Card>
+    );
+}
+
+function SchedulePreview() {
+    const [view, setView] = useState<'static' | 'with_changes'>('with_changes');
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Náhled rozvrhu</CardTitle>
+                <CardDescription>Zobrazení aktuálního stavu rozvrhů a suplování.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Tabs value={view} onValueChange={(value) => setView(value as any)} className="w-full">
+                    <TabsList>
+                        <TabsTrigger value="with_changes">Rozvrh se změnami</TabsTrigger>
+                        <TabsTrigger value="static">Statický rozvrh</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="with_changes" className="mt-4">
+                       <p>Zde se zobrazí rozvrh včetně všech suplování, odpadlých hodin a událostí.</p>
+                    </TabsContent>
+                     <TabsContent value="static" className="mt-4">
+                       <p>Zde se zobrazí základní podoba rozvrhu dle šablony.</p>
+                    </TabsContent>
+                </Tabs>
+            </CardContent>
+        </Card>
+    );
+}
+
 
 export default function RozvrhySuplovaniPage() {
     return (
@@ -471,27 +513,11 @@ export default function RozvrhySuplovaniPage() {
                 <TabsContent value="rozvrhy" className="mt-4">
                    <ScheduleEditor />
                 </TabsContent>
-                <TabsContent value="suplovani">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Plánování suplování</CardTitle>
-                            <CardDescription>Zde můžete zadávat a spravovat suplování za chybějící učitele.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <p>Obsah pro plánování suplování...</p>
-                        </CardContent>
-                    </Card>
+                <TabsContent value="suplovani" className="mt-4">
+                    <SubstitutionPlanner />
                 </TabsContent>
-                <TabsContent value="nahled">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Náhled</CardTitle>
-                            <CardDescription>Zobrazení aktuálního stavu rozvrhů a suplování.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <p>Obsah pro náhled...</p>
-                        </CardContent>
-                    </Card>
+                <TabsContent value="nahled" className="mt-4">
+                    <SchedulePreview />
                 </TabsContent>
             </Tabs>
         </div>
