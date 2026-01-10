@@ -28,7 +28,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isWithinInterval, startOfDay, endOfDay, getDay } from "date-fns";
 import { cs } from "date-fns/locale";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -637,55 +637,89 @@ function SubstitutionPlanner() {
     const { toast } = useToast();
     const [date, setDate] = useState(new Date());
 
-    const { data: substitutions } = useCollection<Substitution>(
-        useMemoFirebase(() => firestore ? query(collection(firestore, "suplovani"), where('date', '==', format(date, "yyyy-MM-dd"))) : null, [firestore, date])
-    );
-     const { data: teachers } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore]));
+    const { data: absences, isLoading: absencesLoading } = useCollection<Absence>(useMemoFirebase(() => firestore ? collection(firestore, 'absences') : null, [firestore]));
+    const { data: allTemplates, isLoading: templatesLoading } = useCollection<ScheduleTemplate>(useMemoFirebase(() => firestore ? collection(firestore, 'scheduleTemplates') : null, [firestore]));
+    const { data: teachers, isLoading: teachersLoading } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore]));
+
+    const absentTeachersToday = useMemo(() => {
+        if (!absences) return [];
+        return absences
+            .filter(a => isWithinInterval(date, { start: parseISO(a.startDate), end: parseISO(a.endDate) }))
+            .map(a => a.teacherId);
+    }, [absences, date]);
+
+    const lessonsToSubstitute = useMemo(() => {
+        if (!allTemplates || absentTeachersToday.length === 0) return [];
+        const dayIndex = (getDay(date) + 6) % 7; // Monday = 0
+        
+        let lessons: { lesson: LessonBlock, day: string, period: number, classId: string }[] = [];
+
+        allTemplates.forEach(template => {
+            const daySchedule = template.days.find(d => d.dayIndex === dayIndex);
+            if (daySchedule) {
+                daySchedule.lessons.forEach((lesson, periodIndex) => {
+                    if (lesson && absentTeachersToday.includes(lesson.teacherId)) {
+                        lessons.push({
+                            lesson,
+                            day: daysOfWeek[dayIndex],
+                            period: periodIndex,
+                            classId: template.tridaId,
+                        });
+                    }
+                });
+            }
+        });
+        return lessons;
+    }, [allTemplates, absentTeachersToday, date]);
+
+    const isLoading = absencesLoading || templatesLoading || teachersLoading;
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-                <CardHeader>
-                    <CardTitle>Plánování suplování</CardTitle>
-                    <CardDescription>Zadejte a spravujte suplování za chybějící učitele.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <p>Tato část je ve vývoji.</p>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader>
-                     <div className="flex justify-between items-center">
-                        <div>
-                             <CardTitle>Suplování na den</CardTitle>
-                             <CardDescription>{format(date, "d. MMMM yyyy", { locale: cs })}</CardDescription>
-                        </div>
-                         <Popover>
-                            <PopoverTrigger asChild>
-                            <Button
-                                variant={"outline"}
-                                className="w-[180px] justify-start text-left font-normal"
-                            >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                Změnit datum
-                            </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                            <Calendar
-                                mode="single"
-                                selected={date}
-                                onSelect={(day) => day && setDate(day)}
-                                initialFocus
-                            />
-                            </PopoverContent>
-                        </Popover>
+        <Card>
+            <CardHeader>
+                <div className="flex justify-between items-start">
+                    <div>
+                        <CardTitle>Plánování suplování</CardTitle>
+                        <CardDescription>Zadejte a spravujte suplování za chybějící učitele.</CardDescription>
                     </div>
-                </CardHeader>
-                <CardContent>
-                     {substitutions?.length === 0 && <p className="text-muted-foreground text-sm">Žádné suplování pro tento den.</p>}
-                </CardContent>
-            </Card>
-        </div>
+                     <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline"><CalendarIcon className="mr-2 h-4 w-4" /> {format(date, "d. MMMM yyyy", { locale: cs })}</Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                            <Calendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} initialFocus locale={cs} />
+                        </PopoverContent>
+                    </Popover>
+                </div>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1 space-y-4">
+                    <h3 className="font-semibold">Hodiny k suplování</h3>
+                     {isLoading ? (
+                        <p>Načítání...</p>
+                    ) : lessonsToSubstitute.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Pro tento den nejsou žádné hodiny k suplování.</p>
+                    ) : (
+                        <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+                            {lessonsToSubstitute.map((item, index) => (
+                                <div key={index} className="p-3 border rounded-lg hover:bg-muted cursor-pointer">
+                                    <p className="font-bold">{item.lesson.subjectName} <span className="font-normal text-muted-foreground">({item.lesson.className})</span></p>
+                                    <p className="text-sm">Původní učitel: {item.lesson.teacherName}</p>
+                                    <p className="text-sm text-muted-foreground">{item.period + 1}. hodina ({allTemplates?.find(t => t.id === item.classId)?.timeSlots[item.period]})</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                 <div className="lg:col-span-2">
+                    <h3 className="font-semibold">Detail suplování</h3>
+                    <div className="mt-4 border rounded-lg p-6 h-full flex items-center justify-center bg-muted/50">
+                        <p className="text-muted-foreground">Vyberte hodinu vlevo pro zadání suplování.</p>
+                    </div>
+                </div>
+
+            </CardContent>
+        </Card>
     );
 }
 
