@@ -26,9 +26,8 @@ export default function AddProfilePage() {
     const isMobile = useIsMobile();
 
     useEffect(() => {
-        // Redirect if not mobile
-        if (isMobile === false) { // Check for explicit false to avoid redirect on initial undefined state
-            router.replace('/dashboard');
+        if (isMobile === false) { 
+            router.replace('/dashboard/profil');
         }
     }, [isMobile, router]);
 
@@ -60,7 +59,6 @@ export default function AddProfilePage() {
         }
     }
     
-    // Render nothing or a loading state until mobile check is complete
     if (isMobile === undefined || isMobile === false) {
         return null;
     }
@@ -112,7 +110,7 @@ export default function AddProfilePage() {
                             )}
                         />
                         <Button type="submit" className="w-full" disabled={isLoading}>
-                            {isLoading ? <Loader2 className="animate-spin" /> : 'Přidat a přihlásit účet'}
+                            {isLoading ? <Loader2 className="animate-spin" /> : 'Přidat účet'}
                         </Button>
                         </form>
                     </Form>

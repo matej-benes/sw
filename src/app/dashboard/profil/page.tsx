@@ -32,6 +32,7 @@ export default function ProfilPage() {
     }
     
     const getInitials = (name: string) => {
+        if(!name) return '';
         return name
         .split(' ')
         .map((n) => n[0])
@@ -55,7 +56,7 @@ export default function ProfilPage() {
                     </Avatar>
                     <CardTitle className="text-2xl">{user.name}</CardTitle>
                     <CardDescription>{user.email}</CardDescription>
-                     {(user.roles.length > 0) && (
+                     {(user.roles?.length > 0) && (
                         <div className="flex flex-wrap justify-center gap-1 pt-2">
                             {user.roles.map(role => (
                             <Badge key={role} variant="secondary" className="text-sm">

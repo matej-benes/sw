@@ -44,6 +44,7 @@ export function UserNav() {
   }
 
   const getInitials = (name: string) => {
+    if(!name) return '';
     return name
       .split(' ')
       .map((n) => n[0])
@@ -64,7 +65,7 @@ export function UserNav() {
        <div className="hidden text-right md:flex items-center gap-4">
           <div className="text-right">
             <p className="text-sm font-medium leading-none">{user.name}</p>
-             {(user.roles.length > 0) && (
+             {(user.roles?.length > 0) && (
                 <div className="flex flex-wrap justify-end gap-1 mt-1">
                     {user.roles.map(role => (
                     <Badge key={role} variant="secondary" className="text-xs">

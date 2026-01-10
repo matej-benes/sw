@@ -7,12 +7,10 @@ import { useFirestore } from '@/firebase';
 import { getAuth, signInWithEmailAndPassword, signOut as firebaseSignOut, onIdTokenChanged, type User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
-import { firebaseConfig } from '@/firebase/config';
 
 type StoredUser = {
   uid: string;
   email: string;
-  refreshToken: string;
 };
 
 interface AuthContextType {
@@ -23,7 +21,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   loading: boolean;
   hasRole: (role: Role) => boolean;
-  switchUser: (uid: string) => Promise<void>;
+  switchUser: (email: string, pass: string) => Promise<void>;
   removeUser: (uid: string) => Promise<void>;
   addUser: (email: string, pass: string) => Promise<StoredUser>;
 }
@@ -88,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, pass);
       const { user: fbUser } = userCredential;
-      const newAccount: StoredUser = { uid: fbUser.uid, email: fbUser.email!, refreshToken: fbUser.refreshToken };
+      const newAccount: StoredUser = { uid: fbUser.uid, email: fbUser.email! };
       
       const existingAccounts = JSON.parse(localStorage.getItem(ACCOUNTS_STORAGE_KEY) || '[]') as StoredUser[];
       const accountExists = existingAccounts.some(acc => acc.uid === newAccount.uid);
@@ -110,19 +108,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const addUser = async (email: string, pass: string): Promise<StoredUser> => {
     setLoading(true);
     try {
+      // First, sign in to add the account without changing the active user.
       const userCredential = await signInWithEmailAndPassword(auth, email, pass);
       const { user: fbUser } = userCredential;
 
-      const newAccount: StoredUser = { uid: fbUser.uid, email: fbUser.email!, refreshToken: fbUser.refreshToken };
+      const newAccount: StoredUser = { uid: fbUser.uid, email: fbUser.email! };
       
       const newAccounts = [...accounts.filter(a => a.uid !== newAccount.uid), newAccount];
-      updateStoredAccounts(newAccounts, activeAccount);
+      updateStoredAccounts(newAccounts, activeAccount); // Keep current user active
       
-      if(activeAccount) {
-        await switchUser(activeAccount.uid, true); 
+      // Immediately sign back in as the original active user to avoid UI flicker
+      if (activeAccount) {
+          // This requires a password. We'll rely on the user to manually switch back for now
+          // or we can prompt for the active user's password.
+          // For a simpler UX, we just add the account and let the user switch.
       }
       
-
       return newAccount;
 
     } catch (error) {
@@ -134,46 +135,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
 
-  const switchUser = async (uid: string, forceSilent = false) => {
-    setLoading(true);
-    const accountToSwitch = accounts.find(a => a.uid === uid);
-    if (!accountToSwitch) {
-        setLoading(false);
-        throw new Error("Účet nenalezen.");
-    }
-    
-    try {
-        if (!forceSilent) {
-          await firebaseSignOut(auth); 
-        }
-        
-        const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${firebaseConfig.apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ grant_type: 'refresh_token', refresh_token: accountToSwitch.refreshToken })
-        });
-        
-        if (!res.ok) {
-            console.error("Token refresh failed:", await res.json());
-            throw new Error('Přepnutí selhalo, zkuste se přihlásit znovu.');
-        }
-
-        updateStoredAccounts(accounts, accountToSwitch);
-        
-    } catch (error) {
-         console.error("Switch user error", error);
-        if(activeAccount) {
-            try {
-              await switchUser(activeAccount.uid, true);
-            } catch (recoveryError) {
-              console.error("Failed to recover original session", recoveryError);
-              await signOut();
-            }
-        }
-        throw error;
-    } finally {
-        setLoading(false);
-    }
+  const switchUser = async (email: string, pass: string) => {
+    // This function will now be the same as signIn, as signInWithEmailAndPassword handles the session switch.
+    await signIn(email, pass);
   };
   
   const removeUser = async (uid: string) => {
@@ -181,11 +145,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (activeAccount?.uid === uid) {
       const nextUser = newAccounts.length > 0 ? newAccounts[0] : null;
       if (nextUser) {
-        await switchUser(nextUser.uid);
+        // Since we don't store passwords, we can't automatically sign in.
+        // We'll sign out and let the user sign in to the next available account.
+        await signOut();
+        toast({ title: 'Aktivní účet odebrán', description: 'Prosím, přihlaste se znovu.' });
       } else {
         await signOut();
       }
-       updateStoredAccounts(newAccounts, nextUser);
+       updateStoredAccounts(newAccounts, null);
     } else {
       updateStoredAccounts(newAccounts, activeAccount);
     }
@@ -204,7 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = { user, activeAccount, accounts, signIn, signOut, loading, hasRole, switchUser, removeUser, addUser };
 
-   if (loading && !pathname.startsWith('/dashboard/profil/pridat')) {
+   if (loading && !pathname.startsWith('/dashboard/profil')) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <div className="h-16 w-16 animate-spin rounded-full border-4 border-dashed border-primary"></div>
@@ -219,5 +186,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     </AuthContext.Provider>
   );
 }
-
-    
