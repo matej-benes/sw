@@ -10,8 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useFirestore, useCollection, useMemoFirebase, useDoc, setDocumentNonBlocking, updateDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
-import type { Trida, LessonBlock, User, Predmet, Ucebna, ScheduleTemplate, Rozvrh, Substitution } from '@/lib/types';
+import { useFirestore, useCollection, useMemoFirebase, useDoc, setDocumentNonBlocking, updateDocumentNonBlocking, addDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import type { Trida, LessonBlock, User, Predmet, Ucebna, ScheduleTemplate, Rozvrh, Substitution, Absence } from '@/lib/types';
 import { collection, query, where, doc, getDoc, writeBatch } from 'firebase/firestore';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { cn } from "@/lib/utils";
@@ -34,6 +34,10 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Textarea } from "@/components/ui/textarea";
+import { DateRange } from "react-day-picker";
+import { addDays } from "date-fns";
+import { Table, TableBody, TableCell, TableHeader, TableRow, TableHead } from "@/components/ui/table";
+
 
 const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
 const defaultTimeSlots = [
@@ -469,6 +473,165 @@ function ScheduleEditor() {
     );
 }
 
+function AbsencePlanner() {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+
+    const [teacherId, setTeacherId] = useState<string>('');
+    const [date, setDate] = useState<DateRange | undefined>({ from: new Date(), to: addDays(new Date(), 1) });
+    const [reason, setReason] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+    
+    const { data: teachers, isLoading: teachersLoading } = useCollection<User>(
+        useMemoFirebase(() => firestore ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore])
+    );
+    const { data: absences, isLoading: absencesLoading } = useCollection<Absence>(
+        useMemoFirebase(() => firestore ? collection(firestore, 'absences') : null, [firestore])
+    );
+    
+    const handleDelete = async (absenceId: string) => {
+        if (!firestore) return;
+        await deleteDocumentNonBlocking(doc(firestore, 'absences', absenceId));
+        toast({ title: "Absence smazána" });
+    }
+
+    const handleSave = async () => {
+        if (!firestore || !teacherId || !date?.from || !date?.to) {
+            toast({ variant: "destructive", title: "Chybějící údaje", description: "Vyberte učitele a rozsah data." });
+            return;
+        }
+        setIsSaving(true);
+        try {
+            await addDocumentNonBlocking(collection(firestore, 'absences'), {
+                teacherId,
+                startDate: format(date.from, 'yyyy-MM-dd'),
+                endDate: format(date.to, 'yyyy-MM-dd'),
+                reason,
+            });
+            toast({ title: "Absence uložena" });
+            setTeacherId('');
+            setReason('');
+            setDate({ from: new Date(), to: addDays(new Date(), 1) });
+        } catch (error) {
+            console.error("Error saving absence: ", error);
+            toast({ variant: "destructive", title: "Chyba při ukládání" });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+    
+    const getTeacherName = (id: string) => teachers?.find(t => t.id === id)?.name || 'Neznámý učitel';
+
+     return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Evidence absencí</CardTitle>
+                <CardDescription>Zde můžete zadávat absence učitelů, které slouží jako podklad pro suplování.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                    <h3 className="font-semibold text-lg">Nová absence</h3>
+                     <div className="grid gap-1.5">
+                        <Label>Učitel</Label>
+                        <Select value={teacherId} onValueChange={setTeacherId} disabled={teachersLoading}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Vyberte učitele" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {teachers?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                     <div className="grid gap-1.5">
+                        <Label>Datum od - do</Label>
+                         <Popover>
+                            <PopoverTrigger asChild>
+                            <Button
+                                id="date"
+                                variant={"outline"}
+                                className={cn(
+                                "w-full justify-start text-left font-normal",
+                                !date && "text-muted-foreground"
+                                )}
+                            >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {date?.from ? (
+                                date.to ? (
+                                    <>
+                                    {format(date.from, "LLL dd, y")} -{" "}
+                                    {format(date.to, "LLL dd, y")}
+                                    </>
+                                ) : (
+                                    format(date.from, "LLL dd, y")
+                                )
+                                ) : (
+                                <span>Vyberte datum</span>
+                                )}
+                            </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                                initialFocus
+                                mode="range"
+                                defaultMonth={date?.from}
+                                selected={date}
+                                onSelect={setDate}
+                                numberOfMonths={2}
+                                locale={cs}
+                            />
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                    <div className="grid gap-1.5">
+                        <Label>Důvod (nepovinné)</Label>
+                        <Textarea value={reason} onChange={e => setReason(e.target.value)} />
+                    </div>
+                    <Button onClick={handleSave} disabled={isSaving}>
+                        {isSaving ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
+                        Uložit absenci
+                    </Button>
+                </div>
+
+                <div className="space-y-4">
+                    <h3 className="font-semibold text-lg">Seznam zadaných absencí</h3>
+                    {absencesLoading ? <p>Načítání...</p> : (
+                        <div className="border rounded-md max-h-96 overflow-y-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Učitel</TableHead>
+                                        <TableHead>Od</TableHead>
+                                        <TableHead>Do</TableHead>
+                                        <TableHead></TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {absences && absences.length > 0 ? absences.map(absence => (
+                                        <TableRow key={absence.id}>
+                                            <TableCell className="font-medium">{getTeacherName(absence.teacherId)}</TableCell>
+                                            <TableCell>{format(parseISO(absence.startDate), "d.M.yyyy")}</TableCell>
+                                            <TableCell>{format(parseISO(absence.endDate), "d.M.yyyy")}</TableCell>
+                                            <TableCell className="text-right">
+                                                <Button variant="ghost" size="icon" onClick={() => handleDelete(absence.id)}>
+                                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    )) : (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="text-center h-24">Žádné absence k zobrazení.</TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
 function SubstitutionPlanner() {
     const firestore = useFirestore();
     const { toast } = useToast();
@@ -523,20 +686,6 @@ function SubstitutionPlanner() {
                 </CardContent>
             </Card>
         </div>
-    );
-}
-
-function AbsencePlanner() {
-     return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Evidence absencí</CardTitle>
-                <CardDescription>Zde můžete zadávat absence učitelů, které slouží jako podklad pro suplování.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <p>Tato část je ve vývoji.</p>
-            </CardContent>
-        </Card>
     );
 }
 

@@ -419,6 +419,19 @@
             }
         },
         "required": ["id", "tridaId", "datum", "hodina", "predmetId", "ucitelId", "topic", "attendance"]
+    },
+    "Absence": {
+      "title": "Absence",
+      "type": "object",
+      "description": "Represents a teacher's absence.",
+      "properties": {
+        "id": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "reason": { "type": "string" }
+      },
+      "required": ["id", "teacherId", "startDate", "endDate"]
     }
   },
   "auth": {
@@ -608,6 +621,17 @@
           "description": "Stores class book entries for each lesson. Document ID is a composite key like '{tridaId}-{YYYY-MM-DD}-{hodina}'.",
           "params": [
             { "name": "zapisId", "description": "The unique ID of the class book entry." }
+          ]
+        }
+      },
+       {
+        "path": "/absences/{absenceId}",
+        "definition": {
+          "entityName": "Absence",
+          "schema": { "$ref": "#/backend/entities/Absence" },
+          "description": "Stores teacher absences.",
+          "params": [
+            { "name": "absenceId", "description": "The unique ID of the absence record." }
           ]
         }
       }

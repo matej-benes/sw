@@ -194,3 +194,11 @@ export interface ZapisHodiny {
         reason?: string;
     }[];
 }
+
+export interface Absence {
+    id: string;
+    teacherId: string;
+    startDate: string; // YYYY-MM-DD
+    endDate: string; // YYYY-MM-DD
+    reason?: string;
+}
