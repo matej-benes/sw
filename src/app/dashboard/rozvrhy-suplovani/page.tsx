@@ -167,8 +167,8 @@ function LessonEditDialog({
                 subjectShortcut: subject.shortcut,
                 teacherName: teacher.name,
                 className: lesson?.className || '', // same for className
-                ucebnaId: classroomId,
-                ucebnaName: classroom?.nazev,
+                ucebnaId: classroomId || null,
+                ucebnaName: classroom?.nazev || null,
             };
             onSave(newLesson);
         }
@@ -295,12 +295,31 @@ function ScheduleEditor() {
         setIsSaving(true);
         try {
             const templateRef = doc(firestore, 'scheduleTemplates', selectedClassId);
+
+            // Function to sanitize an object, replacing undefined with null recursively
+            const sanitizeObject = (obj: any): any => {
+                if (obj === null || obj === undefined) return null;
+                if (typeof obj !== 'object') return obj;
+
+                if (Array.isArray(obj)) {
+                    return obj.map(sanitizeObject);
+                }
+
+                const newObj: { [key: string]: any } = {};
+                for (const key in obj) {
+                    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                        const value = obj[key];
+                        newObj[key] = value === undefined ? null : sanitizeObject(value);
+                    }
+                }
+                return newObj;
+            };
             
-            // Convert 2D schedule array to a format Firestore accepts
+            // Convert 2D schedule array to a format Firestore accepts and sanitize it
             const storableDays: StorableDay[] = schedule.map((dayLessons, index) => ({
                 dayIndex: index,
-                lessons: dayLessons || []
-            })).filter(day => day.lessons.some(l => l !== null)); // Only store days with lessons
+                lessons: (dayLessons || []).map(lesson => sanitizeObject(lesson))
+            })).filter(day => day.lessons.some(l => l !== null));
 
             const templateData = {
                 id: selectedClassId,
