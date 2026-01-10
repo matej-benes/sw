@@ -10,8 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useFirestore, useCollection, useMemoFirebase, useDoc, setDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
-import type { Trida, LessonBlock, User, Predmet, Ucebna, ScheduleTemplate, Rozvrh } from '@/lib/types';
+import { useFirestore, useCollection, useMemoFirebase, useDoc, setDocumentNonBlocking, updateDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
+import type { Trida, LessonBlock, User, Predmet, Ucebna, ScheduleTemplate, Rozvrh, Substitution } from '@/lib/types';
 import { collection, query, where, doc, getDoc, writeBatch } from 'firebase/firestore';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { cn } from "@/lib/utils";
@@ -31,7 +31,9 @@ import { Calendar } from "@/components/ui/calendar";
 import { format, parseISO } from "date-fns";
 import { cs } from "date-fns/locale";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-
+import { Checkbox } from "@/components/ui/checkbox";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { Textarea } from "@/components/ui/textarea";
 
 const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
 const defaultTimeSlots = [
@@ -468,14 +470,71 @@ function ScheduleEditor() {
 }
 
 function SubstitutionPlanner() {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const [date, setDate] = useState(new Date());
+
+    const { data: substitutions } = useCollection<Substitution>(
+        useMemoFirebase(() => firestore ? query(collection(firestore, "suplovani"), where('date', '==', format(date, "yyyy-MM-dd"))) : null, [firestore, date])
+    );
+     const { data: teachers } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore]));
+
     return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Plánování suplování</CardTitle>
+                    <CardDescription>Zadejte a spravujte suplování za chybějící učitele.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p>Tato část je ve vývoji.</p>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader>
+                     <div className="flex justify-between items-center">
+                        <div>
+                             <CardTitle>Suplování na den</CardTitle>
+                             <CardDescription>{format(date, "d. MMMM yyyy", { locale: cs })}</CardDescription>
+                        </div>
+                         <Popover>
+                            <PopoverTrigger asChild>
+                            <Button
+                                variant={"outline"}
+                                className="w-[180px] justify-start text-left font-normal"
+                            >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                Změnit datum
+                            </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                            <Calendar
+                                mode="single"
+                                selected={date}
+                                onSelect={(day) => day && setDate(day)}
+                                initialFocus
+                            />
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                     {substitutions?.length === 0 && <p className="text-muted-foreground text-sm">Žádné suplování pro tento den.</p>}
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
+
+function AbsencePlanner() {
+     return (
         <Card>
             <CardHeader>
-                <CardTitle>Plánování suplování</CardTitle>
-                <CardDescription>Zde můžete zadávat a spravovat suplování za chybějící učitele.</CardDescription>
+                <CardTitle>Evidence absencí</CardTitle>
+                <CardDescription>Zde můžete zadávat absence učitelů, které slouží jako podklad pro suplování.</CardDescription>
             </CardHeader>
             <CardContent>
-                <p>Obsah pro plánování suplování bude brzy doplněn.</p>
+                <p>Tato část je ve vývoji.</p>
             </CardContent>
         </Card>
     );
@@ -639,6 +698,7 @@ export default function RozvrhySuplovaniPage() {
                 <div className="flex justify-between items-center">
                     <TabsList>
                         <TabsTrigger value="rozvrhy">Šablony rozvrhů</TabsTrigger>
+                         <TabsTrigger value="absence">Absence</TabsTrigger>
                         <TabsTrigger value="suplovani">Plánování suplování</TabsTrigger>
                         <TabsTrigger value="nahled">Náhled a úpravy</TabsTrigger>
                     </TabsList>
@@ -649,6 +709,9 @@ export default function RozvrhySuplovaniPage() {
                 </div>
                 <TabsContent value="rozvrhy" className="mt-4">
                    <ScheduleEditor />
+                </TabsContent>
+                 <TabsContent value="absence" className="mt-4">
+                    <AbsencePlanner />
                 </TabsContent>
                 <TabsContent value="suplovani" className="mt-4">
                     <SubstitutionPlanner />

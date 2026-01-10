@@ -135,7 +135,7 @@ function EmptySlotContextMenu({ children }: { children: React.ReactNode }) {
 }
 
 
-function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, isSubstituted = false }: { lesson: LessonBlock; isTeacher: boolean, dayInfo: DayMappingInfo, period: number, classId: string, isSubstituted?: boolean }) {
+function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, isSubstituted = false, substitutionNote }: { lesson: LessonBlock; isTeacher: boolean, dayInfo: DayMappingInfo, period: number, classId: string, isSubstituted?: boolean, substitutionNote?: string }) {
     const getSubjectColor = (subjectId: string) => {
         if (!subjectId) return `hsl(0, 0%, 85%)`;
         let hash = 0;
@@ -167,6 +167,7 @@ function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, isSubstit
                 <TooltipTrigger asChild>{interactiveBlock}</TooltipTrigger>
                 <TooltipContent>
                     <LessonTooltipContent lesson={lesson} dayInfo={dayInfo} period={period} />
+                     {substitutionNote && <p className="mt-2 p-2 border-t text-sm">Pozn. k supl.: {substitutionNote}</p>}
                 </TooltipContent>
             </Tooltip>
         </TooltipProvider>
@@ -348,7 +349,7 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
                                                 )}
                                                 {substitutedLesson && dayInfo && classId && (
                                                     <div className="absolute inset-0.5">
-                                                        <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} />
+                                                        <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} substitutionNote={substitution?.changes.note}/>
                                                     </div>
                                                 )}
                                                 
