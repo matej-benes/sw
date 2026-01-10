@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CalendarDays, MessageSquare, LayoutGrid, User, Backpack, ClipboardCheck, Users, UserPlus } from 'lucide-react';
+import { CalendarDays, MessageSquare, LayoutGrid, User, Backpack, ClipboardCheck, Users, UserPlus, PencilRuler } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUnreadMessages } from '@/hooks/use-unread-messages';
 import { Badge } from '../ui/badge';
@@ -28,7 +28,7 @@ const userMenuItems = [
 ];
 
 const appMenuItems = [
-    { href: '/dashboard/znamky', icon: LayoutGrid, label: 'Známky' },
+    { href: '/dashboard/hodnoceni', icon: PencilRuler, label: 'Hodnocení' },
     { href: '/dashboard/ukoly', icon: Backpack, label: 'Domácí úkoly' },
     { href: '/dashboard/omluvenky', icon: ClipboardCheck, label: 'Omluvenky' },
 ]
