@@ -2,7 +2,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Save, Loader2, Trash2, Edit, CalendarIcon, X } from "lucide-react";
+import { PlusCircle, Save, Loader2, Trash2, Edit, CalendarIcon, X, Info } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useFirestore, useCollection, useMemoFirebase, useDoc, setDocumentNonBlocking, updateDocumentNonBlocking, addDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import type { Trida, LessonBlock, User, Predmet, Ucebna, ScheduleTemplate, Rozvrh, Substitution, Absence } from '@/lib/types';
+import type { Trida, LessonBlock, User, Predmet, Ucebna, ScheduleTemplate, Rozvrh, Substitution, Absence, Udalost } from '@/lib/types';
 import { collection, query, where, doc, getDoc, writeBatch } from 'firebase/firestore';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { cn } from "@/lib/utils";
@@ -28,7 +28,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { format, parseISO, isWithinInterval, startOfDay, endOfDay, getDay } from "date-fns";
+import { format, parseISO, isWithinInterval, startOfDay, endOfDay, getDay, isSameDay } from "date-fns";
 import { cs } from "date-fns/locale";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -740,6 +740,16 @@ function SchedulePreview() {
     const scheduleRef = useMemoFirebase(() => scheduleId ? doc(firestore, 'rozvrhy', scheduleId) : null, [scheduleId, firestore]);
     const { data: scheduleData, isLoading: scheduleLoading } = useDoc<Rozvrh>(scheduleRef);
 
+    const { data: events, isLoading: eventsLoading } = useCollection<Udalost>(useMemoFirebase(() => firestore ? collection(firestore, 'udalosti') : null, [firestore]));
+
+    const dailyEvents = useMemo(() => {
+        if (!events || !selectedClassId) return [];
+        return events.filter(event => 
+            isSameDay(parseISO(event.datum), selectedDate) &&
+            event.tridyIds.includes(selectedClassId)
+        );
+    }, [events, selectedDate, selectedClassId]);
+
     useEffect(() => {
         if (classes && classes.length > 0 && !selectedClassId) {
             setSelectedClassId(classes[0].id);
@@ -768,7 +778,7 @@ function SchedulePreview() {
         }
     };
     
-    const isLoading = classesLoading || scheduleLoading;
+    const isLoading = classesLoading || scheduleLoading || eventsLoading;
 
     return (
         <Card>
@@ -824,42 +834,63 @@ function SchedulePreview() {
                                 </tr>
                            </thead>
                             <tbody>
-                                {scheduleData.hodiny.map((lesson, index) => (
-                                    <tr key={index} className="border-t">
-                                        <td className="p-2 font-medium">{index + 1}.</td>
-                                        <td className="p-2 text-muted-foreground">{scheduleData.timeSlots[index]}</td>
-                                        {lesson ? (
-                                            <>
-                                                <td className="p-2 font-semibold">{lesson.subjectName} ({lesson.subjectShortcut})</td>
-                                                <td className="p-2">{lesson.teacherName}</td>
-                                                <td className="p-2">{lesson.ucebnaName}</td>
-                                                <td className="p-2 text-center">
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                                                                <X className="h-4 w-4" />
-                                                            </Button>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>Opravdu chcete smazat tuto hodinu?</AlertDialogTitle>
-                                                                <AlertDialogDescription>
-                                                                    Tato akce trvale odstraní hodinu <strong>{lesson.subjectName}</strong> z rozvrhu pro den <strong>{format(selectedDate, "d. M. yyyy")}.</strong> Tato změna se neprojeví v šabloně.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Zrušit</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={() => handleDeleteLesson(index)}>Smazat</AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
+                                {scheduleData.hodiny.map((lesson, index) => {
+                                    const timeSlot = scheduleData.timeSlots[index];
+                                    const event = dailyEvents.find(e => e.cas === timeSlot?.split('-')[0] && e.nahrazujeHodiny);
+                                    
+                                    if (event) {
+                                        return (
+                                            <tr key={index} className="border-t bg-accent/10">
+                                                <td className="p-2 font-medium">{index + 1}.</td>
+                                                <td className="p-2 text-muted-foreground">{timeSlot}</td>
+                                                <td colSpan={3} className="p-2 font-semibold text-accent-foreground">
+                                                    <div className="flex items-center gap-2">
+                                                        <Info className="h-4 w-4 text-accent" />
+                                                        {event.nazev} ({event.typ})
+                                                    </div>
                                                 </td>
-                                            </>
-                                        ) : (
-                                            <td colSpan={4} className="p-2 text-center text-muted-foreground italic">Volná hodina</td>
-                                        )}
-                                    </tr>
-                                ))}
+                                                <td className="p-2 text-center"></td>
+                                            </tr>
+                                        )
+                                    }
+                                    
+                                    return (
+                                        <tr key={index} className="border-t">
+                                            <td className="p-2 font-medium">{index + 1}.</td>
+                                            <td className="p-2 text-muted-foreground">{timeSlot}</td>
+                                            {lesson ? (
+                                                <>
+                                                    <td className="p-2 font-semibold">{lesson.subjectName} ({lesson.subjectShortcut})</td>
+                                                    <td className="p-2">{lesson.teacherName}</td>
+                                                    <td className="p-2">{lesson.ucebnaName}</td>
+                                                    <td className="p-2 text-center">
+                                                        <AlertDialog>
+                                                            <AlertDialogTrigger asChild>
+                                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+                                                                    <X className="h-4 w-4" />
+                                                                </Button>
+                                                            </AlertDialogTrigger>
+                                                            <AlertDialogContent>
+                                                                <AlertDialogHeader>
+                                                                    <AlertDialogTitle>Opravdu chcete smazat tuto hodinu?</AlertDialogTitle>
+                                                                    <AlertDialogDescription>
+                                                                        Tato akce trvale odstraní hodinu <strong>{lesson.subjectName}</strong> z rozvrhu pro den <strong>{format(selectedDate, "d. M. yyyy")}.</strong> Tato změna se neprojeví v šabloně.
+                                                                    </AlertDialogDescription>
+                                                                </AlertDialogHeader>
+                                                                <AlertDialogFooter>
+                                                                    <AlertDialogCancel>Zrušit</AlertDialogCancel>
+                                                                    <AlertDialogAction onClick={() => handleDeleteLesson(index)}>Smazat</AlertDialogAction>
+                                                                </AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
+                                                    </td>
+                                                </>
+                                            ) : (
+                                                <td colSpan={4} className="p-2 text-center text-muted-foreground italic">Volná hodina</td>
+                                            )}
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
