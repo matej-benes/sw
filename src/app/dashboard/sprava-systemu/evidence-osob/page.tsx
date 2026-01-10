@@ -58,6 +58,7 @@ import {
   arrayUnion,
   arrayRemove,
   setDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
@@ -305,7 +306,7 @@ function AdminUserManagement() {
             const originalUserDoc = await getDoc(userRef);
             const originalUserData = originalUserDoc.data() as User | undefined;
 
-            await updateDoc(userRef, dataToSave);
+            await updateDocumentNonBlocking(userRef, dataToSave);
 
             // If class changed for a student, update the ziaciIds in both old and new class
             if (dataToSave.roles?.includes('ziak')) {
@@ -313,16 +314,18 @@ function AdminUserManagement() {
                 const newTridaId = dataToSave.tridaId;
 
                 if (originalTridaId !== newTridaId) {
+                    const batch = writeBatch(firestore);
                     // Remove from old class
                     if (originalTridaId) {
                         const oldTridaRef = doc(firestore, 'tridy', originalTridaId);
-                        await updateDoc(oldTridaRef, { ziaciIds: arrayRemove(editingUser.id) });
+                        batch.update(oldTridaRef, { ziaciIds: arrayRemove(editingUser.id) });
                     }
                     // Add to new class
                     if (newTridaId) {
                         const newTridaRef = doc(firestore, 'tridy', newTridaId);
-                        await updateDoc(newTridaRef, { ziaciIds: arrayUnion(editingUser.id) });
+                        batch.update(newTridaRef, { ziaciIds: arrayUnion(editingUser.id) });
                     }
+                    await batch.commit();
                 }
             }
 
@@ -339,12 +342,15 @@ function AdminUserManagement() {
                 avatarUrl: `https://picsum.photos/seed/${newUserDocRef.id}/100/100`,
             };
             
-            await setDoc(newUserDocRef, newUserForDb);
+            const batch = writeBatch(firestore);
+            batch.set(newUserDocRef, newUserForDb);
 
             if (newUserForDb.roles?.includes('ziak') && newUserForDb.tridaId) {
                 const tridaRef = doc(firestore, 'tridy', newUserForDb.tridaId);
-                await updateDoc(tridaRef, { ziaciIds: arrayUnion(newUserForDb.id) });
+                batch.update(tridaRef, { ziaciIds: arrayUnion(newUserForDb.id) });
             }
+            
+            await batch.commit();
 
             toast({
               title: 'Uživatel přidán',
@@ -364,13 +370,18 @@ function AdminUserManagement() {
         if (!deletingUser || !firestore) return;
 
         try {
+            const batch = writeBatch(firestore);
+
             // If deleting a student, remove them from their class
             if (deletingUser.roles.includes('ziak') && deletingUser.tridaId) {
                 const tridaRef = doc(firestore, 'tridy', deletingUser.tridaId);
-                await updateDoc(tridaRef, { ziaciIds: arrayRemove(deletingUser.id) });
+                batch.update(tridaRef, { ziaciIds: arrayRemove(deletingUser.id) });
             }
+            
+            const userRef = doc(firestore, 'users', deletingUser.id);
+            batch.delete(userRef);
 
-            await deleteDocumentNonBlocking(doc(firestore, 'users', deletingUser.id));
+            await batch.commit();
             
             toast({
               title: 'Uživatel smazán',
