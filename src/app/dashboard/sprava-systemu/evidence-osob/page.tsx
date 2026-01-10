@@ -103,7 +103,7 @@ function UserForm({
   closeDialog: () => void;
 }) {
   const firestore = useFirestore();
-  const tridyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]);
+  const tridyCollection = useMemoFirebase(() => (firestore ? collection(firestore, 'tridy') : null), [firestore]);
   const { data: classes } = useCollection<Trida>(tridyCollection);
 
   const {

@@ -83,7 +83,7 @@ export function useCollection<T = any>(
     if (internalQuery._query?.filters) {
         for (const filter of internalQuery._query.filters) {
             // Safely check if _a and g exist before accessing them
-            if (filter._a && filter._a.g.includes(undefined)) {
+            if (filter._a && Array.isArray(filter._a.g) && filter._a.g.includes(undefined)) {
                 // One of the 'where' clause values is undefined. Stop here.
                 setData(null);
                 setIsLoading(false);
