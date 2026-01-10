@@ -105,6 +105,15 @@ export interface Rozvrh {
     hodiny: (LessonBlock | null)[];
 }
 
+export interface ScheduleTemplate {
+    id: string; // Should be the same as tridaId
+    tridaId: string;
+    timeSlots: string[];
+    // Index corresponds to day of week (0=Monday, 1=Tuesday, etc.)
+    days: (LessonBlock | null)[][];
+}
+
+
 export interface DailySchedule {
     date: Date;
     timeSlots: string[];

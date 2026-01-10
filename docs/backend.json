@@ -343,6 +343,30 @@
         "ucebnaId": { "type": "string" },
         "ucebnaName": { "type": "string" }
       }
+    },
+    "ScheduleTemplate": {
+        "title": "ScheduleTemplate",
+        "type": "object",
+        "description": "A template for a class's weekly schedule.",
+        "properties": {
+            "id": { "type": "string", "description": "Unique ID, same as tridaId." },
+            "tridaId": { "type": "string" },
+            "timeSlots": { "type": "array", "items": { "type": "string" } },
+            "days": { 
+                "type": "array", 
+                "description": "A 2D array representing the week's schedule. Outer array index is day of week (0=Mon), inner is period.",
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "oneOf": [
+                            { "$ref": "#/backend/entities/LessonBlock" },
+                            { "type": "null" }
+                        ]
+                    }
+                }
+            }
+        },
+        "required": ["id", "tridaId", "timeSlots", "days"]
     }
   },
   "auth": {
@@ -451,6 +475,17 @@
               "description": "Composite key for the schedule, e.g., 'classId-YYYY-MM-DD'."
             }
           ]
+        }
+      },
+      {
+        "path": "/scheduleTemplates/{templateId}",
+        "definition": {
+            "entityName": "ScheduleTemplate",
+            "schema": { "$ref": "#/backend/entities/ScheduleTemplate" },
+            "description": "Stores the weekly schedule template for a class. The document ID should be the class ID.",
+            "params": [
+                { "name": "templateId", "description": "The ID of the template, which is the same as the class ID." }
+            ]
         }
       },
       {

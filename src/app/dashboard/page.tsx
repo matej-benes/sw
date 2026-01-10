@@ -26,11 +26,12 @@ import {
   subWeeks,
   addWeeks,
   isSameDay,
+  isWithinInterval,
 } from 'date-fns';
 import { cs } from 'date-fns/locale';
 
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, writeBatch, getDoc } from 'firebase/firestore';
 import type {
   Trida,
   User,
@@ -39,11 +40,14 @@ import type {
   Rozvrh,
   Udalost,
   Substitution,
+  ScheduleTemplate,
 } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+
+const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
 
 export default function DashboardPage() {
   const firestore = useFirestore();
@@ -127,6 +131,74 @@ export default function DashboardPage() {
       }
   }, [tridy, selectedClassId, hasRole, user?.tridaId]);
 
+  const targetClassId = useMemo(() => {
+    return hasRole('ucitel') ? selectedClassId : user?.tridaId;
+  }, [hasRole, selectedClassId, user?.tridaId]);
+
+
+  // Logic to generate schedules from template if they don't exist
+  useEffect(() => {
+    const generateSchedulesForWeek = async () => {
+        if (!firestore || !targetClassId || !schedulesData) return;
+
+        const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
+        const weekEnd = addDays(weekStart, 6);
+
+        // Check if schedules for this week and class already exist
+        const weekSchedulesExist = schedulesData.some(s => 
+            s.tridaId === targetClassId &&
+            isWithinInterval(parseISO(s.datum), { start: weekStart, end: weekEnd })
+        );
+
+        if (weekSchedulesExist) {
+            return; // Schedules already exist
+        }
+
+        // Fetch the template
+        const templateRef = doc(firestore, 'scheduleTemplates', targetClassId);
+        const templateSnap = await getDoc(templateRef);
+
+        if (!templateSnap.exists()) {
+            console.log(`No schedule template found for class ${targetClassId}`);
+            return;
+        }
+
+        const template = templateSnap.data() as ScheduleTemplate;
+        
+        console.log(`Generating schedules for class ${targetClassId} for week starting ${format(weekStart, 'yyyy-MM-dd')}`);
+
+        const batch = writeBatch(firestore);
+
+        for (let i = 0; i < 7; i++) {
+            const dayDate = addDays(weekStart, i);
+            const dayDateString = format(dayDate, 'yyyy-MM-dd');
+            const dayLessons = template.days[i] || []; // 0=Mon, 1=Tue...
+
+            const rozvrhId = `${targetClassId}-${dayDateString}`;
+            const rozvrhRef = doc(firestore, 'rozvrhy', rozvrhId);
+
+            const newRozvrh: Omit<Rozvrh, 'id'> = {
+                tridaId: targetClassId,
+                datum: dayDateString,
+                timeSlots: template.timeSlots,
+                hodiny: dayLessons,
+            };
+            batch.set(rozvrhRef, newRozvrh);
+        }
+
+        try {
+            await batch.commit();
+            console.log("Successfully generated weekly schedules.");
+            // Data will be re-fetched by useCollection hook automatically
+        } catch (error) {
+            console.error("Error generating weekly schedules:", error);
+        }
+    };
+
+    generateSchedulesForWeek();
+  }, [firestore, targetClassId, currentDate, schedulesData]);
+
+
   // Handlers
   const handlePrevWeek = useCallback(() => {
     setCurrentDate((prev) => subWeeks(prev, 1));
@@ -151,11 +223,11 @@ export default function DashboardPage() {
     if (!user) return [];
     
     // For teachers, filter by selected class ID. For others, filter by their own class ID.
-    const targetClassId = hasRole('ucitel') ? selectedClassId : user.tridaId;
+    const targetId = hasRole('ucitel') ? selectedClassId : user.tridaId;
 
-    if (!targetClassId) return [];
+    if (!targetId) return [];
 
-    return schedulesData.filter((s) => s.tridaId === targetClassId);
+    return schedulesData.filter((s) => s.tridaId === targetId);
   }, [schedulesData, selectedClassId, hasRole, user]);
 
   const classInfo = useMemo(() => {

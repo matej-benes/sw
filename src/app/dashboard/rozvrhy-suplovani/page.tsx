@@ -2,7 +2,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Save } from "lucide-react";
+import { PlusCircle, Save, Loader2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -10,8 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import type { Trida, Rozvrh, LessonBlock, User, Predmet, Ucebna } from '@/lib/types';
+import { useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
+import type { Trida, Rozvrh, LessonBlock, User, Predmet, Ucebna, ScheduleTemplate } from '@/lib/types';
 import { collection, query, where } from 'firebase/firestore';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { cn } from "@/lib/utils";
@@ -144,9 +144,18 @@ function ScheduleEditor() {
     const firestore = useFirestore();
     const { toast } = useToast();
 
+    const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+
     // Data fetching
     const tridyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]);
     const { data: classes, isLoading: classesLoading } = useCollection<Trida>(tridyCollection);
+    
+    const scheduleTemplateRef = useMemoFirebase(() => {
+        if (!firestore || !selectedClassId) return null;
+        return doc(firestore, 'scheduleTemplates', selectedClassId);
+    }, [firestore, selectedClassId]);
+    const { data: scheduleTemplate, isLoading: templateLoading } = useDoc<ScheduleTemplate>(scheduleTemplateRef);
+
 
     const uciteleQuery = useMemoFirebase(() => firestore ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore]);
     const { data: teachers, isLoading: teachersLoading } = useCollection<User>(uciteleQuery);
@@ -158,9 +167,8 @@ function ScheduleEditor() {
     const { data: classrooms, isLoading: classroomsLoading } = useCollection<Ucebna>(ucebnyCollection);
 
 
-    const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
     const [schedule, setSchedule] = useState<ScheduleEditorState>([]);
-
+    const [isSaving, setIsSaving] = useState(false);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingCell, setEditingCell] = useState<{ dayIndex: number, periodIndex: number } | null>(null);
 
@@ -170,40 +178,44 @@ function ScheduleEditor() {
             setSelectedClassId(classes[0].id);
         }
     }, [classes, selectedClassId]);
-
-    // This would fetch the schedule for the selected class
+    
     useEffect(() => {
         if (selectedClassId) {
-            // For now, we initialize an empty schedule
-            const emptySchedule: ScheduleEditorState = Array(daysOfWeek.length).fill(null).map(() => Array(timeSlots.length).fill(null));
-            setSchedule(emptySchedule);
+            if (scheduleTemplate) {
+                // If template exists, use it. Ensure it has the correct structure.
+                const validTemplate = Array.isArray(scheduleTemplate.days) && scheduleTemplate.days.length > 0 ? scheduleTemplate.days : [];
+                setSchedule(validTemplate);
+            } else if (!templateLoading) {
+                 // If no template and not loading, create an empty one.
+                const emptySchedule: ScheduleEditorState = Array(daysOfWeek.length).fill(null).map(() => Array(timeSlots.length).fill(null));
+                setSchedule(emptySchedule);
+            }
         }
-    }, [selectedClassId]);
+    }, [selectedClassId, scheduleTemplate, templateLoading]);
+
 
     const handleSave = async () => {
         if (!selectedClassId || !firestore) {
             toast({ variant: "destructive", title: "Chyba", description: "Není vybrána žádná třída." });
             return;
         }
-
+        setIsSaving(true);
         try {
-            for (let i = 0; i < daysOfWeek.length; i++) {
-                const day = daysOfWeek[i];
-                const rozvrhId = `${selectedClassId}-2024-09-0${i + 2}`; // Example: 7A-2024-09-02
-                const rozvrhRef = doc(firestore, 'rozvrhy', rozvrhId);
-                const daySchedule: Omit<Rozvrh, 'id'> = {
-                    tridaId: selectedClassId,
-                    datum: `2024-09-0${i + 2}`, // Example date
-                    timeSlots: timeSlots,
-                    hodiny: schedule[i] || [],
-                }
-                await setDoc(rozvrhRef, daySchedule);
-            }
+            const templateRef = doc(firestore, 'scheduleTemplates', selectedClassId);
+            const templateData: ScheduleTemplate = {
+                id: selectedClassId,
+                tridaId: selectedClassId,
+                timeSlots: timeSlots,
+                days: schedule,
+            };
+            await setDoc(templateRef, templateData);
 
-            toast({ title: "Rozvrh uložen", description: "Změny v rozvrhu byly úspěšně uloženy." });
+            toast({ title: "Šablona rozvrhu uložena", description: "Změny v šabloně byly úspěšně uloženy." });
         } catch (error) {
-            console.error("Error saving schedule:", error);
-            toast({ variant: "destructive", title: "Chyba ukládání", description: "Při ukládání rozvrhu došlo k chybě." });
+            console.error("Error saving schedule template:", error);
+            toast({ variant: "destructive", title: "Chyba ukládání", description: "Při ukládání šablony rozvrhu došlo k chybě." });
+        } finally {
+            setIsSaving(false);
         }
     };
     
@@ -242,15 +254,15 @@ function ScheduleEditor() {
         handleDialogClose();
     };
 
-    const isDataLoading = classesLoading || teachersLoading || subjectsLoading || classroomsLoading;
+    const isDataLoading = classesLoading || teachersLoading || subjectsLoading || classroomsLoading || templateLoading;
     const currentLesson = editingCell ? schedule[editingCell.dayIndex]?.[editingCell.periodIndex] : null;
 
     return (
         <Card>
             <CardHeader className="flex-row items-center justify-between">
                 <div>
-                    <CardTitle>Editor rozvrhu</CardTitle>
-                    <CardDescription>Vytvářejte a upravujte rozvrhy pro jednotlivé třídy.</CardDescription>
+                    <CardTitle>Editor šablon rozvrhů</CardTitle>
+                    <CardDescription>Vytvářejte a upravujte šablony rozvrhů pro jednotlivé třídy.</CardDescription>
                 </div>
                 <div className="flex items-center gap-4">
                      <Select onValueChange={setSelectedClassId} value={selectedClassId || ''} disabled={classesLoading}>
@@ -261,13 +273,14 @@ function ScheduleEditor() {
                             {classes?.map(c => <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    <Button onClick={handleSave} disabled={!selectedClassId || isDataLoading}>
-                        <Save className="mr-2 h-4 w-4" /> Uložit rozvrh
+                    <Button onClick={handleSave} disabled={!selectedClassId || isDataLoading || isSaving}>
+                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                        Uložit šablonu
                     </Button>
                 </div>
             </CardHeader>
             <CardContent>
-                {isDataLoading ? (
+                {isDataLoading && !scheduleTemplate ? (
                     <div className="flex justify-center items-center h-48">Načítání dat...</div>
                 ) : (
                     <div className="border rounded-lg overflow-auto">
@@ -341,7 +354,7 @@ export default function RozvrhySuplovaniPage() {
             <Tabs defaultValue="rozvrhy">
                 <div className="flex justify-between items-center">
                     <TabsList>
-                        <TabsTrigger value="rozvrhy">Správa rozvrhů</TabsTrigger>
+                        <TabsTrigger value="rozvrhy">Šablony rozvrhů</TabsTrigger>
                         <TabsTrigger value="suplovani">Plánování suplování</TabsTrigger>
                         <TabsTrigger value="nahled">Náhled</TabsTrigger>
                     </TabsList>
