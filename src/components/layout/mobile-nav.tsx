@@ -9,14 +9,12 @@ import { Badge } from '../ui/badge';
 import {
   Sheet,
   SheetContent,
-  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
   SheetClose
 } from "@/components/ui/sheet"
 import { Button } from '../ui/button';
-import { Separator } from '../ui/separator';
 
 const mainNavItems = [
     { href: '/dashboard', icon: CalendarDays, label: 'Rozvrh' },
@@ -65,7 +63,8 @@ export function MobileNav() {
                 
                  <Sheet>
                     <SheetTrigger asChild>
-                         <div className="flex flex-col items-center justify-center gap-1 transition-colors w-full h-full text-muted-foreground hover:text-primary cursor-pointer">
+                         <div className={cn("flex flex-col items-center justify-center gap-1 transition-colors w-full h-full cursor-pointer",
+                          pathname.startsWith('/dashboard/profil') ? 'text-primary' : 'text-muted-foreground hover:text-primary')}>
                             <User className="h-6 w-6" />
                             <span className="text-xs">Profil</span>
                         </div>

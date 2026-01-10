@@ -16,6 +16,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useUnreadMessages } from '@/hooks/use-unread-messages';
 import { Badge } from '@/components/ui/badge';
 import { usePageTitleUpdater } from '@/hooks/usePageTitleUpdater';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 
 const mainNavLinks = [
     { name: 'Komunikace', href: '/dashboard/zpravy', icon: MessageSquare },
@@ -89,6 +90,7 @@ export default function DashboardLayout({
                     isActive && "text-primary bg-muted",
                     isSubMenu && "text-sm"
                 )}
+                onClick={() => isMobile && setIsMobileMenuOpen(false)}
             >
                 <div className="flex items-center gap-3">
                     {LinkIcon && <LinkIcon className="h-4 w-4" />}
@@ -165,14 +167,12 @@ export default function DashboardLayout({
                 <Menu className="h-5 w-5" />
                 <span className="sr-only">Toggle navigation menu</span>
             </Button>
-            {/* Mobile Sheet */}
-            {isMobileMenuOpen && (
-                 <div className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
-                    <div className="fixed inset-y-0 left-0 z-50 w-[280px] bg-card" onClick={(e) => e.stopPropagation()}>
-                        {sidebarContent}
-                    </div>
-                </div>
-            )}
+            
+            <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+              <SheetContent side="left" className="p-0">
+                {sidebarContent}
+              </SheetContent>
+            </Sheet>
            
           <div className="w-full flex-1">
             {/* Can add search bar here if needed */}

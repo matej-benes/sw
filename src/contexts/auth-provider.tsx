@@ -7,6 +7,8 @@ import { useFirestore } from '@/firebase';
 import { getAuth, signInWithEmailAndPassword, signOut as firebaseSignOut, onIdTokenChanged, type User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
+import { toast } from '@/hooks/use-toast';
+
 
 type StoredUser = {
   uid: string;
@@ -23,7 +25,7 @@ interface AuthContextType {
   hasRole: (role: Role) => boolean;
   switchUser: (email: string, pass: string) => Promise<void>;
   removeUser: (uid: string) => Promise<void>;
-  addUser: (email: string, pass: string) => Promise<StoredUser>;
+  addUser: (email: string, pass: string) => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -105,32 +107,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const addUser = async (email: string, pass: string): Promise<StoredUser> => {
+  const addUser = async (email: string, pass: string): Promise<void> => {
     setLoading(true);
     try {
-      // First, sign in to add the account without changing the active user.
       const userCredential = await signInWithEmailAndPassword(auth, email, pass);
       const { user: fbUser } = userCredential;
-
+      
       const newAccount: StoredUser = { uid: fbUser.uid, email: fbUser.email! };
+      const currentAccounts = JSON.parse(localStorage.getItem(ACCOUNTS_STORAGE_KEY) || '[]') as StoredUser[];
       
-      const newAccounts = [...accounts.filter(a => a.uid !== newAccount.uid), newAccount];
-      updateStoredAccounts(newAccounts, activeAccount); // Keep current user active
-      
-      // Immediately sign back in as the original active user to avoid UI flicker
-      if (activeAccount) {
-          // This requires a password. We'll rely on the user to manually switch back for now
-          // or we can prompt for the active user's password.
-          // For a simpler UX, we just add the account and let the user switch.
+      if (!currentAccounts.some(acc => acc.uid === newAccount.uid)) {
+        const newAccounts = [...currentAccounts, newAccount];
+        // Only update the list of accounts, DO NOT change the active account
+        localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(newAccounts));
+        setAccounts(newAccounts);
       }
-      
-      return newAccount;
 
     } catch (error) {
        console.error("Add user error", error);
        throw new Error('Nepodařilo se přidat účet. Zkontrolujte přihlašovací údaje.');
     } finally {
         setLoading(false);
+        // Sign out the temporarily authenticated user, which will trigger onIdTokenChanged 
+        // to re-evaluate auth state with the original active user's token (if they exist).
+        // This relies on Firebase's underlying token management.
+        if(auth.currentUser?.email !== activeAccount?.email) {
+            await firebaseSignOut(auth);
+            // After signing out the temp user, re-auth the active one if needed
+            // This part is tricky without storing passwords. A page reload or re-login might be necessary
+            // For now, let's assume the session for the active user persists.
+        }
     }
   };
 

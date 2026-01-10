@@ -96,7 +96,7 @@ export default function SwitchProfilePage() {
     
     useEffect(() => {
         if (isMobile === false) { 
-            router.replace('/dashboard/profil');
+            router.replace('/dashboard');
         }
     }, [isMobile, router]);
 

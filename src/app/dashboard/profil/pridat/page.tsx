@@ -27,7 +27,7 @@ export default function AddProfilePage() {
 
     useEffect(() => {
         if (isMobile === false) { 
-            router.replace('/dashboard/profil');
+            router.replace('/dashboard');
         }
     }, [isMobile, router]);
 
