@@ -154,9 +154,12 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             const userDoc = querySnapshot.docs[0];
             const userWithPin = { id: userDoc.id, ...userDoc.data() } as User;
             let userToRegister: User;
-            
-            if (userWithPin.roles.includes('rodic')) {
-                toast({
+
+            const isStudentPin = userWithPin.roles.includes('ziak');
+            const isParentPin = userWithPin.roles.includes('rodic');
+
+            if (isParentPin) {
+                 toast({
                     variant: 'destructive',
                     title: 'Nesprávný typ PINu',
                     description: 'Pro registraci rodičovského účtu zadejte PIN, který patří Vašemu dítěti.'
@@ -164,19 +167,42 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 setIsLoading(false);
                 return;
             }
-            
-            if (userWithPin.roles.includes('ziak') && userWithPin.studentId) {
-                const parentDocRef = doc(firestore, 'users', userWithPin.studentId);
-                const parentDoc = await getDoc(parentDocRef);
-                if (parentDoc.exists()) {
-                    userToRegister = { id: parentDoc.id, ...parentDoc.data() } as User;
+
+            if (isStudentPin) {
+                // Pin belongs to a student. Now, we need to find the associated parent account.
+                if (userWithPin.studentId) {
+                    const parentDocRef = doc(firestore, 'users', userWithPin.studentId);
+                    const parentDoc = await getDoc(parentDocRef);
+                    if (parentDoc.exists()) {
+                        userToRegister = { id: parentDoc.id, ...parentDoc.data() } as User;
+                    } else {
+                         throw new Error("Propojený rodičovský účet nebyl nalezen. Kontaktujte administrátora.");
+                    }
                 } else {
-                     throw new Error("Propojený rodičovský účet nebyl nalezen. Kontaktujte administrátora.");
+                    // This case means a student is registering themselves, OR a parent is registering
+                    // for a student who doesn't have a pre-assigned parent. This logic might need refinement
+                    // based on school's process. For now, we assume parent registration via student PIN.
+                    // Let's find a parent placeholder or decide what to do.
+                    // For now, let's assume if there's no studentId, the student registers themselves.
+                    // BUT the user story says parent registers with student PIN.
+                    // The most robust way is to find the pre-created (but unregistered) parent account.
+                    // This assumes a parent account was created with a link to the student.
+                     const parentQuery = query(usersRef, where("studentId", "==", userWithPin.id), where("roles", "array-contains", "rodic"));
+                     const parentSnapshot = await getDocs(parentQuery);
+                     if (!parentSnapshot.empty) {
+                         const parentDoc = parentSnapshot.docs[0];
+                         userToRegister = { id: parentDoc.id, ...parentDoc.data() } as User;
+                     } else {
+                         // Fallback or error: what if no parent account is pre-created?
+                         // For this flow, let's throw an error.
+                         throw new Error("Pro tohoto žáka nebyl nalezen žádný předvytvořený rodičovský účet. Kontaktujte prosím administrátora školy.");
+                     }
                 }
             } else {
+                // Pin belongs to a teacher, admin etc.
                 userToRegister = userWithPin;
             }
-
+            
             let tridaName: string | null = "N/A";
             const classIdForDisplay = userWithPin.tridaId || userToRegister.tridaId;
 
@@ -200,7 +226,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
         }
     };
 
-    const handleRegistrationSubmit = async (values: z.infer<typeof registrationSchema>) => {
+     const handleRegistrationSubmit = async (values: z.infer<typeof registrationSchema>) => {
         setIsLoading(true);
         if (!firestore || !registrationData) {
             toast({ variant: 'destructive', title: 'Chyba', description: 'Došlo k neočekávané chybě.' });
@@ -216,9 +242,11 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             const newFirebaseUser = userCredential.user;
 
             const isRegisteringParent = userToRegister.roles.includes('rodic');
-            const isRegisteringStudent = userToRegister.roles.includes('ziak');
 
-            // Step 2: Create the user document in Firestore with the new UID
+            // Step 2: Use a batch to perform multiple writes atomically
+            const batch = writeBatch(firestore);
+
+            // Operation A: Create the new user document with the new UID
             const newUserDocRef = doc(firestore, 'users', newFirebaseUser.uid);
             const finalUserData: Partial<User> = {
                 id: newFirebaseUser.uid,
@@ -226,29 +254,25 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 email: values.email,
                 roles: userToRegister.roles,
                 avatarUrl: userToRegister.avatarUrl || `https://picsum.photos/seed/${newFirebaseUser.uid}/100/100`,
-                tridaId: isRegisteringStudent ? userToRegister.tridaId : (isRegisteringParent ? userWithPin.tridaId : userToRegister.tridaId),
+                // If parent is registering, they get the class of their child (userWithPin)
+                tridaId: isRegisteringParent ? userWithPin.tridaId : userToRegister.tridaId,
+                 // If parent is registering, their studentId becomes the child's ID (userWithPin.id)
                 studentId: isRegisteringParent ? userWithPin.id : userToRegister.studentId,
             };
-            await setDoc(newUserDocRef, finalUserData);
+            batch.set(newUserDocRef, finalUserData);
 
-            // Step 3: Update relationships in a separate transaction (batch)
-            const batch = writeBatch(firestore);
-
-            // If a parent registered, update the student document to link to the new parent's UID.
+            // Operation B: If a parent registered, update the student document to link to the new parent's UID.
             if (isRegisteringParent) {
                 const studentRef = doc(firestore, 'users', userWithPin.id);
                 batch.update(studentRef, { studentId: newFirebaseUser.uid });
             }
-
-            // If a student registered, update their class membership list.
-            if (isRegisteringStudent && finalUserData.tridaId) {
-                const tridaRef = doc(firestore, 'tridy', finalUserData.tridaId);
-                // Remove old placeholder student ID and add the new UID
-                batch.update(tridaRef, { ziaciIds: arrayRemove(userWithPin.id) });
-                batch.update(tridaRef, { ziaciIds: arrayUnion(newFirebaseUser.uid) });
-            }
             
-            // Commit relationship updates
+            // Operation C: Delete the original placeholder document that was used for registration
+            const placeholderUserRef = doc(firestore, 'users', userToRegister.id);
+            batch.delete(placeholderUserRef);
+
+
+            // Commit the batch
             await batch.commit();
 
             toast({ title: 'Registrace úspěšná', description: 'Váš účet byl vytvořen, nyní se můžete přihlásit.' });
