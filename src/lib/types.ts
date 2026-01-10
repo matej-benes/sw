@@ -25,6 +25,22 @@ export interface Znamka {
   druhHodnoceni?: string;
 }
 
+export interface Grading {
+  id: string;
+  ucitelId: string;
+  tridaId: string;
+  predmetId: string;
+  predmetNazev: string;
+  datum: Timestamp;
+  hodina: string;
+  tema?: string;
+  znamky: {
+    studentId: string;
+    znamka: string;
+    slovniHodnoceni?: string;
+  }[];
+}
+
 
 export interface Grade {
   id: string;
