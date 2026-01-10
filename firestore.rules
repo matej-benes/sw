@@ -43,19 +43,15 @@ service cloud.firestore {
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
 
-      // This subcollection is now deprecated in favor of the top-level /gradings collection
-      // Rules are kept for legacy data but new data should not be written here.
-      match /znamky/{znamkaId} {
-         allow read: if false;
-         allow write: if false;
+      // Gradings are now stored in a subcollection of the user who created them (the teacher)
+      match /gradings/{gradingId} {
+        allow read, write: if isOwner(userId) || isAdmin();
       }
-    }
-    
-    match /gradings/{gradingId} {
-        allow get: if hasAnyRole(['ucitel', 'administrator']) || (isMyStudent(resource.data.studentId)); // Logic needs review based on final data model
-        allow list: if hasAnyRole(['ucitel', 'administrator']) && request.query.where.ucitelId == request.auth.uid;
-        allow create: if hasAnyRole(['ucitel', 'administrator']);
-        allow update, delete: if resource.data.ucitelId == request.auth.uid || isAdmin();
+
+      // This subcollection is now deprecated.
+      match /znamky/{znamkaId} {
+         allow read, write: if false;
+      }
     }
     
     match /tridy/{tridaId} {

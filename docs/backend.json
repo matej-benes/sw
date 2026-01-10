@@ -547,6 +547,16 @@
               "name": "userId",
               "description": "The unique identifier of the user."
             }
+          ],
+          "subcollections": [
+            {
+              "path": "/gradings/{gradingId}",
+              "definition": {
+                "entityName": "Grading",
+                "schema": { "$ref": "#/backend/entities/Grading" },
+                "description": "Stores grading events created by this user."
+              }
+            }
           ]
         }
       },
@@ -562,22 +572,6 @@
             {
               "name": "tridaId",
               "description": "The unique identifier of the class."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/gradings/{gradingId}",
-        "definition": {
-          "entityName": "Grading",
-          "schema": {
-            "$ref": "#/backend/entities/Grading"
-          },
-          "description": "Stores a single grading event, containing multiple student marks.",
-          "params": [
-            {
-              "name": "gradingId",
-              "description": "The unique identifier of the grading event."
             }
           ]
         }

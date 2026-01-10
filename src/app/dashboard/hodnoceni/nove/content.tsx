@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format, parseISO } from 'date-fns';
 import { cs } from 'date-fns/locale';
-import { useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
+import { useFirestore, useCollection, useDoc, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
 import { collection, doc, query, where, Timestamp, addDoc } from 'firebase/firestore';
 import type { Trida, User, Predmet, Rozvrh, Grading } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -154,7 +154,8 @@ function NewGradingContent() {
             }))
         };
 
-        await addDoc(collection(firestore, 'gradings'), newGrading);
+        const gradingsCollectionRef = collection(firestore, `users/${teacherUser.id}/gradings`);
+        await addDocumentNonBlocking(gradingsCollectionRef, newGrading);
         
         toast({
             title: 'Hodnocení uloženo',

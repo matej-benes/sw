@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { collection, query, where, doc, getDocs, orderBy, Timestamp } from 'firebase/firestore';
@@ -39,9 +39,9 @@ export default function HodnoceniPrehledPage() {
 
   const gradingsQuery = useMemoFirebase(() => {
     if (!firestore || !user?.id) return null;
+    // Query the subcollection for the specific user (teacher)
     return query(
-      collection(firestore, 'gradings'),
-      where('ucitelId', '==', user.id),
+      collection(firestore, `users/${user.id}/gradings`),
       orderBy('datum', 'desc')
     );
   }, [firestore, user?.id]);
@@ -49,8 +49,10 @@ export default function HodnoceniPrehledPage() {
   const { data: gradings, isLoading } = useCollection<Grading>(gradingsQuery);
 
   const handleDelete = async (gradingId: string) => {
-    if (!firestore) return;
-    await deleteDocumentNonBlocking(doc(firestore, `gradings`, gradingId));
+    if (!firestore || !user) return;
+    // Correctly reference the document in the subcollection
+    const docRef = doc(firestore, `users/${user.id}/gradings`, gradingId);
+    await deleteDocumentNonBlocking(docRef);
     toast({ title: "Hodnocení smazáno." });
   };
   
@@ -67,6 +69,7 @@ export default function HodnoceniPrehledPage() {
       if (!firestore || allStudentIds.length === 0) return null;
       return query(collection(firestore, 'users'), where('__name__', 'in', allStudentIds));
   }, [firestore, allStudentIds]);
+
   const { data: users, isLoading: usersLoading } = useCollection<User>(usersQuery);
 
   const studentNameMap = useMemo(() => {
