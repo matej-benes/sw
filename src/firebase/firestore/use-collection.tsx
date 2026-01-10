@@ -34,7 +34,14 @@ export interface InternalQuery extends Query<DocumentData> {
     path: {
       canonicalString(): string;
       toString(): string;
-    }
+    },
+    filters: {
+        _a: {
+            // This is a simplified representation of the internal filter structure
+            // It helps us check for undefined values in 'where' clauses
+            g: any[]; 
+        }
+    }[]
   }
 }
 
@@ -63,6 +70,23 @@ export function useCollection<T = any>(
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
   useEffect(() => {
+    // New safety check: Validate the query itself for `undefined` values in filters.
+    if (memoizedTargetRefOrQuery) {
+        const internalQuery = memoizedTargetRefOrQuery as unknown as InternalQuery;
+        if (internalQuery._query?.filters) {
+            for (const filter of internalQuery._query.filters) {
+                if (filter._a.g.includes(undefined)) {
+                    // One of the 'where' clause values is undefined. Stop here.
+                    setData(null);
+                    setIsLoading(false);
+                    setError(null);
+                    return;
+                }
+            }
+        }
+    }
+
+
     if (!memoizedTargetRefOrQuery) {
       setData(null);
       setIsLoading(false);
