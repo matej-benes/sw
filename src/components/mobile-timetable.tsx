@@ -14,6 +14,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import { useToast } from '@/hooks/use-toast';
+
 
 const dayNames = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
 const defaultTimeSlots = [
@@ -41,7 +43,9 @@ function TeacherLessonContextMenu({ children, lesson, dayInfo, period, classId }
 
     return (
         <DropdownMenu>
-            <DropdownMenuTrigger asChild onContextMenu={(e) => e.preventDefault()}>
+            <DropdownMenuTrigger asChild onContextMenu={(e) => {
+                e.preventDefault();
+            }}>
                 {children}
             </DropdownMenuTrigger>
             <DropdownMenuContent>
@@ -74,6 +78,7 @@ export function MobileTimetable({
     const today = new Date();
     const [selectedDate, setSelectedDate] = useState(today);
     const router = useRouter();
+    const { toast } = useToast();
 
     const timeSlots = schedules[0]?.timeSlots || defaultTimeSlots;
     
@@ -112,7 +117,13 @@ export function MobileTimetable({
 
 
     const handleLessonClick = (lessonData: any, classId: string) => {
-        if(isTeacher) return;
+        if(isTeacher) {
+            toast({
+                title: 'Akce hodiny',
+                description: 'Pro zobrazení akcí (např. zápis do třídnice) podržte prst na hodině.',
+            })
+            return;
+        }
 
         const lesson = lessonData.lesson || lessonData.substituted;
         if (!lesson) return;
