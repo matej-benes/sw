@@ -69,11 +69,21 @@ service cloud.firestore {
 
     match /messages/{messageId} {
       allow get: if isAuthenticated() && (request.auth.uid == resource.data.senderId || request.auth.uid in resource.data.recipientIds);
-      allow list: if isAuthenticated() && (request.query.where.field == "recipientIds" && request.query.where.op == "array-contains" && request.query.where.value == request.auth.uid) || (request.query.where.field == "senderId" && request.query.where.op == "==" && request.query.where.value == request.auth.uid);
+      
+      // Allow two specific list queries: one for received, one for sent.
+      allow list: if isAuthenticated() && 
+                    (
+                      (request.query.where.field == "recipientIds" && request.query.where.op == "array-contains" && request.query.where.value == request.auth.uid) ||
+                      (request.query.where.field == "senderId" && request.query.where.op == "==" && request.query.where.value == request.auth.uid)
+                    );
+
       allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid;
+      
+      // Allow a recipient to mark a message as read
       allow update: if isAuthenticated() && 
                     (request.auth.uid in resource.data.recipientIds && 
                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']));
+
       allow delete: if false; 
     }
 
