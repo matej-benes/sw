@@ -105,15 +105,16 @@ export interface Rozvrh {
     hodiny: (LessonBlock | null)[];
 }
 
+export interface StorableDay {
+    dayIndex: number;
+    lessons: (LessonBlock | null)[];
+}
+
 export interface ScheduleTemplate {
     id: string; // Should be the same as tridaId
     tridaId: string;
     timeSlots: string[];
-    // This is the format for Firestore to avoid nested arrays
-    days: {
-        dayIndex: number;
-        lessons: (LessonBlock | null)[];
-    }[];
+    days: StorableDay[];
 }
 
 
@@ -167,16 +168,11 @@ export interface Substitution {
     };
 }
 
-export interface Conversation {
-    id: string;
-    participantIds: string[];
-    lastMessage: string;
-    lastMessageAt: any; // Firestore Timestamp
-}
-
 export interface Message {
     id: string;
     senderId: string;
+    recipientIds: string[];
     text: string;
     createdAt: any; // Firestore Timestamp
+    readBy: string[]; // List of user IDs who have read the message
 }

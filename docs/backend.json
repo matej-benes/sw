@@ -354,43 +354,43 @@
             "timeSlots": { "type": "array", "items": { "type": "string" } },
             "days": { 
                 "type": "array", 
-                "description": "A 2D array representing the week's schedule. Outer array index is day of week (0=Mon), inner is period.",
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "oneOf": [
-                            { "$ref": "#/backend/entities/LessonBlock" },
-                            { "type": "null" }
-                        ]
-                    }
-                }
+                "description": "An array of day objects representing the week's schedule.",
+                "items": { "$ref": "#/backend/entities/StorableDay" }
             }
         },
         "required": ["id", "tridaId", "timeSlots", "days"]
     },
-    "Conversation": {
-      "title": "Conversation",
-      "type": "object",
-      "description": "Represents a messaging conversation between two or more users.",
-      "properties": {
-        "id": { "type": "string" },
-        "participantIds": { "type": "array", "items": { "type": "string" } },
-        "lastMessage": { "type": "string" },
-        "lastMessageAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["id", "participantIds"]
+    "StorableDay": {
+        "title": "StorableDay",
+        "type": "object",
+        "description": "Represents a single day's schedule to be stored in Firestore.",
+        "properties": {
+            "dayIndex": { "type": "number" },
+            "lessons": {
+                "type": "array",
+                "items": {
+                    "oneOf": [
+                        { "$ref": "#/backend/entities/LessonBlock" },
+                        { "type": "null" }
+                    ]
+                }
+            }
+        },
+        "required": ["dayIndex", "lessons"]
     },
     "Message": {
       "title": "Message",
       "type": "object",
-      "description": "Represents a single message within a conversation.",
+      "description": "Represents a single message between users.",
       "properties": {
         "id": { "type": "string" },
         "senderId": { "type": "string" },
+        "recipientIds": { "type": "array", "items": { "type": "string" } },
         "text": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "readBy": { "type": "array", "items": { "type": "string" }, "description": "List of user IDs who have read the message." }
       },
-      "required": ["id", "senderId", "text", "createdAt"]
+      "required": ["id", "senderId", "recipientIds", "text", "createdAt"]
     }
   },
   "auth": {
@@ -562,24 +562,12 @@
         }
       },
       {
-        "path": "/conversations/{conversationId}",
-        "definition": {
-          "entityName": "Conversation",
-          "schema": { "$ref": "#/backend/entities/Conversation" },
-          "description": "Top-level collection for conversations. Each document contains metadata about a conversation.",
-          "params": [
-            { "name": "conversationId", "description": "The unique ID of the conversation." }
-          ]
-        }
-      },
-      {
-        "path": "/conversations/{conversationId}/messages/{messageId}",
+        "path": "/messages/{messageId}",
         "definition": {
           "entityName": "Message",
           "schema": { "$ref": "#/backend/entities/Message" },
-          "description": "Sub-collection under each conversation document to store individual messages.",
+          "description": "Collection for all messages. Each document is a single message with its own recipients.",
           "params": [
-            { "name": "conversationId", "description": "The ID of the parent conversation." },
             { "name": "messageId", "description": "The unique ID of the message." }
           ]
         }
