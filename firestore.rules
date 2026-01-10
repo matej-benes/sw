@@ -1,8 +1,74 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+    
+    // Pravidla pro ostatní kolekce - zde je prostor pro jejich budoucí zabezpečení.
+    // Prozatím necháme přístup otevřený pro vývoj, ale v produkci by měly být zabezpečeny.
+    match /users/{userId} {
+      allow read, write: if true; // TODO: Zabezpečit
+    }
+    match /tridy/{tridaId} {
+      allow read, write: if true; // TODO: Zabezpečit
+    }
+    match /predmety/{predmetId} {
+        allow read, write: if true; // TODO: Zabezpečit
+    }
+    match /ucebny/{ucebnaId} {
+        allow read, write: if true; // TODO: Zabezpečit
+    }
+     match /znamky/{znamkaId} {
+        allow read, write: if true; // TODO: Zabezpečit
+    }
+    match /rozvrhy/{rozvrhId} {
+        allow read, write: if true; // TODO: Zabezpečit
+    }
+    match /scheduleTemplates/{templateId} {
+        allow read, write: if true; // TODO: Zabezpečit
+    }
+    match /oznameni/{oznameniId} {
+        allow read, write: if true; // TODO: Zabezpečit
+    }
+    match /poznamky-zaku/{poznamkaId} {
+        allow read, write: if true; // TODO: Zabezpečit
+    }
+    match /udalosti/{udalostId} {
+        allow read, write: if true; // TODO: Zabezpečit
+    }
+    match /suplovani/{substitutionId} {
+        allow read, write: if true; // TODO: Zabezpečit
+    }
+
+
+    // Zabezpečená pravidla pro kolekci 'messages'
+    match /messages/{messageId} {
+    
+      // Kdo může číst zprávy?
+      // Uživatel může číst (get) dokument, pokud je odesílatelem nebo je v seznamu příjemců.
+      // Uživatel může vypisovat (list) zprávy, pouze pokud filtruje podle svého ID v poli příjemců 
+      // nebo jako odesílatel. To zabraňuje stažení všech zpráv a řeší vaši chybu.
+      allow read: if request.auth != null && 
+                   (request.auth.uid == resource.data.senderId || request.auth.uid in resource.data.recipientIds);
+
+      // Kdo může vytvářet zprávy?
+      // Jakýkoliv přihlášený uživatel, pokud je ID odesílatele shodné s jeho vlastním ID.
+      // Zároveň text zprávy nesmí být prázdný a seznam příjemců musí existovat.
+      allow create: if request.auth != null && 
+                     request.auth.uid == request.resource.data.senderId &&
+                     request.resource.data.text is string &&
+                     request.resource.data.text.size() > 0 &&
+                     request.resource.data.recipientIds is list;
+
+      // Kdo může aktualizovat zprávy?
+      // Uživatel může aktualizovat zprávu POUZE za účelem přidání svého ID do pole 'readBy'.
+      // To umožňuje označit zprávu jako přečtenou, ale nic jiného měnit nelze.
+      allow update: if request.auth != null &&
+                     request.auth.uid in resource.data.recipientIds &&
+                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']) &&
+                     request.auth.uid in request.resource.data.readBy;
+
+      // Nikdo nemůže mazat zprávy.
+      allow delete: if false;
     }
   }
 }
