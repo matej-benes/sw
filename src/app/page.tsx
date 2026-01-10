@@ -151,8 +151,8 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 return;
             }
 
-            const userWithPinDoc = querySnapshot.docs[0];
-            const userWithPin = { id: userWithPinDoc.id, ...userWithPinDoc.data() } as User;
+            const userDoc = querySnapshot.docs[0];
+            const userWithPin = { id: userDoc.id, ...userDoc.data() } as User;
             
             // If user with PIN is a parent, they must use their child's PIN.
             if (userWithPin.roles.includes('rodic')) {
@@ -184,7 +184,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             
               let tridaName: string | null = "N/A";
               // Get class name for student, or for teacher if they have a class
-              const classId = userWithPin.tridaId;
+              const classId = userToRegister.tridaId || userWithPin.tridaId;
 
               if (classId) {
                 const tridaRef = doc(firestore, 'tridy', classId);
@@ -216,6 +216,8 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
         try {
             const batch = writeBatch(firestore);
             
+            // Temporarily use createUserWithEmailAndPassword to get a new UID.
+            // We will immediately delete this user from Auth and create our own record.
             const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
             const firebaseUser = userCredential.user;
 
@@ -314,7 +316,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                              {registrationData.user.roles.includes('rodic') && registrationData.user.studentId && (
                                 <p className="text-muted-foreground text-xs">Registrujete se jako rodič. Jméno dítěte se zobrazí po přihlášení.</p>
                             )}
-                             {registrationData.user.roles.includes('ziak') && (
+                             {(registrationData.user.roles.includes('ziak') || registrationData.user.roles.includes('rodic')) && (
                                 <p><strong>Třída:</strong> {registrationData.tridaName || 'N/A'}</p>
                             )}
                         </div>
@@ -360,6 +362,23 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
 
 export default function LoginPage() {
   const [isRegistering, setIsRegistering] = useState(false);
+  const router = useRouter();
+  const { user, loading } = useAuth();
+  
+  useEffect(() => {
+    if (user && !loading) {
+      router.push('/dashboard');
+    }
+  }, [user, loading, router]);
+
+
+  if(loading || user) {
+     return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <div className="h-16 w-16 animate-spin rounded-full border-4 border-dashed border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4">
