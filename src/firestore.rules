@@ -32,7 +32,9 @@ service cloud.firestore {
     
     function isMyClassStudent(studentId) {
         let studentDoc = get(/databases/$(database)/documents/users/$(studentId));
-        return studentDoc.data.tridaId != null && isClassTeacher(studentDoc.data.tridaId);
+        let studentClassId = studentDoc.data.tridaId;
+        // Check if student has a class and if the requesting user is a teacher of that class
+        return studentClassId != null && isClassTeacher(studentClassId);
     }
 
     match /users/{userId} {
@@ -42,16 +44,23 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       match /znamky/{znamkaId} {
+         // A user can get their own grade. A parent can get their child's grade. A teacher can get a grade of a student in their class. An admin can get any grade.
          allow get: if isAuthenticated() && (isOwner(userId) || isMyStudent(userId) || isMyClassStudent(userId) || isAdmin());
-         allow list: if isAuthenticated() && (isOwner(userId) || isMyStudent(userId) || isMyClassStudent(userId) || isAdmin());
+         // A user can list their own grades. A parent can list their child's grades.
+         allow list: if isAuthenticated() && (isOwner(userId) || isMyStudent(userId));
+         // Only teachers and admins can create grades. Further check that they are creating it for a student in their class is done in the collection group rule.
          allow create: if hasAnyRole(['ucitel', 'administrator']);
-         allow update, delete: if hasAnyRole(['ucitel', 'administrator']) && resource.data.ucitelId == request.auth.uid;
+         // Only the teacher who gave the grade or an admin can update/delete it.
+         allow update, delete: if (hasAnyRole(['ucitel', 'administrator']) && resource.data.ucitelId == request.auth.uid) || isAdmin();
       }
     }
     
-    // Allow teachers to query their own grades across all students
+    // This collection group query allows a teacher to query for all grades they've given, across all students.
     match /{path=**}/znamky/{znamkaId} {
-      allow list: if hasAnyRole(['ucitel', 'administrator']) && resource.data.ucitelId == request.auth.uid;
+      // Allow a teacher to list grades if they are the one who created them.
+      // Also check if the student belongs to a class they teach.
+      allow list: if isAuthenticated() && hasAnyRole(['ucitel', 'administrator']) && request.query.where.ucitelId == request.auth.uid && isMyClassStudent(request.query.where.studentId);
+      allow get: if isAuthenticated() && (isMyClassStudent(resource.data.studentId) || isAdmin());
     }
 
     match /tridy/{tridaId} {

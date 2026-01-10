@@ -129,7 +129,7 @@ export default function HodnoceniPrehledPage() {
       
       const [classesSnap, substituteClassesSnap] = await Promise.all([
         getDocs(classesQuery),
-        getDocs(substituteClassesQuery)
+        getDocs(substituteClassesSnap)
       ]);
       
       const allTeacherClasses = [...classesSnap.docs, ...substituteClassesSnap.docs]
@@ -152,10 +152,21 @@ export default function HodnoceniPrehledPage() {
         return;
       }
       
-      // 3. Fetch all grades created by this teacher
-      const gradesQuery = query(collectionGroup(firestore, 'znamky'), where('ucitelId', '==', user.id));
-      const gradesSnap = await getDocs(gradesQuery);
-      const allTeacherGrades = gradesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Znamka));
+      // 3. Fetch all grades created by this teacher for students in their classes
+      const allTeacherGrades: Znamka[] = [];
+      // To avoid hitting 'in' query limit of 30, we might need to batch this.
+      // For now, assuming student count is reasonable.
+      if (allStudentIds.length > 0) {
+          const gradesQuery = query(
+            collectionGroup(firestore, 'znamky'), 
+            where('studentId', 'in', allStudentIds),
+            where('ucitelId', '==', user.id)
+          );
+          const gradesSnap = await getDocs(gradesQuery);
+          gradesSnap.forEach(doc => {
+            allTeacherGrades.push({ id: doc.id, ...doc.data() } as Znamka);
+          });
+      }
       
       // 4. Fetch the user data for the relevant students
       const uniqueStudentIds = [...new Set(allTeacherGrades.map(g => g.studentId))];
