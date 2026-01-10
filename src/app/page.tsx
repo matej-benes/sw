@@ -14,8 +14,8 @@ import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, getDocs, doc, getDoc, writeBatch } from 'firebase/firestore';
-import type { User } from '@/lib/types';
+import { collection, query, where, getDocs, doc, getDoc, writeBatch, setDoc, updateDoc, arrayRemove, arrayUnion } from 'firebase/firestore';
+import type { User, Trida } from '@/lib/types';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 
 
@@ -154,9 +154,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             const userDoc = querySnapshot.docs[0];
             const userWithPin = { id: userDoc.id, ...userDoc.data() } as User;
             let userToRegister: User;
-            let studentForParent: User | null = null;
             
-            // Scenario 1: PIN belongs to a parent. This is invalid.
             if (userWithPin.roles.includes('rodic')) {
                 toast({
                     variant: 'destructive',
@@ -167,9 +165,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 return;
             }
             
-            // Scenario 2: PIN belongs to a student. This means a parent is registering.
             if (userWithPin.roles.includes('ziak') && userWithPin.studentId) {
-                studentForParent = userWithPin;
                 const parentDocRef = doc(firestore, 'users', userWithPin.studentId);
                 const parentDoc = await getDoc(parentDocRef);
                 if (parentDoc.exists()) {
@@ -178,10 +174,8 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                      throw new Error("Propojený rodičovský účet nebyl nalezen. Kontaktujte administrátora.");
                 }
             } else {
-            // Scenario 3: PIN belongs to a student (without a linked parent yet) or a teacher/staff
                 userToRegister = userWithPin;
             }
-
 
             let tridaName: string | null = "N/A";
             const classIdForDisplay = userWithPin.tridaId || userToRegister.tridaId;
@@ -217,47 +211,44 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
         const { userToRegister, userWithPin } = registrationData;
 
         try {
+            // Step 1: Create the Firebase Auth user
             const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
             const newFirebaseUser = userCredential.user;
-            
-            const batch = writeBatch(firestore);
 
-            const finalUserData: User = {
+            const isRegisteringParent = userToRegister.roles.includes('rodic');
+            const isRegisteringStudent = userToRegister.roles.includes('ziak');
+
+            // Step 2: Create the user document in Firestore with the new UID
+            const newUserDocRef = doc(firestore, 'users', newFirebaseUser.uid);
+            const finalUserData: Partial<User> = {
                 id: newFirebaseUser.uid,
                 name: userToRegister.name,
                 email: values.email,
                 roles: userToRegister.roles,
                 avatarUrl: userToRegister.avatarUrl || `https://picsum.photos/seed/${newFirebaseUser.uid}/100/100`,
-                tridaId: userToRegister.roles.includes('ziak') ? userToRegister.tridaId : userWithPin.tridaId,
-                studentId: userToRegister.roles.includes('rodic') ? userWithPin.id : undefined,
+                tridaId: isRegisteringStudent ? userToRegister.tridaId : (isRegisteringParent ? userWithPin.tridaId : userToRegister.tridaId),
+                studentId: isRegisteringParent ? userWithPin.id : userToRegister.studentId,
             };
+            await setDoc(newUserDocRef, finalUserData);
 
-            const newUserDocRef = doc(firestore, 'users', newFirebaseUser.uid);
-            batch.set(newUserDocRef, finalUserData);
+            // Step 3: Update relationships in a separate transaction (batch)
+            const batch = writeBatch(firestore);
 
-            // Delete the original pre-registration placeholder user(s)
-            batch.delete(doc(firestore, 'users', userToRegister.id));
-            if (userToRegister.id !== userWithPin.id) {
-                 batch.delete(doc(firestore, 'users', userWithPin.id));
-            }
-
-            // If a parent registered, update student's studentId to point to the new parent's UID
-            if(finalUserData.roles.includes('rodic')) {
+            // If a parent registered, update the student document to link to the new parent's UID.
+            if (isRegisteringParent) {
                 const studentRef = doc(firestore, 'users', userWithPin.id);
                 batch.update(studentRef, { studentId: newFirebaseUser.uid });
             }
 
-            // If a student registers, update their class membership
-            if (finalUserData.roles.includes('ziak') && finalUserData.tridaId) {
+            // If a student registered, update their class membership list.
+            if (isRegisteringStudent && finalUserData.tridaId) {
                 const tridaRef = doc(firestore, 'tridy', finalUserData.tridaId);
-                const tridaDoc = await getDoc(tridaRef);
-                if (tridaDoc.exists()) {
-                    const ziaciIds = (tridaDoc.data().ziaciIds || []).filter((id: string) => id !== userWithPin.id);
-                    ziaciIds.push(newFirebaseUser.uid);
-                    batch.update(tridaRef, { ziaciIds: ziaciIds });
-                }
+                // Remove old placeholder student ID and add the new UID
+                batch.update(tridaRef, { ziaciIds: arrayRemove(userWithPin.id) });
+                batch.update(tridaRef, { ziaciIds: arrayUnion(newFirebaseUser.uid) });
             }
-
+            
+            // Commit relationship updates
             await batch.commit();
 
             toast({ title: 'Registrace úspěšná', description: 'Váš účet byl vytvořen, nyní se můžete přihlásit.' });
@@ -275,6 +266,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             setIsLoading(false);
         }
     };
+
 
     return (
         <Card className="w-full max-w-sm">
