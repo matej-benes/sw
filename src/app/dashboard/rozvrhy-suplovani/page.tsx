@@ -244,7 +244,10 @@ function ScheduleEditor() {
     const { data: scheduleTemplate, isLoading: templateLoading } = useDoc<ScheduleTemplate>(scheduleTemplateRef);
 
 
-    const uciteleQuery = useMemoFirebase(() => firestore ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore]);
+    const uciteleQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, "users"), where("roles", "array-contains", "ucitel"));
+    }, [firestore]);
     const { data: teachers, isLoading: teachersLoading } = useCollection<User>(uciteleQuery);
 
     const predmetyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'predmety') : null, [firestore]);
@@ -956,3 +959,5 @@ export default function RozvrhySuplovaniPage() {
         </div>
     );
 }
+
+    
