@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Menu, ChevronDown, BookCopy, Settings, Users, School, Book, FileQuestion, Home, CalendarDays, MessageSquare, LayoutGrid } from 'lucide-react';
+import { Menu, ChevronDown, BookCopy, Settings, Users, School, Book, FileQuestion, Home, CalendarDays, MessageSquare, LayoutGrid, Replace } from 'lucide-react';
 import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
@@ -18,6 +18,10 @@ import { useIsMobile } from '@/hooks/use-mobile';
 const adminNavLinks = [
     { name: 'Studijní materiály', href: '/dashboard/materialy', icon: FileQuestion },
 ];
+
+const teacherNavLinks = [
+    { name: "Rozvrhy a suplování", href: "/dashboard/rozvrhy-suplovani", icon: Replace },
+]
 
 const spravaSystemuLinks = [
      { name: "Evidence osob", href: "/dashboard/sprava-systemu/evidence-osob", icon: Users },
@@ -36,6 +40,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const isAdministrator = hasRole('administrator');
+  const isTeacher = hasRole('ucitel');
   const isMobile = useIsMobile();
 
 
@@ -84,6 +89,12 @@ export default function DashboardLayout({
         </div>
         <div className="flex-1">
             <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
+                 {(isTeacher || isAdministrator) && (
+                    <>
+                        <div className='my-2'></div>
+                        {renderNavLinks(teacherNavLinks)}
+                    </>
+                 )}
                 {isAdministrator && (
                     <>
                         <div className='my-2'></div>
