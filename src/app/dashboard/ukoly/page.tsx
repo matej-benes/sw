@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { useSearchParams } from 'next/navigation';
 
 const homeworkSchema = z.object({
   tridaId: z.string().min(1, "Vyberte třídu."),
@@ -44,9 +45,33 @@ function TeacherHomeworkForm() {
     const { user } = useAuth();
     const firestore = useFirestore();
     const { toast } = useToast();
-    const { handleSubmit, control, reset, formState: { errors } } = useForm<HomeworkFormData>({
+    const searchParams = useSearchParams();
+
+    // From query params
+    const tridaIdParam = searchParams.get('tridaId');
+    const predmetIdParam = searchParams.get('predmetId');
+    const datumZadaniParam = searchParams.get('datumZadani');
+
+    const { handleSubmit, control, reset, setValue, formState: { errors } } = useForm<HomeworkFormData>({
         resolver: zodResolver(homeworkSchema),
+        defaultValues: {
+            tridaId: tridaIdParam || '',
+            predmetId: predmetIdParam || '',
+            nazev: '',
+            popis: '',
+        }
     });
+
+     useEffect(() => {
+        setValue('tridaId', tridaIdParam || '');
+        setValue('predmetId', predmetIdParam || '');
+        if (datumZadaniParam) {
+            // The date for deadline can be set to a week from the assignment date for example
+            const deadline = new Date(datumZadaniParam);
+            deadline.setDate(deadline.getDate() + 7);
+            setValue('terminOdevzdani', deadline);
+        }
+    }, [tridaIdParam, predmetIdParam, datumZadaniParam, setValue]);
 
     const teacherClassesQuery = useMemoFirebase(() => {
         if (!firestore || !user) return null;
@@ -68,7 +93,7 @@ function TeacherHomeworkForm() {
 
         await addDocumentNonBlocking(collection(firestore, 'ukoly'), newHomework);
         toast({ title: 'Domácí úkol zadán', description: `Úkol "${data.nazev}" byl úspěšně zadán.` });
-        reset();
+        reset({ tridaId: '', predmetId: '', nazev: '', popis: '' });
     };
     
     return (
@@ -151,6 +176,7 @@ function HomeworkList() {
     const getTeacherName = (id: string) => teachers?.find(t => t.id === id)?.name || 'Neznámý učitel';
     
     const handleDelete = async (id: string) => {
+        if (!firestore) return;
         await deleteDocumentNonBlocking(doc(firestore, 'ukoly', id));
     }
     
@@ -216,7 +242,7 @@ function HomeworkList() {
     )
 }
 
-export default function DomaciUkolyPage() {
+function UkolyContent() {
     const { hasRole, loading } = useAuth();
 
     if (loading) {
@@ -232,4 +258,11 @@ export default function DomaciUkolyPage() {
     );
 }
 
-    
+
+export default function DomaciUkolyPage() {
+    return (
+        <React.Suspense fallback={<div>Načítání...</div>}>
+            <UkolyContent />
+        </React.Suspense>
+    )
+}

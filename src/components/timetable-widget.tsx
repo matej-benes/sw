@@ -109,7 +109,11 @@ function LessonContextMenu({ children, lesson, dayInfo, period, classId }: { chi
                 <DropdownMenuItem>Informace k výuce</DropdownMenuItem>
                 <DropdownMenuItem>Přiložit výukový zdroj</DropdownMenuItem>
                 <DropdownMenuItem>Odeslat zprávu</DropdownMenuItem>
-                <DropdownMenuItem>Nový domácí úkol</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleNavigation('/dashboard/ukoly', {
+                    tridaId: lesson.classId,
+                    predmetId: lesson.subjectId,
+                    datumZadani: format(dayInfo.fullDate, 'yyyy-MM-dd'),
+                })}>Nový domácí úkol</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>Vytvořit online schůzku</DropdownMenuItem>
             </DropdownMenuContent>

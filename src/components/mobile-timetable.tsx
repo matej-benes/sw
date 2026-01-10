@@ -61,6 +61,11 @@ function TeacherLessonContextMenu({ children, lesson, dayInfo, period, classId }
                     datum: format(dayInfo.fullDate, 'yyyy-MM-dd'),
                     hodina: (period + 1).toString()
                 })}>Zadat hodnocení</DropdownMenuItem>
+                 <DropdownMenuItem onClick={() => handleNavigation('/dashboard/ukoly', {
+                    tridaId: lesson.classId,
+                    predmetId: lesson.subjectId,
+                    datumZadani: format(dayInfo.fullDate, 'yyyy-MM-dd'),
+                })}>Nový domácí úkol</DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
     );
