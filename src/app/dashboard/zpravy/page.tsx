@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { Loader2, Send, UserPlus, Inbox, Send as SendIcon, Pencil, CheckCircle, Eye } from 'lucide-react';
+import { Loader2, Send, UserPlus, Inbox, Send as SendIcon, Pencil, CheckCircle, Eye, Reply } from 'lucide-react';
 import { useFirestore, useCollection, useDoc, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
 import { collection, doc, query, where, Timestamp, updateDoc, arrayUnion } from 'firebase/firestore';
 import type { Trida, User, Message } from '@/lib/types';
@@ -113,19 +113,41 @@ function RecipientDialog({ isOpen, onOpenChange, allUsers, allClasses, selectedR
   )
 }
 
-function MessageDetailDialog({ message, isOpen, onOpenChange, allUsers }: { message: Message | null, isOpen: boolean, onOpenChange: (open: boolean) => void, allUsers: User[] }) {
+function MessageDetailDialog({ message, isOpen, onOpenChange, allUsers, onReply }: { message: Message | null, isOpen: boolean, onOpenChange: (open: boolean) => void, allUsers: User[], onReply: (recipientId: string, replyText: string) => Promise<void> }) {
+  const [replyText, setReplyText] = useState('');
+  const [isReplying, setIsReplying] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (!isOpen) {
+        setReplyText('');
+    }
+  }, [isOpen]);
+    
   if (!message) return null;
 
   const sender = allUsers.find(u => u.id === message.senderId);
   const recipients = message.recipientIds.map(id => allUsers.find(u => u.id === id)?.name || 'Neznámý').join(', ');
   
+  const handleReply = async () => {
+    if (!sender || !replyText.trim()) {
+        toast({ variant: 'destructive', title: 'Text odpovědi nesmí být prázdný.' });
+        return;
+    }
+    setIsReplying(true);
+    await onReply(sender.id, replyText);
+    setIsReplying(false);
+    setReplyText('');
+    onOpenChange(false);
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl">
             <DialogHeader>
                 <DialogTitle>Detail zprávy</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
                 <div className="text-sm">
                     <p><span className="font-semibold text-muted-foreground">Odesílatel:</span> {sender?.name}</p>
                     <p><span className="font-semibold text-muted-foreground">Příjemci:</span> {recipients}</p>
@@ -147,11 +169,27 @@ function MessageDetailDialog({ message, isOpen, onOpenChange, allUsers }: { mess
                     </div>
                   </div>
                 )}
+
+                <Separator />
+                <div className="space-y-2 pt-4">
+                    <Label htmlFor="quick-reply">Rychlá odpověď</Label>
+                    <Textarea 
+                        id="quick-reply"
+                        rows={4}
+                        placeholder={`Napsat odpověď pro ${sender?.name}...`}
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                    />
+                </div>
             </div>
              <DialogFooter>
                 <DialogClose asChild>
                     <Button variant="outline">Zavřít</Button>
                 </DialogClose>
+                <Button onClick={handleReply} disabled={isReplying}>
+                    {isReplying ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Reply className="mr-2 h-4 w-4" />}
+                    Odeslat odpověď
+                </Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>
@@ -190,12 +228,17 @@ export default function ZpravyPage() {
   const { data: sentMessagesData, isLoading: sentLoading } = useCollection<Message>(sentMessagesQuery);
 
   const receivedMessages = useMemo(() => 
-    receivedMessagesData?.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()) || [], 
+    receivedMessagesData?.sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis()) || [], 
   [receivedMessagesData]);
 
   const sentMessages = useMemo(() => 
-    sentMessagesData?.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()) || [],
+    sentMessagesData?.sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis()) || [],
   [sentMessagesData]);
+
+  const unreadMessagesCount = useMemo(() => {
+    if (!user || !receivedMessages) return 0;
+    return receivedMessages.filter(msg => !msg.readBy.includes(user.id)).length;
+  }, [user, receivedMessages]);
 
 
   const handleSendMessage = async () => {
@@ -252,6 +295,26 @@ export default function ZpravyPage() {
     }
   };
 
+  const handleReplyMessage = async (recipientId: string, replyText: string) => {
+    if (!user || !firestore) return;
+
+    const newMessage: Omit<Message, 'id'> = {
+        senderId: user.id,
+        recipientIds: [recipientId],
+        text: replyText,
+        createdAt: Timestamp.now(),
+        readBy: [],
+    };
+    try {
+        await addDocumentNonBlocking(collection(firestore, 'messages'), newMessage);
+        toast({ title: 'Odpověď odeslána' });
+    } catch (e) {
+        console.error(e);
+        toast({ variant: 'destructive', title: 'Chyba při odesílání odpovědi' });
+    }
+  };
+
+
   const handleToggleRecipient = (recipientId: string) => {
     setSelectedRecipients(prev =>
       prev.includes(recipientId)
@@ -300,7 +363,12 @@ export default function ZpravyPage() {
         <Tabs defaultValue="inbox" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="new"><Pencil className="mr-2 h-4 w-4" />Nová zpráva</TabsTrigger>
-                <TabsTrigger value="inbox"><Inbox className="mr-2 h-4 w-4" />Doručené</TabsTrigger>
+                <TabsTrigger value="inbox" className="relative">
+                    <Inbox className="mr-2 h-4 w-4" />Doručené
+                    {unreadMessagesCount > 0 && (
+                        <Badge className="absolute -top-2 -right-2 h-5 w-5 justify-center p-0">{unreadMessagesCount}</Badge>
+                    )}
+                </TabsTrigger>
                 <TabsTrigger value="sent"><SendIcon className="mr-2 h-4 w-4" />Odeslané</TabsTrigger>
             </TabsList>
             
@@ -424,6 +492,7 @@ export default function ZpravyPage() {
           isOpen={isDetailOpen}
           onOpenChange={setIsDetailOpen}
           allUsers={allUsers}
+          onReply={handleReplyMessage}
         />
       )}
     </>

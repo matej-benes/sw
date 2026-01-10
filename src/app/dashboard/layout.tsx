@@ -4,7 +4,7 @@ import { UserNav } from '@/components/layout/user-nav';
 import { Logo } from '@/components/logo';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Menu, ChevronDown, BookCopy, Settings, Users, School, Book, FileQuestion, Home, CalendarDays, MessageSquare, LayoutGrid, Replace, PencilRuler } from 'lucide-react';
 import Link from 'next/link';
@@ -13,7 +13,8 @@ import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
 import { MobileNav } from '@/components/layout/mobile-nav';
 import { useIsMobile } from '@/hooks/use-mobile';
-
+import { useUnreadMessages } from '@/hooks/use-unread-messages';
+import { Badge } from '@/components/ui/badge';
 
 const mainNavLinks = [
     { name: 'Komunikace', href: '/dashboard/zpravy', icon: MessageSquare },
@@ -41,6 +42,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const { user, loading, hasRole } = useAuth();
+  const { unreadCount } = useUnreadMessages();
   const router = useRouter();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -67,18 +69,24 @@ export default function DashboardLayout({
     links.map(link => {
         const isActive = pathname.startsWith(link.href);
         const LinkIcon = link.icon;
+        const isCommunication = link.name === 'Komunikace';
         return (
             <Link 
                 key={link.name} 
                 href={link.href} 
                 className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary",
+                    "flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary",
                     isActive && "text-primary bg-muted",
                     isSubMenu && "text-sm"
                 )}
             >
-                {LinkIcon && <LinkIcon className="h-4 w-4" />}
-                {link.name}
+                <div className="flex items-center gap-3">
+                    {LinkIcon && <LinkIcon className="h-4 w-4" />}
+                    {link.name}
+                </div>
+                {isCommunication && unreadCount > 0 && (
+                    <Badge className="h-5">{unreadCount}</Badge>
+                )}
             </Link>
         )
     })
