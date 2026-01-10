@@ -154,6 +154,7 @@ function MessageDetailDialog({ message, isOpen, onOpenChange, allUsers }: { mess
                 </DialogClose>
             </DialogFooter>
         </DialogContent>
+    </Dialog>
   );
 }
 
@@ -177,18 +178,12 @@ export default function ZpravyPage() {
   
   const receivedMessagesQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
-    return query(
-        collection(firestore, 'messages'),
-        where('recipientIds', 'array-contains', user.id)
-    );
+    return query(collection(firestore, 'messages'), where('recipientIds', 'array-contains', user.id));
   }, [firestore, user]);
 
   const sentMessagesQuery = useMemoFirebase(() => {
       if (!firestore || !user) return null;
-      return query(
-          collection(firestore, 'messages'),
-          where('senderId', '==', user.id)
-      );
+      return query(collection(firestore, 'messages'), where('senderId', '==', user.id));
   }, [firestore, user]);
   
   const { data: receivedMessagesData, isLoading: receivedLoading } = useCollection<Message>(receivedMessagesQuery);
