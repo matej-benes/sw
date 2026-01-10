@@ -1,8 +1,8 @@
 'use client';
 
-import type { User } from '@/lib/types';
+import type { User, Role } from '@/lib/types';
 import { useRouter, usePathname } from 'next/navigation';
-import React, { createContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useUser as useFirebaseUser, useFirestore } from '@/firebase';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -13,7 +13,7 @@ interface AuthContextType {
   signIn: (email: string, pass: string) => Promise<void>;
   signOut: () => void;
   loading: boolean;
-  hasRole: (role: User['roles'][number]) => boolean;
+  hasRole: (role: Role) => boolean;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -27,32 +27,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const firestore = useFirestore();
 
   useEffect(() => {
-    setLoading(firebaseUserLoading);
-    if (!firebaseUserLoading) {
-      if (firebaseUser) {
-        // User is authenticated, now fetch their profile from Firestore
-        const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-        getDoc(userDocRef).then((docSnap) => {
-          if (docSnap.exists()) {
-            const userData = { id: docSnap.id, ...docSnap.data() } as User;
-            setUser(userData);
-            sessionStorage.setItem('skolaweb-user', JSON.stringify(userData));
-          } else {
-            // Firestore profile doesn't exist. This can happen.
-            // For now, we sign them out.
-            console.error("User exists in Auth but not in Firestore.");
-            signOut();
-          }
-        }).catch(error => {
+    const fetchUserProfile = async (uid: string) => {
+        if (!firestore) return;
+        const userDocRef = doc(firestore, 'users', uid);
+        try {
+            const docSnap = await getDoc(userDocRef);
+            if (docSnap.exists()) {
+                const userData = { id: docSnap.id, ...docSnap.data() } as User;
+                setUser(userData);
+            } else {
+                console.error("Firestore profile doesn't exist for authenticated user.");
+                signOut();
+            }
+        } catch (error) {
             console.error("Error fetching user profile:", error);
             signOut();
-        });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (firebaseUserLoading) {
+      setLoading(true);
+    } else {
+      if (firebaseUser) {
+        fetchUserProfile(firebaseUser.uid);
       } else {
-        // No firebase user, clear local state
         setUser(null);
-        sessionStorage.removeItem('skolaweb-user');
+        setLoading(false);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firebaseUser, firebaseUserLoading, firestore]);
   
    useEffect(() => {
@@ -64,39 +69,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, loading, pathname, router]);
 
-  const hasRole = (role: User['roles'][number]) => {
+  const hasRole = useCallback((role: Role) => {
     return user?.roles.includes(role) ?? false;
-  };
+  }, [user]);
 
   const signIn = async (email: string, pass: string): Promise<void> => {
     setLoading(true);
     const auth = getAuth();
     try {
-      // Use Firebase to sign in
-      const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-      // The useEffect will handle fetching the user profile and setting the state
-      // No need to do anything else here.
+      await signInWithEmailAndPassword(auth, email, pass);
+      // The useEffect hook will handle fetching the profile and updating the state
     } catch (error) {
       console.error("Sign in error", error);
-      setLoading(false);
-      // Re-throw a simpler error message for the UI
+      setLoading(false); // Make sure to stop loading on error
       throw new Error('Nesprávný email nebo heslo.');
     }
-    // Loading will be set to false by the useEffect
   };
 
   const signOut = () => {
     const auth = getAuth();
-    auth.signOut(); // This will trigger the onAuthStateChanged listener
+    auth.signOut();
     setUser(null);
-    sessionStorage.removeItem('skolaweb-user');
     router.push('/');
   };
 
   const value = { user, signIn, signOut, loading, hasRole };
 
   // Use the loading state from this provider, which is synced with firebaseUserLoading.
-  if (loading) {
+  if (loading && pathname !== '/') { // Avoid showing loader on the login page during initial load
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <div className="h-16 w-16 animate-spin rounded-full border-4 border-dashed border-primary"></div>
