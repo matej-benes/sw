@@ -478,6 +478,23 @@
         "prilohy": { "type": "array", "items": { "type": "string" }, "description": "Array of URLs to attachments." }
       },
       "required": ["id", "tridaId", "predmetId", "ucitelId", "nazev", "popis", "datumZadani", "terminOdevzdani"]
+    },
+    "ZapisDoPrvniTridy": {
+        "title": "ZapisDoPrvniTridy",
+        "type": "object",
+        "description": "Represents an application for first-grade enrollment.",
+        "properties": {
+            "id": { "type": "string" },
+            "jmenoDitete": { "type": "string" },
+            "datumNarozeniDitete": { "type": "string", "format": "date" },
+            "bydlisteDitete": { "type": "string" },
+            "jmenoZastupce": { "type": "string" },
+            "emailZastupce": { "type": "string", "format": "email" },
+            "telefonZastupce": { "type": "string" },
+            "datumPodani": { "type": "string", "format": "date-time" },
+            "status": { "type": "string", "enum": ["Podáno", "Přijato", "Nepřijato", "Odklad"] }
+        },
+        "required": ["id", "jmenoDitete", "datumNarozeniDitete", "jmenoZastupce", "emailZastupce", "datumPodani", "status"]
     }
   },
   "auth": {
@@ -700,6 +717,17 @@
           "description": "Stores homework assignments.",
           "params": [
             { "name": "ukolId", "description": "The unique ID of the homework." }
+          ]
+        }
+      },
+      {
+        "path": "/zapisy/{zapisId}",
+        "definition": {
+          "entityName": "ZapisDoPrvniTridy",
+          "schema": { "$ref": "#/backend/entities/ZapisDoPrvniTridy" },
+          "description": "Stores first-grade enrollment applications.",
+          "params": [
+            { "name": "zapisId", "description": "The unique ID of the enrollment application." }
           ]
         }
       }

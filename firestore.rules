@@ -123,5 +123,9 @@ service cloud.firestore {
         allow get, list: if isAuthenticated();
         allow create, update, delete: if isAdmin() || hasAnyRole(['ucitel']);
     }
+
+    match /zapisy/{zapisId} {
+        allow get, list, write: if isAdmin();
+    }
   }
 }

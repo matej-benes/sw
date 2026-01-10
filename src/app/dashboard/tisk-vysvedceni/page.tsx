@@ -1,3 +1,10 @@
+'use client';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useAuth } from '@/hooks/use-auth';
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, where } from 'firebase/firestore';
+import type { Trida, User, Znamka, ZapisHodiny } from '@/lib/types';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,16 +14,92 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 
-const students = [
-    { id: "s1", name: "Adam Volný", avgGrade: "1.45", attendance: 98, status: "V pořádku" },
-    { id: "s2", name: "Eva Svobodová", avgGrade: "1.15", attendance: 100, status: "V pořádku" },
-    { id: "s3", name: "Pavel Černý", avgGrade: "2.80", attendance: 85, status: "Hranice docházky" },
-    { id: "s4", name: "Lucie Dvořáková", avgGrade: "1.95", attendance: 95, status: "V pořádku" },
-];
-
 const printForms = ["SEVT", "OFTIS", "OPTYS", "Bianco blankety"];
 
+type StudentReportData = {
+    id: string;
+    name: string;
+    avgGrade: string;
+    attendance: number;
+    status: 'V pořádku' | 'Hranice docházky' | 'Chybí známky';
+};
+
+
 export default function TiskVysvedceniPage() {
+    const { user, hasRole } = useAuth();
+    const firestore = useFirestore();
+    
+    const [selectedClassId, setSelectedClassId] = useState<string>('');
+    const [selectedSemester, setSelectedSemester] = useState<string>('2pololeti');
+    const [studentReportData, setStudentReportData] = useState<StudentReportData[]>([]);
+
+    const teacherClassesQuery = useMemoFirebase(() => {
+        if (!firestore || !user || !hasRole('ucitel')) return null;
+        return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
+    }, [firestore, user, hasRole]);
+    const { data: teacherClasses, isLoading: classesLoading } = useCollection<Trida>(teacherClassesQuery);
+
+    const studentsQuery = useMemoFirebase(() => {
+        if (!firestore || !selectedClassId) return null;
+        return query(collection(firestore, 'users'), where('tridaId', '==', selectedClassId), where('roles', 'array-contains', 'ziak'));
+    }, [firestore, selectedClassId]);
+    const { data: students, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
+    
+    const gradesQuery = useMemoFirebase(() => {
+        if (!firestore || !selectedClassId) return null;
+        return query(collection(firestore, 'znamky'), where('tridaId', '==', selectedClassId));
+    }, [firestore, selectedClassId]);
+    const { data: grades, isLoading: gradesLoading } = useCollection<Znamka>(gradesQuery);
+
+    const attendanceQuery = useMemoFirebase(() => {
+         if (!firestore || !selectedClassId) return null;
+        return query(collection(firestore, 'zapisyHodin'), where('tridaId', '==', selectedClassId));
+    }, [firestore, selectedClassId]);
+    const { data: attendanceRecords, isLoading: attendanceLoading } = useCollection<ZapisHodiny>(attendanceRecords);
+
+    useEffect(() => {
+        if (teacherClasses && teacherClasses.length > 0 && !selectedClassId) {
+            setSelectedClassId(teacherClasses[0].id);
+        }
+    }, [teacherClasses, selectedClassId]);
+
+    useEffect(() => {
+        if (students && grades && attendanceRecords) {
+            const reportData = students.map(student => {
+                const studentGrades = grades.filter(g => g.studentId === student.id);
+                const totalLessons = attendanceRecords.length;
+                const presentLessons = attendanceRecords.filter(r => r.attendance.some(a => a.studentId === student.id && a.status === '-')).length;
+
+                let avgGrade = 'N/A';
+                if (studentGrades.length > 0) {
+                    const sum = studentGrades.reduce((acc, g) => acc + g.hodnota, 0);
+                    avgGrade = (sum / studentGrades.length).toFixed(2);
+                }
+
+                const attendance = totalLessons > 0 ? Math.round((presentLessons / totalLessons) * 100) : 100;
+                
+                let status: StudentReportData['status'] = 'V pořádku';
+                if (attendance < 90) { // Example threshold
+                    status = 'Hranice docházky';
+                }
+                if(studentGrades.length === 0){
+                    status = 'Chybí známky';
+                }
+
+                return {
+                    id: student.id,
+                    name: student.name,
+                    avgGrade,
+                    attendance,
+                    status
+                };
+            });
+            setStudentReportData(reportData);
+        }
+    }, [students, grades, attendanceRecords]);
+    
+    const isLoading = classesLoading || studentsLoading || gradesLoading || attendanceLoading;
+
     return (
         <div className="space-y-6">
             <div>
@@ -31,17 +114,15 @@ export default function TiskVysvedceniPage() {
                         <CardDescription>Vyberte třídu a pololetí pro zahájení procesu uzávěrek.</CardDescription>
                     </div>
                     <div className="flex items-center gap-4">
-                         <Select defaultValue="1a">
+                         <Select value={selectedClassId} onValueChange={setSelectedClassId} disabled={isLoading}>
                             <SelectTrigger className="w-[180px]">
                                 <SelectValue placeholder="Vyberte třídu" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="1a">1.A</SelectItem>
-                                <SelectItem value="2b">2.B</SelectItem>
-                                <SelectItem value="4c">4.C</SelectItem>
+                                {teacherClasses?.map(c => <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>)}
                             </SelectContent>
                         </Select>
-                         <Select defaultValue="2pololeti">
+                         <Select defaultValue={selectedSemester} onValueChange={setSelectedSemester}>
                             <SelectTrigger className="w-[180px]">
                                 <SelectValue placeholder="Vyberte pololetí" />
                             </SelectTrigger>
@@ -54,7 +135,7 @@ export default function TiskVysvedceniPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Stav uzávěrky třídy 4.C</label>
+                        <label className="text-sm font-medium">Stav uzávěrky třídy</label>
                         <div className="flex items-center gap-4">
                             <Progress value={75} className="w-full" />
                             <span className="text-sm font-semibold">75%</span>
@@ -75,7 +156,10 @@ export default function TiskVysvedceniPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {students.map((student) => (
+                                {isLoading ? (
+                                    <TableRow><TableCell colSpan={6} className="text-center h-24">Načítání dat...</TableCell></TableRow>
+                                ) : (
+                                    studentReportData.map((student) => (
                                     <TableRow key={student.id}>
                                         <TableCell><Checkbox /></TableCell>
                                         <TableCell className="font-medium">{student.name}</TableCell>
@@ -94,7 +178,8 @@ export default function TiskVysvedceniPage() {
                                             </Button>
                                         </TableCell>
                                     </TableRow>
-                                ))}
+                                ))
+                                )}
                             </TableBody>
                         </Table>
                     </div>
@@ -117,9 +202,9 @@ export default function TiskVysvedceniPage() {
                             </div>
                         </div>
                     </div>
-                     <Button>
+                     <Button disabled={isLoading || studentReportData.length === 0}>
                         <Printer className="mr-2 h-4 w-4" />
-                        Tisknout vybraná vysvědčení ({students.length})
+                        Tisknout vybraná vysvědčení ({studentReportData.length})
                     </Button>
                 </CardFooter>
             </Card>

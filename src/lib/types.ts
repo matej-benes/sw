@@ -229,3 +229,15 @@ export interface DomaciUkol {
     terminOdevzdani: string; // YYYY-MM-DD
     prilohy?: string[];
 }
+
+export interface ZapisDoPrvniTridy {
+    id: string;
+    jmenoDitete: string;
+    datumNarozeniDitete: string; // YYYY-MM-DD
+    bydlisteDitete: string;
+    jmenoZastupce: string;
+    emailZastupce: string;
+    telefonZastupce: string;
+    datumPodani: string; // YYYY-MM-DD HH:MM
+    status: 'Podáno' | 'Přijato' | 'Nepřijato' | 'Odklad';
+}

@@ -1,21 +1,35 @@
+'use client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FileText, PlusCircle, Search, Edit, BarChart, ImageIcon, Code, Settings } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection } from 'firebase/firestore';
 
-const reportTemplates = [
-    { name: "Seznam žáků třídy", category: "Žáci", type: "Předpřipravená" },
-    { name: "Přehled docházky - měsíční", category: "Docházka", type: "Předpřipravená" },
-    { name: "Katalogový list žáka", category: "Žáci", type: "Vlastní" },
-    { name: "Přihláška na SŠ", category: "Přihlášky", type: "Předpřipravená" },
-    { name: "Záznam o úrazu", category: "Dokumentace", type: "Předpřipravená" },
-    { name: "Inventura majetku", category: "Majetek", type: "Vlastní" },
-    { name: "Statistika známek (graf)", category: "Hodnocení", type: "Vlastní" },
-];
+// In a real app, this would be a real data type from your backend.json
+type ReportTemplate = {
+    id: string;
+    name: string;
+    category: string;
+    type: 'Předpřipravená' | 'Vlastní';
+}
 
 export default function TiskoveSestavyPage() {
+    // This is a placeholder for fetching real report templates.
+    // Currently, there's no "ReportTemplate" entity in backend.json.
+    // For now, we'll use a static list but indicate that it's a placeholder.
+    const reportTemplates: ReportTemplate[] = [
+        { id: '1', name: "Seznam žáků třídy", category: "Žáci", type: "Předpřipravená" },
+        { id: '2', name: "Přehled docházky - měsíční", category: "Docházka", type: "Předpřipravená" },
+        { id: '3', name: "Katalogový list žáka", category: "Žáci", type: "Vlastní" },
+        { id: '4', name: "Přihláška na SŠ", category: "Přihlášky", type: "Předpřipravená" },
+        { id: '5', name: "Záznam o úrazu", category: "Dokumentace", type: "Předpřipravená" },
+    ];
+    const isLoading = false; // Placeholder for loading state
+
+
     return (
         <div className="space-y-6">
             <div>
@@ -51,7 +65,13 @@ export default function TiskoveSestavyPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {reportTemplates.map((template, index) => (
+                                {isLoading ? (
+                                     <TableRow>
+                                        <TableCell colSpan={4} className="h-24 text-center">
+                                            Načítání šablon...
+                                        </TableCell>
+                                    </TableRow>
+                                ) : reportTemplates.map((template, index) => (
                                     <TableRow key={index}>
                                         <TableCell className="font-medium">{template.name}</TableCell>
                                         <TableCell>

@@ -1,3 +1,8 @@
+'use client';
+import React, { useState, useMemo } from 'react';
+import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
+import { collection, query } from 'firebase/firestore';
+import type { ZapisDoPrvniTridy } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,15 +11,54 @@ import { FileText, PlusCircle, Search, Download, UserCheck, CheckCircle, AlertCi
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-
-const applications = [
-    { id: "app1", childName: "Jiří Novotný", parentName: "Petr Novotný", date: "2024-04-15", status: "Podáno" },
-    { id: "app2", childName: "Alena Procházková", parentName: "Jana Procházková", date: "2024-04-16", status: "Přijato" },
-    { id: "app3", childName: "Tomáš Marek", parentName: "Martin Marek", date: "2024-04-18", status: "Odklad" },
-    { id: "app4", childName: "Klára Jelínková", parentName: "Veronika Jelínková", date: "2024-04-20", status: "Podáno" },
-];
+import { useToast } from '@/hooks/use-toast';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export default function ZapisyPage() {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const [activeTab, setActiveTab] = useState('applications');
+    const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
+
+    const applicationsQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, 'zapisy'));
+    }, [firestore]);
+    const { data: applications, isLoading: applicationsLoading } = useCollection<ZapisDoPrvniTridy>(applicationsQuery);
+
+    const selectedApplication = useMemo(() => {
+        return applications?.find(app => app.id === selectedApplicationId) || null;
+    }, [applications, selectedApplicationId]);
+    
+    const handleStatusChange = async (newStatus: 'Přijato' | 'Odklad' | 'Nepřijato') => {
+        if (!firestore || !selectedApplication) return;
+        
+        try {
+            await updateDocumentNonBlocking(`zapisy/${selectedApplication.id}`, { status: newStatus });
+            toast({
+                title: 'Stav aktualizován',
+                description: `Stav přihlášky pro ${selectedApplication.jmenoDitete} byl změněn na "${newStatus}".`,
+            });
+        } catch (error) {
+             toast({
+                variant: 'destructive',
+                title: 'Chyba',
+                description: 'Nepodařilo se aktualizovat stav přihlášky.',
+            });
+        }
+    };
+    
+    const handleRowClick = (appId: string) => {
+        setSelectedApplicationId(appId);
+        setActiveTab('details');
+    }
+
     return (
         <div className="space-y-6">
             <div>
@@ -22,10 +66,10 @@ export default function ZapisyPage() {
                 <p className="text-muted-foreground">Komplexní agenda pro přijímání dětí do prvních tříd.</p>
             </div>
 
-            <Tabs defaultValue="applications">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="applications">Seznam přihlášek</TabsTrigger>
-                    <TabsTrigger value="details">Detail dítěte a rozhodnutí</TabsTrigger>
+                    <TabsTrigger value="details" disabled={!selectedApplicationId}>Detail dítěte a rozhodnutí</TabsTrigger>
                 </TabsList>
                 <TabsContent value="applications">
                     <Card>
@@ -55,24 +99,30 @@ export default function ZapisyPage() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {applications.map((app) => (
-                                            <TableRow key={app.id} className="cursor-pointer hover:bg-muted/50">
-                                                <TableCell className="font-medium">{app.childName}</TableCell>
-                                                <TableCell>{app.parentName}</TableCell>
-                                                <TableCell>{app.date}</TableCell>
-                                                <TableCell>
-                                                     <Badge variant={
-                                                        app.status === "Přijato" ? "default" :
-                                                        app.status === "Odklad" ? "secondary" : "outline"
-                                                     } className={app.status === "Přijato" ? "bg-green-500" : ""}>
-                                                        {app.status === 'Přijato' && <CheckCircle className="h-3 w-3 mr-1" />}
-                                                        {app.status === 'Odklad' && <Clock className="h-3 w-3 mr-1" />}
-                                                        {app.status === 'Podáno' && <FileText className="h-3 w-3 mr-1" />}
-                                                        {app.status}
-                                                    </Badge>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
+                                        {applicationsLoading ? (
+                                            <TableRow><TableCell colSpan={4} className="text-center h-24">Načítání přihlášek...</TableCell></TableRow>
+                                        ) : applications && applications.length > 0 ? (
+                                            applications.map((app) => (
+                                                <TableRow key={app.id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleRowClick(app.id)}>
+                                                    <TableCell className="font-medium">{app.jmenoDitete}</TableCell>
+                                                    <TableCell>{app.jmenoZastupce}</TableCell>
+                                                    <TableCell>{app.datumPodani}</TableCell>
+                                                    <TableCell>
+                                                        <Badge variant={
+                                                            app.status === "Přijato" ? "default" :
+                                                            app.status === "Odklad" ? "secondary" : "outline"
+                                                        } className={app.status === "Přijato" ? "bg-green-500" : ""}>
+                                                            {app.status === 'Přijato' && <CheckCircle className="h-3 w-3 mr-1" />}
+                                                            {app.status === 'Odklad' && <Clock className="h-3 w-3 mr-1" />}
+                                                            {app.status === 'Podáno' && <FileText className="h-3 w-3 mr-1" />}
+                                                            {app.status}
+                                                        </Badge>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow><TableCell colSpan={4} className="text-center h-24">Nebyly nalezeny žádné přihlášky.</TableCell></TableRow>
+                                        )}
                                     </TableBody>
                                 </Table>
                             </div>
@@ -82,37 +132,39 @@ export default function ZapisyPage() {
                  <TabsContent value="details">
                      <Card>
                         <CardHeader>
-                            <CardTitle>Detail žádosti: Jiří Novotný</CardTitle>
+                            <CardTitle>Detail žádosti: {selectedApplication?.jmenoDitete}</CardTitle>
                             <CardDescription>Komplexní evidence údajů o dítěti a správa rozhodnutí.</CardDescription>
                         </CardHeader>
+                        {selectedApplication ? (
+                        <>
                         <CardContent className="space-y-6">
                             <div className="grid md:grid-cols-2 gap-6">
                                 <div className="space-y-3">
                                     <h4 className="font-semibold">Údaje o dítěti</h4>
-                                    <p className="text-sm"><strong className="text-muted-foreground">Jméno:</strong> Jiří Novotný</p>
-                                    <p className="text-sm"><strong className="text-muted-foreground">Datum narození:</strong> 15. 6. 2018</p>
-                                    <p className="text-sm"><strong className="text-muted-foreground">Bydliště:</strong> Uliční 123, Město</p>
+                                    <p className="text-sm"><strong className="text-muted-foreground">Jméno:</strong> {selectedApplication.jmenoDitete}</p>
+                                    <p className="text-sm"><strong className="text-muted-foreground">Datum narození:</strong> {selectedApplication.datumNarozeniDitete}</p>
+                                    <p className="text-sm"><strong className="text-muted-foreground">Bydliště:</strong> {selectedApplication.bydlisteDitete}</p>
                                 </div>
                                 <div className="space-y-3">
                                     <h4 className="font-semibold">Údaje o zákonném zástupci</h4>
-                                    <p className="text-sm"><strong className="text-muted-foreground">Jméno:</strong> Petr Novotný</p>
-                                    <p className="text-sm"><strong className="text-muted-foreground">Email:</strong> petr.novotny@email.cz</p>
-                                    <p className="text-sm"><strong className="text-muted-foreground">Telefon:</strong> +420 123 456 789</p>
+                                    <p className="text-sm"><strong className="text-muted-foreground">Jméno:</strong> {selectedApplication.jmenoZastupce}</p>
+                                    <p className="text-sm"><strong className="text-muted-foreground">Email:</strong> {selectedApplication.emailZastupce}</p>
+                                    <p className="text-sm"><strong className="text-muted-foreground">Telefon:</strong> {selectedApplication.telefonZastupce}</p>
                                 </div>
                             </div>
                             <Separator />
                             <div>
                                 <h4 className="font-semibold mb-4">Správa rozhodnutí</h4>
                                 <div className="flex flex-wrap gap-4">
-                                     <Button>
+                                     <Button onClick={() => handleStatusChange('Přijato')}>
                                         <CheckCircle className="mr-2 h-4 w-4"/>
                                         Vytvořit rozhodnutí o přijetí
                                     </Button>
-                                     <Button variant="secondary">
+                                     <Button variant="secondary" onClick={() => handleStatusChange('Odklad')}>
                                         <Clock className="mr-2 h-4 w-4"/>
                                         Vytvořit rozhodnutí o odkladu
                                     </Button>
-                                    <Button variant="destructive">
+                                    <Button variant="destructive" onClick={() => handleStatusChange('Nepřijato')}>
                                         <AlertCircle className="mr-2 h-4 w-4"/>
                                         Vytvořit rozhodnutí o nepřijetí
                                     </Button>
@@ -120,11 +172,17 @@ export default function ZapisyPage() {
                             </div>
                         </CardContent>
                          <CardFooter className="flex justify-end">
-                            <Button>
+                            <Button disabled={selectedApplication.status !== 'Přijato'}>
                                 <UserCheck className="mr-2 h-4 w-4"/>
                                 Převést přijaté dítě do školní matriky
                             </Button>
                         </CardFooter>
+                        </>
+                        ) : (
+                            <CardContent>
+                                <p className="text-center text-muted-foreground py-10">Vyberte přihlášku ze seznamu pro zobrazení detailů.</p>
+                            </CardContent>
+                        )}
                     </Card>
                 </TabsContent>
             </Tabs>
