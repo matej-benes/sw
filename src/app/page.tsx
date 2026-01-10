@@ -180,14 +180,37 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             const usersRef = collection(firestore, 'users');
             const q = query(usersRef, where("pin", "==", values.pin));
             const querySnapshot = await getDocs(q);
+            
+            let userDoc;
 
             if (querySnapshot.empty) {
-                toast({ variant: 'destructive', title: 'Chyba', description: 'Neplatný PIN kód.' });
-                setIsLoading(false);
-                return;
+                // If no direct match on PIN, check if it's a parent trying to register with a student's PIN
+                 const studentQuery = query(usersRef, where("pin", "==", values.pin), where("roles", "array-contains", "ziak"));
+                 const studentSnapshot = await getDocs(studentQuery);
+
+                 if (studentSnapshot.empty) {
+                     toast({ variant: 'destructive', title: 'Chyba', description: 'Neplatný PIN kód.' });
+                     setIsLoading(false);
+                     return;
+                 }
+                 const studentData = studentSnapshot.docs[0];
+
+                 // Find the parent associated with this student
+                 const parentQuery = query(usersRef, where("studentId", "==", studentData.id), where("roles", "array-contains", "rodic"));
+                 const parentSnapshot = await getDocs(parentQuery);
+
+                 if(parentSnapshot.empty) {
+                     toast({ variant: 'destructive', title: 'Chyba', description: 'K tomuto studentovi nebyl nalezen žádný rodičovský účet.' });
+                     setIsLoading(false);
+                     return;
+                 }
+                 userDoc = parentSnapshot.docs[0];
+
+            } else {
+                userDoc = querySnapshot.docs[0];
             }
 
-            const userDoc = querySnapshot.docs[0];
+
             const userData = { ...userDoc.data(), id: userDoc.id } as User;
             
             let tridaName: string | null = "N/A";
