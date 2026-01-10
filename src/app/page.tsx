@@ -14,7 +14,7 @@ import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, getDocs, doc, setDoc, addDoc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, addDoc, getDoc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import type { User } from '@/lib/types';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 
@@ -221,13 +221,15 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
         }
 
         try {
+            const batch = writeBatch(firestore);
+            
             // 1. Create Firebase Auth user
             const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
             const firebaseUser = userCredential.user;
 
             // 2. Create the new user document in Firestore with the Firebase Auth UID.
             const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
-            await setDoc(newUserDocRef, {
+            batch.set(newUserDocRef, {
                 id: firebaseUser.uid,
                 name: registrationData.user.name,
                 email: values.email,
@@ -239,7 +241,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
 
             // 3. Delete the original pre-seeded document to prevent duplication.
             const originalUserDocRef = doc(firestore, 'users', registrationData.user.id);
-            await deleteDoc(originalUserDocRef);
+            batch.delete(originalUserDocRef);
 
             // 4. If the user is a student, we must update the ziaciIds in the trida document with the new UID.
             if (registrationData.user.roles.includes('ziak') && registrationData.user.tridaId) {
@@ -250,10 +252,11 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                     // Remove the old ID and add the new UID
                     const updatedZiaciIds = ziaciIds.filter((id: string) => id !== registrationData.user.id);
                     updatedZiaciIds.push(firebaseUser.uid);
-                    await updateDoc(tridaRef, { ziaciIds: updatedZiaciIds });
+                    batch.update(tridaRef, { ziaciIds: updatedZiaciIds });
                 }
             }
-
+            
+            await batch.commit();
 
             toast({ title: 'Registrace úspěšná', description: 'Váš účet byl vytvořen, nyní se můžete přihlásit.' });
             onLoginClick(); // Switch back to login form

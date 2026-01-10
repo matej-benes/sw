@@ -27,8 +27,8 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get, list: if isAuthenticated();
-      allow update: if isOwner(userId) || hasRole('administrator');
       allow create: if hasRole('administrator');
+      allow update: if isOwner(userId) || hasRole('administrator');
       allow delete: if hasRole('administrator');
     }
 
