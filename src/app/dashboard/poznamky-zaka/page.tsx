@@ -30,7 +30,7 @@ export default function PoznamkaZakaPage() {
 
   const studentsQuery = useMemoFirebase(() => {
     if (!firestore || !selectedClass) return null;
-    return query(collection(firestore, "users"), where("tridaId", "==", selectedClass));
+    return query(collection(firestore, "users"), where("tridaId", "==", selectedClass), where("roles", "array-contains", "ziak"));
   }, [firestore, selectedClass]);
   const { data: students, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
   
