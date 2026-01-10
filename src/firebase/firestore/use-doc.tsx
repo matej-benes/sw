@@ -48,13 +48,13 @@ export function useDoc<T = any>(
   const [data, setData] = useState<StateDataType>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<FirestoreError | Error | null>(null);
-  const { user } = useUser();
+  const { user, isUserLoading } = useUser();
 
   useEffect(() => {
     // Wait for user and the doc ref itself.
     if (!memoizedDocRef || !user) {
       setData(null);
-      setIsLoading(false);
+      setIsLoading(isUserLoading || !memoizedDocRef);
       setError(null);
       return;
     }
@@ -91,7 +91,7 @@ export function useDoc<T = any>(
     );
 
     return () => unsubscribe();
-  }, [memoizedDocRef, user]); // Re-run if the memoizedDocRef or user changes.
+  }, [memoizedDocRef, user, isUserLoading]); // Re-run if the memoizedDocRef or user changes.
 
   return { data, isLoading, error };
 }

@@ -61,13 +61,13 @@ export function useCollection<T = any>(
   const [data, setData] = useState<StateDataType>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<FirestoreError | Error | null>(null);
-  const { user } = useUser();
+  const { user, isUserLoading } = useUser();
 
   useEffect(() => {
     // Wait for user and the query itself.
     if (!memoizedTargetRefOrQuery || !user) {
       setData(null);
-      setIsLoading(false);
+      setIsLoading(isUserLoading || !memoizedTargetRefOrQuery);
       setError(null);
       return;
     }
@@ -109,7 +109,7 @@ export function useCollection<T = any>(
     );
 
     return () => unsubscribe();
-  }, [memoizedTargetRefOrQuery, user]); // Re-run if the target query/reference or user changes.
+  }, [memoizedTargetRefOrQuery, user, isUserLoading]); // Re-run if the target query/reference or user changes.
   
   if(memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
     throw new Error(memoizedTargetRefOrQuery + ' was not properly memoized using useMemoFirebase');
