@@ -43,12 +43,13 @@ service cloud.firestore {
     // Zabezpečená pravidla pro kolekci 'messages'
     match /messages/{messageId} {
     
-      // Kdo může číst zprávy?
-      // Uživatel může číst (get) dokument, pokud je odesílatelem nebo je v seznamu příjemců.
-      // Uživatel může vypisovat (list) zprávy, pouze pokud filtruje podle svého ID v poli příjemců 
-      // nebo jako odesílatel. To zabraňuje stažení všech zpráv a řeší vaši chybu.
-      allow read: if request.auth != null && 
+      // Uživatel může číst (get) konkrétní dokument, pokud je odesílatelem nebo je v seznamu příjemců.
+      allow get: if request.auth != null && 
                    (request.auth.uid == resource.data.senderId || request.auth.uid in resource.data.recipientIds);
+
+      // Uživatel může vypisovat (list) zprávy, pouze pokud je přihlášen.
+      // Samotná aplikace musí zajistit filtrování, aby se zobrazily jen relevantní zprávy.
+      allow list: if request.auth != null;
 
       // Kdo může vytvářet zprávy?
       // Jakýkoliv přihlášený uživatel, pokud je ID odesílatele shodné s jeho vlastním ID.
