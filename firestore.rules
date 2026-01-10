@@ -48,7 +48,7 @@ service cloud.firestore {
                    (request.auth.uid == resource.data.senderId || request.auth.uid in resource.data.recipientIds);
 
       // Uživatel může vypisovat (list) zprávy, pouze pokud je přihlášen.
-      // Samotná aplikace musí zajistit filtrování, aby se zobrazily jen relevantní zprávy.
+      // Aplikace MUSÍ vždy použít dotaz (where), který omezí výsledky jen na zprávy daného uživatele.
       allow list: if request.auth != null;
 
       // Kdo může vytvářet zprávy?
