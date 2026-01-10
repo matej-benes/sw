@@ -178,24 +178,32 @@ export default function ZpravyPage() {
   
   const receivedMessagesQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
+    // CRITICAL FIX: Removed orderBy to simplify the query and avoid needing composite indexes.
     return query(
         collection(firestore, 'messages'),
-        where('recipientIds', 'array-contains', user.id),
-        orderBy('createdAt', 'desc')
+        where('recipientIds', 'array-contains', user.id)
     );
   }, [firestore, user]);
 
   const sentMessagesQuery = useMemoFirebase(() => {
       if (!firestore || !user) return null;
+      // CRITICAL FIX: Removed orderBy to simplify the query.
       return query(
           collection(firestore, 'messages'),
-          where('senderId', '==', user.id),
-          orderBy('createdAt', 'desc')
+          where('senderId', '==', user.id)
       );
   }, [firestore, user]);
   
-  const { data: receivedMessages, isLoading: receivedLoading } = useCollection<Message>(receivedMessagesQuery);
-  const { data: sentMessages, isLoading: sentLoading } = useCollection<Message>(sentMessagesQuery);
+  const { data: receivedMessagesData, isLoading: receivedLoading } = useCollection<Message>(receivedMessagesQuery);
+  const { data: sentMessagesData, isLoading: sentLoading } = useCollection<Message>(sentMessagesQuery);
+
+  const receivedMessages = useMemo(() => 
+    receivedMessagesData?.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()) || [], 
+  [receivedMessagesData]);
+
+  const sentMessages = useMemo(() => 
+    sentMessagesData?.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()) || [],
+  [sentMessagesData]);
 
 
   const handleSendMessage = async () => {
