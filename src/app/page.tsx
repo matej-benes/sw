@@ -178,54 +178,39 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
 
         try {
             const usersRef = collection(firestore, 'users');
-            // Look for a user (teacher, admin etc) with that PIN directly.
-            let q = query(usersRef, where("pin", "==", values.pin));
-            let querySnapshot = await getDocs(q);
-            let userDoc;
+            const q = query(usersRef, where("pin", "==", values.pin));
+            const querySnapshot = await getDocs(q);
 
             if (!querySnapshot.empty) {
-                userDoc = querySnapshot.docs[0];
-            } else {
-                 // If no direct match, it might be a parent registering with a student's PIN.
-                 // 1. Find the student with the PIN.
-                const studentQuery = query(usersRef, where("roles", "array-contains", "ziak"), where("pin", "==", values.pin));
-                const studentSnapshot = await getDocs(studentQuery);
-
-                if (!studentSnapshot.empty) {
-                    const student = studentSnapshot.docs[0].data() as User;
-                    // 2. Find the parent linked to this student (studentId on parent doc).
-                    if (student.id) {
-                         const parentQuery = query(usersRef, where("roles", "array-contains", "rodic"), where("studentId", "==", student.id));
-                         const parentSnapshot = await getDocs(parentQuery);
-                         if (!parentSnapshot.empty) {
-                             userDoc = parentSnapshot.docs[0];
-                         }
+                const userWithPin = querySnapshot.docs[0].data() as User;
+                // If the PIN belongs directly to a parent account, instruct them to use the child's PIN
+                if (userWithPin.roles.includes('rodic')) {
+                    toast({ 
+                        variant: 'destructive', 
+                        title: 'Nesprávný PIN', 
+                        description: 'Pro registraci rodičovského účtu zadejte prosím PIN, který patří Vašemu dítěti.' 
+                    });
+                    setIsLoading(false);
+                    return;
+                }
+                
+                // PIN belongs to a teacher, admin, or a student directly, proceed
+                const userDoc = querySnapshot.docs[0];
+                 const userData = { ...userDoc.data(), id: userDoc.id } as User;
+                 let tridaName: string | null = "N/A";
+                 if (userData.tridaId) {
+                    const tridaRef = doc(firestore, 'tridy', userData.tridaId);
+                    const tridaDoc = await getDoc(tridaRef);
+                    if (tridaDoc.exists()) {
+                        tridaName = tridaDoc.data().nazev;
                     }
-                }
-            }
-
-            if (!userDoc) {
+                 }
+                setRegistrationData({ user: userData, tridaName });
+                registrationForm.setValue('email', userData.email);
+                setStep(2);
+            } else {
                 toast({ variant: 'destructive', title: 'Chyba', description: 'Neplatný PIN kód.' });
-                setIsLoading(false);
-                return;
             }
-
-
-            const userData = { ...userDoc.data(), id: userDoc.id } as User;
-            
-            let tridaName: string | null = "N/A";
-            if (userData.tridaId) {
-                const tridaRef = doc(firestore, 'tridy', userData.tridaId);
-                const tridaDoc = await getDoc(tridaRef);
-                if (tridaDoc.exists()) {
-                    tridaName = tridaDoc.data().nazev;
-                }
-            }
-
-            setRegistrationData({ user: userData, tridaName });
-            registrationForm.setValue('email', userData.email);
-            setStep(2);
-            toast({ title: 'PIN ověřen', description: 'Nyní si můžete vytvořit účet.' });
 
         } catch (error) {
             console.error("PIN verification error:", error);
@@ -277,6 +262,12 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                     updatedZiaciIds.push(firebaseUser.uid);
                     batch.update(tridaRef, { ziaciIds: updatedZiaciIds });
                 }
+            }
+             // 5. If the user being registered is a PARENT, we need to update the parent's ID on the STUDENT's document
+             // This is a correction: The student's document should hold a reference to the parent's NEW UID.
+            if(registrationData.user.roles.includes('rodic') && registrationData.user.studentId) {
+                const studentRef = doc(firestore, 'users', registrationData.user.studentId);
+                batch.update(studentRef, { studentId: firebaseUser.uid }); // Here studentId field on student doc holds parent's new UID
             }
             
             await batch.commit();
@@ -336,7 +327,10 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                     <CardContent>
                         <div className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm">
                             <p><strong>Jméno:</strong> {registrationData.user.name}</p>
-                            <p><strong>{registrationData.user.tridaId ? 'Třída' : 'Role'}:</strong> {registrationData.user.tridaId ? registrationData.tridaName : "Zaměstnanec školy"}</p>
+                            <p><strong>{registrationData.user.tridaId ? 'Třída' : 'Role'}:</strong> {registrationData.user.roles.includes('rodic') ? 'Rodič' : (registrationData.tridaName || 'Zaměstnanec školy')}</p>
+                             {registrationData.user.roles.includes('rodic') && registrationData.user.studentId && (
+                                <p><strong>Dítě:</strong> Vaše jméno dítěte se zobrazí po přihlášení</p>
+                            )}
                         </div>
                         <Form {...registrationForm}>
                             <form onSubmit={registrationForm.handleSubmit(handleRegistrationSubmit)} className="space-y-4">
