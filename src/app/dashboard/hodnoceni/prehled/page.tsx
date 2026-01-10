@@ -125,8 +125,8 @@ export default function HodnoceniPrehledPage() {
   }, [grades]);
   
   const usersQuery = useMemoFirebase(() => {
-      if (!firestore || studentIds.length === 0) return null;
-      return query(collection(firestore, 'users'), where('id', 'in', studentIds));
+      if (!firestore || !studentIds || studentIds.length === 0) return null;
+      return query(collection(firestore, 'users'), where('__name__', 'in', studentIds));
   }, [firestore, studentIds]);
 
   const { data: users, isLoading: usersLoading } = useCollection<User>(usersQuery);
@@ -179,7 +179,7 @@ export default function HodnoceniPrehledPage() {
                     <TableCell className="font-medium"><StudentName studentId={grade.studentId} users={users} /></TableCell>
                     <TableCell>{grade.predmet}</TableCell>
                     <TableCell className="text-center font-bold">{grade.hodnota}</TableCell>
-                    <TableCell>{format(grade.datum.toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
+                    <TableCell>{grade.datum.toDate ? format(grade.datum.toDate(), 'd. M. yyyy', { locale: cs }) : 'N/A'}</TableCell>
                     <TableCell>{grade.tema || '-'}</TableCell>
                     <TableCell className="text-right">
                        <DropdownMenu>
