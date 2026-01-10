@@ -29,6 +29,13 @@ service cloud.firestore {
     function hasAnyRole(roles) {
         return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(roles);
     }
+    
+    function isMyClassStudent(studentId) {
+        let studentDoc = get(/databases/$(database)/documents/users/$(studentId));
+        let studentClassId = studentDoc.data.tridaId;
+        // Check if student has a class and if the requesting user is a teacher of that class
+        return studentClassId != null && isClassTeacher(studentClassId);
+    }
 
     match /users/{userId} {
       allow get, list: if isAuthenticated();
@@ -36,19 +43,17 @@ service cloud.firestore {
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
 
+      // Gradings are now stored in a subcollection of the user who created them (the teacher)
+      match /gradings/{gradingId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+
+      // This subcollection is now deprecated.
       match /znamky/{znamkaId} {
-         allow get: if isAuthenticated() && (isOwner(userId) || isMyStudent(userId) || hasAnyRole(['ucitel', 'administrator']));
-         allow list: if isAuthenticated() && (isOwner(userId) || isMyStudent(userId));
-         allow create: if hasAnyRole(['ucitel', 'administrator']);
-         allow update, delete: if hasAnyRole(['ucitel', 'administrator']) && resource.data.ucitelId == request.auth.uid;
+         allow read, write: if false;
       }
     }
     
-    // Allow teachers to query their own grades across all students
-    match /{path=**}/znamky/{znamkaId} {
-      allow list: if hasAnyRole(['ucitel', 'administrator']);
-    }
-
     match /tridy/{tridaId} {
       allow get, list: if isAuthenticated();
       allow write: if isAdmin();

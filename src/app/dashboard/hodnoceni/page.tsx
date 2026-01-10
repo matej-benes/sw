@@ -78,7 +78,7 @@ export default function HodnoceniPage() {
             <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
                 {isStudentOrParent && <TabsTrigger value="prubezne">Průběžné hodnocení</TabsTrigger>}
                 {isStudentOrParent && <TabsTrigger value="predmet">Hodnocení v předmětu</TabsTrigger>}
-                 {isTeacher && <TabsTrigger value="prehled" asChild><Link href="/dashboard/hodnoceni/prehled">Přehled hodnocení</Link></TabsTrigger>}
+                 {isTeacher && <TabsTrigger value="prehled" asChild><Link href="/dashboard/hodnoceni/prehled-hodnoceni">Přehled hodnocení</Link></TabsTrigger>}
             </TabsList>
             
             {isStudentOrParent && (
@@ -160,7 +160,7 @@ export default function HodnoceniPage() {
             )}
              {isTeacher && (
                 <TabsContent value="prehled">
-                    {/* Content will be on the /prehled page */}
+                    {/* Content will be on the /prehled-hodnoceni page */}
                      <Card>
                         <CardContent className="pt-6">
                             <p className="text-center text-muted-foreground">

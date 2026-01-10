@@ -88,6 +88,35 @@
         "ucitelId"
       ]
     },
+    "Grading": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Grading",
+      "type": "object",
+      "description": "Represents a single grading event, containing multiple student marks.",
+      "properties": {
+        "id": { "type": "string" },
+        "ucitelId": { "type": "string" },
+        "tridaId": { "type": "string" },
+        "predmetId": { "type": "string" },
+        "predmetNazev": { "type": "string" },
+        "datum": { "type": "string", "format": "date-time" },
+        "hodina": { "type": "string" },
+        "tema": { "type": "string" },
+        "znamky": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "studentId": { "type": "string" },
+              "znamka": { "type": "string" },
+              "slovniHodnoceni": { "type": "string" }
+            },
+            "required": ["studentId", "znamka"]
+          }
+        }
+      },
+      "required": ["ucitelId", "tridaId", "predmetId", "datum", "znamky"]
+    },
     "Znamka": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Znamka",
@@ -518,6 +547,16 @@
               "name": "userId",
               "description": "The unique identifier of the user."
             }
+          ],
+          "subcollections": [
+            {
+              "path": "/gradings/{gradingId}",
+              "definition": {
+                "entityName": "Grading",
+                "schema": { "$ref": "#/backend/entities/Grading" },
+                "description": "Stores grading events created by this user."
+              }
+            }
           ]
         }
       },
@@ -565,26 +604,6 @@
             {
               "name": "ucebnaId",
               "description": "The unique identifier of the classroom."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/users/{userId}/znamky/{znamkaId}",
-        "definition": {
-          "entityName": "Znamka",
-          "schema": {
-            "$ref": "#/backend/entities/Znamka"
-          },
-          "description": "Stores grades for a specific user. Enables path-based access control.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user (student)."
-            },
-            {
-              "name": "znamkaId",
-              "description": "The unique identifier of the grade."
             }
           ]
         }

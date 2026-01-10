@@ -133,8 +133,12 @@ export default function HodnoceniPrehledPage() {
       if (studentIds.length > 0) {
           const usersMap = new Map<string, User>();
           // Fetch users in chunks of 30 due to 'in' query limit
+          const chunks = [];
           for (let i = 0; i < studentIds.length; i += 30) {
-              const chunk = studentIds.slice(i, i + 30);
+              chunks.push(studentIds.slice(i, i + 30));
+          }
+          
+          for (const chunk of chunks) {
               const usersQuery = query(collection(firestore, 'users'), where('__name__', 'in', chunk));
               const usersSnap = await getDocs(usersQuery);
               usersSnap.forEach(doc => {
