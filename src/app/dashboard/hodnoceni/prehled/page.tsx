@@ -94,16 +94,12 @@ function EditGradeDialog({ grade, isOpen, onClose, onSave }: { grade: Znamka | n
   )
 }
 
-function StudentName({ studentId }: { studentId: string }) {
-    const firestore = useFirestore();
-    const studentRef = useMemoFirebase(
-      () => (firestore && studentId ? doc(firestore, 'users', studentId) : null),
-      [firestore, studentId]
-    );
-    const { data: student, isLoading } = useDoc<User>(studentRef);
+function StudentName({ studentId, users }: { studentId: string, users: User[] | null }) {
+    const studentName = useMemo(() => {
+        return users?.find(u => u.id === studentId)?.name || 'Načítání...';
+    }, [users, studentId]);
 
-    if (isLoading) return <span>Načítání...</span>;
-    return <span>{student?.name || 'Neznámý žák'}</span>;
+    return <span>{studentName}</span>;
 }
 
 
@@ -122,6 +118,19 @@ export default function HodnoceniPrehledPage() {
 
   const { data: grades, isLoading: gradesLoading } = useCollection<Znamka>(teacherGradesQuery);
 
+  const studentIds = useMemo(() => {
+    if (!grades) return [];
+    return [...new Set(grades.map(g => g.studentId))];
+  }, [grades]);
+  
+  const usersQuery = useMemoFirebase(() => {
+      if (!firestore || studentIds.length === 0) return null;
+      return query(collection(firestore, 'users'), where('id', 'in', studentIds));
+  }, [firestore, studentIds]);
+
+  const { data: users, isLoading: usersLoading } = useCollection<User>(usersQuery);
+
+
   const handleSave = async (data: GradeEditFormData) => {
     if (!firestore || !editingGrade) return;
 
@@ -139,7 +148,7 @@ export default function HodnoceniPrehledPage() {
     setDeletingGrade(null);
   };
   
-  const isLoading = userLoading || gradesLoading;
+  const isLoading = userLoading || gradesLoading || usersLoading;
 
   return (
     <>
@@ -166,7 +175,7 @@ export default function HodnoceniPrehledPage() {
               {!isLoading && grades && grades.length > 0 ? (
                 grades.map(grade => (
                   <TableRow key={grade.id}>
-                    <TableCell className="font-medium"><StudentName studentId={grade.studentId} /></TableCell>
+                    <TableCell className="font-medium"><StudentName studentId={grade.studentId} users={users} /></TableCell>
                     <TableCell>{grade.predmet}</TableCell>
                     <TableCell className="text-center font-bold">{grade.hodnota}</TableCell>
                     <TableCell>{format(grade.datum.toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
