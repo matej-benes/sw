@@ -11,13 +11,21 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import type { Trida, Rozvrh, LessonBlock } from '@/lib/types';
-import { collection } from 'firebase/firestore';
-import React, { useState, useMemo, useEffect } from 'react';
+import type { Trida, Rozvrh, LessonBlock, User, Predmet, Ucebna } from '@/lib/types';
+import { collection, query, where } from 'firebase/firestore';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { setDoc, doc } from 'firebase/firestore';
-
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 
 const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek'];
 const timeSlots = [
@@ -28,15 +36,134 @@ const timeSlots = [
 
 type ScheduleEditorState = (LessonBlock | null)[][];
 
+function LessonEditDialog({
+    isOpen,
+    onClose,
+    onSave,
+    lesson,
+    teachers,
+    subjects,
+    classrooms,
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (lesson: LessonBlock | null) => void;
+    lesson: LessonBlock | null;
+    teachers: User[];
+    subjects: Predmet[];
+    classrooms: Ucebna[];
+}) {
+    const [subjectId, setSubjectId] = useState(lesson?.subjectId || '');
+    const [teacherId, setTeacherId] = useState(lesson?.teacherId || '');
+    const [classroomId, setClassroomId] = useState(lesson?.ucebnaId || '');
+
+    useEffect(() => {
+        setSubjectId(lesson?.subjectId || '');
+        setTeacherId(lesson?.teacherId || '');
+        setClassroomId(lesson?.ucebnaId || '');
+    }, [lesson]);
+
+    const handleSave = () => {
+        const subject = subjects.find(s => s.id === subjectId);
+        const teacher = teachers.find(t => t.id === teacherId);
+        const classroom = classrooms.find(c => c.id === classroomId);
+
+        if (!subject || !teacher) {
+            onSave(null); // Or show an error
+        } else {
+            const newLesson: LessonBlock = {
+                ...(lesson || {}), // Retain other properties if editing
+                id: lesson?.id || `${subjectId}-${teacherId}-${Date.now()}`,
+                subjectId,
+                teacherId,
+                classId: lesson?.classId || '', // classId should be passed down or handled differently
+                subjectName: subject.name,
+                subjectShortcut: subject.shortcut,
+                teacherName: teacher.name,
+                className: lesson?.className || '', // same for className
+                ucebnaId: classroomId,
+                ucebnaName: classroom?.nazev,
+            };
+            onSave(newLesson);
+        }
+    };
+    
+    const handleDelete = () => {
+        onSave(null);
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>{lesson ? 'Upravit hodinu' : 'Přidat hodinu'}</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                        <Label htmlFor="subject">Předmět</Label>
+                        <Select value={subjectId} onValueChange={setSubjectId}>
+                            <SelectTrigger id="subject"><SelectValue placeholder="Vyberte předmět" /></SelectTrigger>
+                            <SelectContent>{subjects.map(s => <SelectItem key={s.id} value={s.id}>{s.name} ({s.shortcut})</SelectItem>)}</SelectContent>
+                        </Select>
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="teacher">Učitel</Label>
+                        <Select value={teacherId} onValueChange={setTeacherId}>
+                            <SelectTrigger id="teacher"><SelectValue placeholder="Vyberte učitele" /></SelectTrigger>
+                            <SelectContent>{teachers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                        </Select>
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="classroom">Učebna</Label>
+                        <Select value={classroomId} onValueChange={setClassroomId}>
+                            <SelectTrigger id="classroom"><SelectValue placeholder="Vyberte učebnu" /></SelectTrigger>
+                            <SelectContent>{classrooms.map(c => <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>)}</SelectContent>
+                        </Select>
+                    </div>
+                </div>
+                <DialogFooter className="justify-between">
+                    <div>
+                         {lesson && (
+                            <Button variant="destructive" onClick={handleDelete}>Smazat hodinu</Button>
+                         )}
+                    </div>
+                    <div className="flex gap-2">
+                        <DialogClose asChild><Button variant="outline">Zrušit</Button></DialogClose>
+                        <Button onClick={handleSave}>Uložit</Button>
+                    </div>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 
 function ScheduleEditor() {
     const firestore = useFirestore();
     const { toast } = useToast();
+
+    // Data fetching
     const tridyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]);
     const { data: classes, isLoading: classesLoading } = useCollection<Trida>(tridyCollection);
 
+    const uciteleQuery = useMemoFirebase(() => firestore ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore]);
+    const { data: teachers, isLoading: teachersLoading } = useCollection<User>(uciteleQuery);
+
+    const predmetyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'predmety') : null, [firestore]);
+    const { data: subjects, isLoading: subjectsLoading } = useCollection<Predmet>(predmetyCollection);
+
+    const ucebnyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'ucebny') : null, [firestore]);
+    const { data: classrooms, isLoading: classroomsLoading } = useCollection<Ucebna>(ucebnyCollection);
+
+
     const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
     const [schedule, setSchedule] = useState<ScheduleEditorState>([]);
+
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [editingCell, setEditingCell] = useState<{ dayIndex: number, periodIndex: number } | null>(null);
+
 
     useEffect(() => {
         if (classes && classes.length > 0 && !selectedClassId) {
@@ -59,18 +186,9 @@ function ScheduleEditor() {
             return;
         }
 
-        // This is a simplified save. In a real scenario, you'd have one document per day/week.
-        // For this example, let's create one document for the entire week's template.
         try {
-            // In a real app, we would probably save one document per day of the week
-            // For simplicity, we can create a single document representing the "template"
-            // Let's assume we are saving the schedule for a specific date range, e.g., a week
-            // But for a generic editor, let's just save one doc per day of the week
             for (let i = 0; i < daysOfWeek.length; i++) {
                 const day = daysOfWeek[i];
-                // Using a composite ID, but a real app might use a more robust system
-                // For a template, we might just use the classId and day name.
-                // Let's create a placeholder for a specific date for now.
                 const rozvrhId = `${selectedClassId}-2024-09-0${i + 2}`; // Example: 7A-2024-09-02
                 const rozvrhRef = doc(firestore, 'rozvrhy', rozvrhId);
                 const daySchedule: Omit<Rozvrh, 'id'> = {
@@ -90,10 +208,42 @@ function ScheduleEditor() {
     };
     
     const handleCellClick = (dayIndex: number, periodIndex: number) => {
-        // Here you would open a dialog to edit the lesson
-        console.log(`Editing: Day ${dayIndex}, Period ${periodIndex}`);
+        setEditingCell({ dayIndex, periodIndex });
+        setIsDialogOpen(true);
+    }
+    
+    const handleDialogClose = () => {
+        setIsDialogOpen(false);
+        setEditingCell(null);
     }
 
+    const handleDialogSave = (lesson: LessonBlock | null) => {
+        if (editingCell) {
+            const { dayIndex, periodIndex } = editingCell;
+            const newSchedule = [...schedule];
+            if (!newSchedule[dayIndex]) {
+                 newSchedule[dayIndex] = Array(timeSlots.length).fill(null);
+            }
+            
+            const selectedClass = classes?.find(c => c.id === selectedClassId);
+            
+            let finalLesson = lesson;
+            if(finalLesson) {
+                finalLesson = {
+                    ...finalLesson,
+                    classId: selectedClassId || '',
+                    className: selectedClass?.nazev || '',
+                }
+            }
+            
+            newSchedule[dayIndex][periodIndex] = finalLesson;
+            setSchedule(newSchedule);
+        }
+        handleDialogClose();
+    };
+
+    const isDataLoading = classesLoading || teachersLoading || subjectsLoading || classroomsLoading;
+    const currentLesson = editingCell ? schedule[editingCell.dayIndex]?.[editingCell.periodIndex] : null;
 
     return (
         <Card>
@@ -111,58 +261,71 @@ function ScheduleEditor() {
                             {classes?.map(c => <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    <Button onClick={handleSave} disabled={!selectedClassId}>
+                    <Button onClick={handleSave} disabled={!selectedClassId || isDataLoading}>
                         <Save className="mr-2 h-4 w-4" /> Uložit rozvrh
                     </Button>
                 </div>
             </CardHeader>
             <CardContent>
-                <div className="border rounded-lg overflow-auto">
-                    <div className={cn("grid", `grid-cols-[auto_repeat(${daysOfWeek.length},1fr)]`)}
-                         style={{ gridTemplateColumns: `auto repeat(${daysOfWeek.length}, minmax(120px, 1fr))`}}
-                    >
-                         {/* Corner */}
-                         <div className="border-b border-r bg-muted/50 p-2"></div>
-                         {/* Day Headers */}
-                         {daysOfWeek.map(day => (
-                             <div key={day} className="p-2 text-center font-semibold border-b border-r bg-muted/50">{day}</div>
-                         ))}
+                {isDataLoading ? (
+                    <div className="flex justify-center items-center h-48">Načítání dat...</div>
+                ) : (
+                    <div className="border rounded-lg overflow-auto">
+                        <div className={cn("grid", `grid-cols-[auto_repeat(${daysOfWeek.length},1fr)]`)}
+                             style={{ gridTemplateColumns: `auto repeat(${daysOfWeek.length}, minmax(120px, 1fr))`}}
+                        >
+                             {/* Corner */}
+                             <div className="border-b border-r bg-muted/50 p-2"></div>
+                             {/* Day Headers */}
+                             {daysOfWeek.map(day => (
+                                 <div key={day} className="p-2 text-center font-semibold border-b border-r bg-muted/50">{day}</div>
+                             ))}
 
-                         {/* Time Slots and Cells */}
-                         {timeSlots.map((time, periodIndex) => (
-                             <React.Fragment key={time}>
-                                <div className="flex flex-col items-center justify-center p-2 text-center font-semibold border-b border-r bg-muted/50 text-sm">
-                                    <span>{periodIndex + 1}.</span>
-                                    <span className="text-xs text-muted-foreground">{time}</span>
-                                </div>
-                                {daysOfWeek.map((day, dayIndex) => {
-                                    const lesson = schedule[dayIndex]?.[periodIndex];
-                                    return (
-                                        <div 
-                                            key={`${day}-${periodIndex}`} 
-                                            className="p-1 border-b border-r min-h-[70px] hover:bg-accent/50 cursor-pointer transition-colors"
-                                            onClick={() => handleCellClick(dayIndex, periodIndex)}
-                                        >
-                                            {lesson ? (
-                                                <div className="bg-primary/20 p-1 rounded-sm text-xs h-full flex flex-col justify-center text-center">
-                                                    <p className="font-bold">{lesson.subjectShortcut}</p>
-                                                    <p>{lesson.teacherName}</p>
-                                                    <p className="text-muted-foreground">{lesson.ucebnaName}</p>
-                                                </div>
-                                            ) : (
-                                                <div className="h-full w-full flex items-center justify-center">
-                                                    <PlusCircle className="h-4 w-4 text-muted-foreground" />
-                                                </div>
-                                            )}
-                                        </div>
-                                    )
-                                })}
-                             </React.Fragment>
-                         ))}
+                             {/* Time Slots and Cells */}
+                             {timeSlots.map((time, periodIndex) => (
+                                 <React.Fragment key={time}>
+                                    <div className="flex flex-col items-center justify-center p-2 text-center font-semibold border-b border-r bg-muted/50 text-sm">
+                                        <span>{periodIndex + 1}.</span>
+                                        <span className="text-xs text-muted-foreground">{time}</span>
+                                    </div>
+                                    {daysOfWeek.map((day, dayIndex) => {
+                                        const lesson = schedule[dayIndex]?.[periodIndex];
+                                        return (
+                                            <div 
+                                                key={`${day}-${periodIndex}`} 
+                                                className="p-1 border-b border-r min-h-[70px] hover:bg-accent/50 cursor-pointer transition-colors"
+                                                onClick={() => handleCellClick(dayIndex, periodIndex)}
+                                            >
+                                                {lesson ? (
+                                                    <div className="bg-primary/20 p-1 rounded-sm text-xs h-full flex flex-col justify-center text-center">
+                                                        <p className="font-bold">{lesson.subjectShortcut}</p>
+                                                        <p>{lesson.teacherName}</p>
+                                                        <p className="text-muted-foreground">{lesson.ucebnaName}</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="h-full w-full flex items-center justify-center">
+                                                        <PlusCircle className="h-4 w-4 text-muted-foreground" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                 </React.Fragment>
+                             ))}
 
+                        </div>
                     </div>
-                </div>
+                )}
             </CardContent>
+            <LessonEditDialog
+                isOpen={isDialogOpen}
+                onClose={handleDialogClose}
+                onSave={handleDialogSave}
+                lesson={currentLesson}
+                teachers={teachers || []}
+                subjects={subjects || []}
+                classrooms={classrooms || []}
+            />
         </Card>
     );
 }
