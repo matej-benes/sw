@@ -2,11 +2,11 @@
 import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, BookOpen, User, Home, Clock } from 'lucide-react';
+import { ArrowLeft, BookOpen, User, Home, Clock, FileText } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, query, where, collection } from 'firebase/firestore';
-import type { Rozvrh, LessonBlock, User as AppUser, Trida } from '@/lib/types';
+import type { Rozvrh, LessonBlock, User as AppUser, Trida, ZapisHodiny } from '@/lib/types';
 import { isSameDay, parseISO } from 'date-fns';
 import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
@@ -24,7 +24,14 @@ export default function LessonDetailPage() {
         return doc(firestore, 'rozvrhy', `${classId}-${dateStr}`);
     }, [firestore, dateStr, classId]);
 
+    const zapisId = `${classId}-${dateStr}-${periodStr}`;
+    const zapisRef = useMemoFirebase(() => {
+        if (!firestore || !zapisId) return null;
+        return doc(firestore, 'zapisyHodin', zapisId);
+    }, [firestore, zapisId]);
+
     const { data: schedule, isLoading: scheduleLoading } = useDoc<Rozvrh>(rozvrhRef);
+    const { data: zapis, isLoading: zapisLoading } = useDoc<ZapisHodiny>(zapisRef);
 
     const lesson: LessonBlock | null | undefined = schedule?.hodiny[parseInt(periodStr, 10)];
     const timeSlot = schedule?.timeSlots[parseInt(periodStr, 10)];
@@ -35,7 +42,9 @@ export default function LessonDetailPage() {
     const teacherRef = useMemoFirebase(() => lesson ? doc(firestore, 'users', lesson.teacherId) : null, [firestore, lesson]);
     const {data: teacherData} = useDoc<AppUser>(teacherRef);
 
-    if (scheduleLoading) {
+    const isLoading = scheduleLoading || zapisLoading;
+
+    if (isLoading) {
         return (
             <div className="p-4 md:p-6">
                 <Button variant="ghost" size="icon" onClick={() => router.back()}>
@@ -58,8 +67,8 @@ export default function LessonDetailPage() {
     }
 
     return (
-        <div className="p-4 md:p-6">
-            <div className="flex items-center gap-4 mb-6">
+        <div className="p-4 md:p-6 space-y-6">
+            <div className="flex items-center gap-4">
                  <Button variant="ghost" size="icon" onClick={() => router.back()}>
                     <ArrowLeft className="h-5 w-5" />
                 </Button>
@@ -113,6 +122,34 @@ export default function LessonDetailPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            {(zapis?.topic || zapis?.note) && (
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>Zápis z hodiny</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {zapis.topic && (
+                            <div className="flex items-start gap-3">
+                                <FileText className="h-5 w-5 mt-0.5 text-muted-foreground" />
+                                <div>
+                                    <p className="text-muted-foreground">Probírané učivo</p>
+                                    <p className="font-medium">{zapis.topic}</p>
+                                </div>
+                            </div>
+                        )}
+                         {zapis.note && (
+                            <div className="flex items-start gap-3">
+                                <FileText className="h-5 w-5 mt-0.5 text-muted-foreground" />
+                                <div>
+                                    <p className="text-muted-foreground">Poznámka</p>
+                                    <p className="font-medium">{zapis.note}</p>
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
         </div>
     );
 }

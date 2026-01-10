@@ -76,5 +76,10 @@ service cloud.firestore {
                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']));
       allow delete: if false; 
     }
+
+    match /zapisyHodin/{zapisId} {
+        allow get, list: if isAuthenticated();
+        allow write: if isAuthenticated(); // For simplicity, teachers can write
+    }
   }
 }

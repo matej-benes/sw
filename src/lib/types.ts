@@ -176,3 +176,21 @@ export interface Message {
     createdAt: any; // Firestore Timestamp
     readBy: string[]; // List of user IDs who have read the message
 }
+
+export type AttendanceStatus = '-' | '/' | 'O' | 'N' | 'S';
+
+export interface ZapisHodiny {
+    id: string; // e.g., {tridaId}-{datum}-{hodina}
+    tridaId: string;
+    datum: string; // YYYY-MM-DD
+    hodina: string; // period number
+    predmetId: string;
+    ucitelId: string;
+    topic: string;
+    note?: string;
+    attendance: {
+        studentId: string;
+        status: AttendanceStatus;
+        reason?: string;
+    }[];
+}

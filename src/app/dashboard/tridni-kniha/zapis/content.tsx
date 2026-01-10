@@ -24,9 +24,9 @@ import { CalendarIcon, ChevronLeft, Info, Save } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { useFirestore, useDoc, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useDoc, useCollection, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
 import { collection, doc, query, where } from 'firebase/firestore';
-import type { User, Trida, Predmet } from '@/lib/types';
+import type { User, Trida, Predmet, AttendanceStatus, ZapisHodiny } from '@/lib/types';
 import {
   Tooltip,
   TooltipContent,
@@ -35,8 +35,9 @@ import {
 } from '@/components/ui/tooltip';
 import { format, parseISO } from 'date-fns';
 import { cs } from 'date-fns/locale';
+import { useAuth } from '@/hooks/use-auth';
 
-type AttendanceStatus = '-' | '/' | 'O' | 'N' | 'S';
+
 const attendanceCycle: AttendanceStatus[] = ['-', '/', 'O', 'N', 'S'];
 
 const attendanceLegend: { [key in AttendanceStatus]: string } = {
@@ -47,23 +48,33 @@ const attendanceLegend: { [key in AttendanceStatus]: string } = {
     'S': 'nezapočítávaná absence (akce školy, ...)',
 };
 
-type StudentWithAttendance = User & { attendance: AttendanceStatus[] };
+type StudentWithAttendance = User & { attendanceStatus: AttendanceStatus; reason: string };
 
 export default function TridniKnihaZapisContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const firestore = useFirestore();
   const { toast } = useToast();
+  const { user: teacherUser } = useAuth();
 
   const tridaId = searchParams.get('tridaId');
   const datum = searchParams.get('datum');
   const hodina = searchParams.get('hodina');
   const predmetId = searchParams.get('predmetId');
+  
+  const zapisId = useMemo(() => {
+    if (!tridaId || !datum || !hodina) return null;
+    return `${tridaId}-${datum}-${hodina}`;
+  }, [tridaId, datum, hodina]);
 
   const [topic, setTopic] = useState('');
   const [note, setNote] = useState('');
   const [students, setStudents] = useState<StudentWithAttendance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch existing entry if it exists
+  const zapisRef = useMemoFirebase(() => zapisId ? doc(firestore, 'zapisyHodin', zapisId) : null, [firestore, zapisId]);
+  const { data: existingZapis, isLoading: zapisLoading } = useDoc<ZapisHodiny>(zapisRef);
 
   // Fetch class info
   const tridaRef = useMemoFirebase(() => tridaId ? doc(firestore, 'tridy', tridaId) : null, [firestore, tridaId]);
@@ -82,29 +93,58 @@ export default function TridniKnihaZapisContent() {
   
   useEffect(() => {
     if (!studentsLoading && studentDocs) {
-      setStudents(studentDocs.map(s => ({
-        ...s,
-        attendance: Array(10).fill('-')
-      })));
+        if (existingZapis) {
+            // Load from existing entry
+            setTopic(existingZapis.topic);
+            setNote(existingZapis.note || '');
+            setStudents(studentDocs.map(s => {
+                const attendanceRecord = existingZapis.attendance.find(a => a.studentId === s.id);
+                return {
+                    ...s,
+                    attendanceStatus: attendanceRecord?.status || '-',
+                    reason: attendanceRecord?.reason || ''
+                }
+            }));
+        } else {
+            // New entry
+            setStudents(studentDocs.map(s => ({
+                ...s,
+                attendanceStatus: '-',
+                reason: ''
+            })));
+        }
     }
-  }, [studentDocs, studentsLoading]);
+  }, [studentDocs, studentsLoading, existingZapis]);
 
   useEffect(() => {
-     setIsLoading(tridaLoading || predmetLoading || studentsLoading);
-  }, [tridaLoading, predmetLoading, studentsLoading]);
+     setIsLoading(tridaLoading || predmetLoading || studentsLoading || zapisLoading);
+  }, [tridaLoading, predmetLoading, studentsLoading, zapisLoading]);
 
 
   const handleSave = (goBack: boolean) => {
-    // In a real app, you would save the data to a database
-    console.log({
-      tridaId,
-      datum,
-      hodina,
-      predmetId,
-      topic,
-      note,
-      attendance: students.map(s => ({ studentId: s.id, attendance: s.attendance })),
-    });
+    if (!firestore || !teacherUser || !zapisId || !tridaId || !datum || !hodina || !predmetId) {
+        toast({ variant: 'destructive', title: 'Chyba', description: 'Nekompletní data pro uložení.'});
+        return;
+    }
+    
+    const zapisData: ZapisHodiny = {
+        id: zapisId,
+        tridaId,
+        datum,
+        hodina,
+        predmetId,
+        ucitelId: teacherUser.id,
+        topic,
+        note,
+        attendance: students.map(s => ({
+            studentId: s.id,
+            status: s.attendanceStatus,
+            reason: s.reason,
+        })),
+    };
+    
+    setDocumentNonBlocking(doc(firestore, 'zapisyHodin', zapisId), zapisData, { merge: true });
+
     toast({
       title: 'Uloženo',
       description: 'Zápis do třídní knihy byl úspěšně uložen.',
@@ -114,21 +154,27 @@ export default function TridniKnihaZapisContent() {
     }
   };
 
-  const handleAttendanceClick = (studentId: string, hourIndex: number) => {
+  const handleAttendanceClick = (studentId: string) => {
     setStudents(prevStudents => 
         prevStudents.map(student => {
             if (student.id === studentId) {
-                const newAttendance = [...student.attendance];
-                const currentStatus = newAttendance[hourIndex];
+                const currentStatus = student.attendanceStatus;
                 const currentIndex = attendanceCycle.indexOf(currentStatus);
                 const nextIndex = (currentIndex + 1) % attendanceCycle.length;
-                newAttendance[hourIndex] = attendanceCycle[nextIndex];
-                return { ...student, attendance: newAttendance };
+                return { ...student, attendanceStatus: attendanceCycle[nextIndex] };
             }
             return student;
         })
     );
   };
+
+  const handleReasonChange = (studentId: string, reason: string) => {
+    setStudents(prevStudents => 
+        prevStudents.map(student => 
+            student.id === studentId ? { ...student, reason } : student
+        )
+    );
+  }
   
   const getAttendanceCellClass = (status: AttendanceStatus) => {
     switch (status) {
@@ -217,9 +263,7 @@ export default function TridniKnihaZapisContent() {
                     <TableHeader>
                         <TableRow>
                             <TableHead className="min-w-[200px]">Příjmení a jméno (ČVTV)</TableHead>
-                            {Array.from({ length: 10 }, (_, i) => (
-                                <TableHead key={i} className="text-center w-12">{i + 1}</TableHead>
-                            ))}
+                            <TableHead className="text-center w-12">{hodina}</TableHead>
                             <TableHead className="min-w-[150px]">Důvod absence</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -245,13 +289,15 @@ export default function TridniKnihaZapisContent() {
                                         </Tooltip>
                                     </TooltipProvider>
                                 </TableCell>
-                                {student.attendance.map((status, i) => (
-                                    <TableCell key={i} className={cn("p-0 text-center", getAttendanceCellClass(status))} onClick={() => handleAttendanceClick(student.id, i)}>
-                                        <div className="w-full h-full flex items-center justify-center p-2">{status}</div>
-                                    </TableCell>
-                                ))}
+                                <TableCell className={cn("p-0 text-center", getAttendanceCellClass(student.attendanceStatus))} onClick={() => handleAttendanceClick(student.id)}>
+                                    <div className="w-full h-full flex items-center justify-center p-2">{student.attendanceStatus}</div>
+                                </TableCell>
                                 <TableCell>
-                                    <Input className="h-8" />
+                                    <Input 
+                                      className="h-8" 
+                                      value={student.reason} 
+                                      onChange={(e) => handleReasonChange(student.id, e.target.value)}
+                                    />
                                 </TableCell>
                             </TableRow>
                         ))}
@@ -259,7 +305,7 @@ export default function TridniKnihaZapisContent() {
                 </Table>
             </div>
              <p className="text-sm text-muted-foreground mt-2">
-                Celkem dětí/žáků: {students.length} (přítomno: {students.filter(s => s.attendance[Number(hodina)-1] === '-').length}, nepřítomno: {students.filter(s => s.attendance[Number(hodina)-1] !== '-').length})
+                Celkem dětí/žáků: {students.length} (přítomno: {students.filter(s => s.attendanceStatus === '-').length}, nepřítomno: {students.filter(s => s.attendanceStatus !== '-').length})
             </p>
           </div>
             

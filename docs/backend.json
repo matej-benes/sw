@@ -391,6 +391,34 @@
         "readBy": { "type": "array", "items": { "type": "string" }, "description": "List of user IDs who have read the message." }
       },
       "required": ["id", "senderId", "recipientIds", "text", "createdAt"]
+    },
+    "ZapisHodiny": {
+        "title": "ZapisHodiny",
+        "type": "object",
+        "description": "Represents an entry in the class book for a specific lesson.",
+        "properties": {
+            "id": { "type": "string", "description": "Composite key, e.g., {tridaId}-{datum}-{hodina}" },
+            "tridaId": { "type": "string" },
+            "datum": { "type": "string", "format": "date" },
+            "hodina": { "type": "string" },
+            "predmetId": { "type": "string" },
+            "ucitelId": { "type": "string" },
+            "topic": { "type": "string", "description": "The topic covered in the lesson." },
+            "note": { "type": "string", "description": "Additional notes (e.g., safety instructions)." },
+            "attendance": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "studentId": { "type": "string" },
+                        "status": { "type": "string", "enum": ["-", "/", "O", "N", "S"] },
+                        "reason": { "type": "string" }
+                    },
+                    "required": ["studentId", "status"]
+                }
+            }
+        },
+        "required": ["id", "tridaId", "datum", "hodina", "predmetId", "ucitelId", "topic", "attendance"]
     }
   },
   "auth": {
@@ -569,6 +597,17 @@
           "description": "Collection for all messages. Each document is a single message with its own recipients.",
           "params": [
             { "name": "messageId", "description": "The unique ID of the message." }
+          ]
+        }
+      },
+       {
+        "path": "/zapisyHodin/{zapisId}",
+        "definition": {
+          "entityName": "ZapisHodiny",
+          "schema": { "$ref": "#/backend/entities/ZapisHodiny" },
+          "description": "Stores class book entries for each lesson. Document ID is a composite key like '{tridaId}-{YYYY-MM-DD}-{hodina}'.",
+          "params": [
+            { "name": "zapisId", "description": "The unique ID of the class book entry." }
           ]
         }
       }
