@@ -14,6 +14,7 @@ import { useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase
 import { collection, doc, query, where } from 'firebase/firestore';
 import type { Trida, User } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { MultiSelect } from '@/components/ui/multi-select';
 
 export default function ZpravyPage() {
   const { user, hasRole } = useAuth();
@@ -21,15 +22,17 @@ export default function ZpravyPage() {
   const { toast } = useToast();
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [recipients, setRecipients] = useState<string[]>([]);
   const isTeacher = hasRole('ucitel');
   const isStudent = hasRole('ziak');
 
-  // Fetch all teachers
-  const teachersQuery = useMemoFirebase(() => {
+  // Fetch all users to be used as potential recipients
+  const usersCollection = useMemoFirebase(() => {
     if (!firestore) return null;
-    return query(collection(firestore, "users"), where("roles", "array-contains", "ucitel"));
+    return collection(firestore, "users");
   }, [firestore]);
-  const { data: teachers } = useCollection<User>(teachersQuery);
+  const { data: allUsers } = useCollection<User>(usersCollection);
+
 
   // Fetch student's class to find the class teacher
   const tridaRef = useMemoFirebase(() => {
@@ -38,12 +41,25 @@ export default function ZpravyPage() {
   }, [firestore, user?.tridaId]);
   const { data: tridaData } = useDoc<Trida>(tridaRef);
   
-  // Fetch students for teacher view
-  const studentsCollection = useMemoFirebase(() => {
-    if (!firestore || !isTeacher) return null;
-    return query(collection(firestore, "users"), where("roles", "array-contains", "ziak"));
-  }, [firestore, isTeacher]);
-  const { data: students } = useCollection<User>(studentsCollection);
+
+  const recipientOptions = useMemo(() => {
+    if (!allUsers) return [];
+
+    if (isTeacher) {
+        // Teachers can message students and parents
+        const studentOptions = allUsers.filter(u => u.roles.includes('ziak')).map(u => ({ value: u.id, label: `${u.name} (Žák)` }));
+        const parentOptions = allUsers.filter(u => u.roles.includes('rodic')).map(u => ({ value: u.id, label: `${u.name} (Rodič)` }));
+        return [...studentOptions, ...parentOptions];
+    }
+
+    if (isStudent) {
+        // Students can message teachers
+        return allUsers.filter(u => u.roles.includes('ucitel')).map(u => ({ value: u.id, label: `${u.name} (Učitel)` }));
+    }
+    
+    // Default/other roles
+    return allUsers.map(u => ({ value: u.id, label: u.name }));
+  }, [allUsers, isTeacher, isStudent]);
 
 
   const handleGenerateMessage = async () => {
@@ -79,34 +95,22 @@ export default function ZpravyPage() {
       });
       return;
     }
+     if (recipients.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Chybí příjemce",
+        description: "Prosím vyberte alespoň jednoho příjemce.",
+      });
+      return;
+    }
     
     toast({
       title: 'Zpráva odeslána',
       description: 'Vaše zpráva byla úspěšně odeslána.',
     });
     setMessage('');
+    setRecipients([]);
   };
-
-  const sortedTeachers = useMemo(() => {
-    if (!teachers) return [];
-    if (!isStudent || !tridaData) return teachers;
-
-    const { ucitelId, zastupciIds = [] } = tridaData;
-    
-    return [...teachers].sort((a, b) => {
-        const isAClassTeacher = a.id === ucitelId;
-        const isBClassTeacher = b.id === ucitelId;
-        const isASubstitute = zastupciIds.includes(a.id);
-        const isBSubstitute = zastupciIds.includes(b.id);
-
-        if (isAClassTeacher) return -1;
-        if (isBClassTeacher) return 1;
-        if (isASubstitute && !isBSubstitute) return -1;
-        if (!isASubstitute && isBSubstitute) return 1;
-        
-        return a.name.localeCompare(b.name);
-    });
-}, [teachers, tridaData, isStudent]);
 
   return (
     <div className="space-y-6">
@@ -134,55 +138,16 @@ export default function ZpravyPage() {
               <CardDescription>Napište novou zprávu.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {isTeacher && (
-                <div className="space-y-2">
-                  <Label htmlFor="student-select">Příjemce</Label>
-                  <Select>
-                    <SelectTrigger id="student-select">
-                      <SelectValue placeholder="Vyberte studenta nebo rodiče" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {students?.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name} (Žák)</SelectItem>
-                      ))}
-                       {students?.map((s) => (
-                        <SelectItem key={`${s.id}-rodic`} value={`${s.studentId}`}>Rodič - {s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+               <div className="space-y-2">
+                  <Label htmlFor="recipient-select">Příjemce</Label>
+                  <MultiSelect
+                    options={recipientOptions}
+                    onValueChange={setRecipients}
+                    defaultValue={recipients}
+                    placeholder="Vyberte příjemce..."
+                    className="w-full"
+                   />
                 </div>
-              )}
-                {isStudent && (
-                <div className="space-y-2">
-                  <Label htmlFor="teacher-select">Příjemce</Label>
-                  <Select>
-                    <SelectTrigger id="teacher-select">
-                      <SelectValue placeholder="Vyberte učitele" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sortedTeachers?.map((t) => {
-                        const isClassTeacher = t.id === tridaData?.ucitelId;
-                        const isSubstitute = tridaData?.zastupciIds?.includes(t.id);
-                        const isSpecial = isClassTeacher || isSubstitute;
-
-                        return (
-                            <SelectItem key={t.id} value={t.id}>
-                               <span className={cn(isSpecial && "text-destructive")}>
-                                    {t.name} {isClassTeacher && "(třídní učitel)"} {isSubstitute && !isClassTeacher && "(zástupce)"}
-                               </span>
-                            </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-                )}
-                {!isTeacher && !isStudent && (
-                    <div className="space-y-2">
-                        <Label htmlFor="teacher-select">Příjemce</Label>
-                        <Input id="teacher-select" value="Není specifikováno" readOnly />
-                    </div>
-                )}
               <div className="space-y-2">
                 <Label htmlFor="message-content">Zpráva</Label>
                 <Textarea
