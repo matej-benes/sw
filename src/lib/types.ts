@@ -1,3 +1,5 @@
+import { Timestamp } from "firebase/firestore";
+
 export type Role = 'ucitel' | 'rodic' | 'ziak' | 'administrator' | 'vedouci pracovnik' | 'asistent pedagoga';
 
 export interface User {
@@ -7,7 +9,7 @@ export interface User {
   roles: Role[];
   avatarUrl?: string;
   tridaId?: string; // Class for student or teacher
-  studentId?: string; // For parent role
+  studentId?: string; // For parent role -> student's ID, for student role -> parent's ID
   pin?: string; // 6-digit PIN for registration
 }
 
@@ -16,7 +18,7 @@ export interface Znamka {
   studentId: string;
   predmet: string;
   hodnota: number;
-  datum: string;
+  datum: Timestamp;
   ucitelId: string;
   slovniHodnoceni?: string;
   tema?: string;

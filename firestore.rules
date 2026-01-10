@@ -28,10 +28,9 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if isAuthenticated();
-      // Allow listing for two specific cases:
-      // 1. Unauthenticated users querying for a specific, non-empty PIN.
-      // 2. Authenticated admin users.
-      allow list: if (request.query.get('where')[0][0] == 'pin' && request.query.get('where')[0][2] != '') || isAdmin();
+      // Allow unauthenticated users to query ONLY by a non-empty PIN for registration.
+      // Allow authenticated admins to list users for management purposes.
+      allow list: if (request.query.get("where")[0][0] == "pin" && request.query.get("where")[0][2] != "") || isAdmin();
       allow create: if isAdmin();
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
@@ -82,9 +81,13 @@ service cloud.firestore {
         allow write: if isAdmin();
     }
     
-    match /users/{userId}/znamky/{znamkaId} {
-       allow get, list: if isAuthenticated();
-       allow write: if isAdmin() || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(['ucitel']);
+    match /users/{studentId}/znamky/{znamkaId} {
+       allow get, list: if isAuthenticated() && (isOwner(studentId) || isMyStudent(studentId) || hasAnyRole(['ucitel', 'administrator']));
+       allow write: if hasAnyRole(['ucitel', 'administrator']);
+
+       function hasAnyRole(roles) {
+         return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(roles);
+       }
     }
 
     match /messages/{document=**} {

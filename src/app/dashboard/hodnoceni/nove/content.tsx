@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { format, parseISO } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { useFirestore, useCollection, useDoc, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
-import { collection, doc, query, where } from 'firebase/firestore';
+import { collection, doc, query, where, Timestamp } from 'firebase/firestore';
 import type { Trida, User, Predmet, Rozvrh, Znamka } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 
@@ -63,7 +63,7 @@ function NewGradingContent() {
 
   const studentsQuery = useMemoFirebase(() => {
     if (!firestore || !tridaId) return null;
-    return query(collection(firestore, "users"), where("tridaId", "==", tridaId));
+    return query(collection(firestore, "users"), where("tridaId", "==", tridaId), where("roles", "array-contains", "ziak"));
   }, [firestore, tridaId]);
   const { data: studentDocs, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
   
@@ -121,21 +121,21 @@ function NewGradingContent() {
     }
 
     try {
-      const znamkyCollection = collection(firestore, `users/${teacherUser.uid}/znamky`);
-        
         for (const student of data.studenti) {
             if (student.zahrnout && student.znamka) {
-                const newZnamka: Znamka = {
+                const newZnamka: Omit<Znamka, 'id'> = {
                     studentId: student.studentId,
                     predmet: predmety?.find(p => p.id === data.predmetId)?.name || 'Neznámý',
                     hodnota: parseInt(student.znamka, 10),
-                    datum: format(data.datum, 'yyyy-MM-dd'),
+                    datum: Timestamp.fromDate(data.datum), // Correct format for Firestore
                     ucitelId: teacherUser.id,
                     slovniHodnoceni: student.slovniHodnoceni,
                     tema: data.tema,
                     druhHodnoceni: 'písemné', // example
                 };
-                await addDocumentNonBlocking(collection(firestore, 'znamky'), newZnamka);
+                // Correct path to subcollection
+                const znamkyCollectionRef = collection(firestore, 'users', student.studentId, 'znamky');
+                await addDocumentNonBlocking(znamkyCollectionRef, newZnamka);
             }
         }
         
