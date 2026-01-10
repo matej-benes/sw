@@ -15,6 +15,7 @@ import { MobileNav } from '@/components/layout/mobile-nav';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useUnreadMessages } from '@/hooks/use-unread-messages';
 import { Badge } from '@/components/ui/badge';
+import { usePageTitleUpdater } from '@/hooks/usePageTitleUpdater';
 
 const mainNavLinks = [
     { name: 'Komunikace', href: '/dashboard/zpravy', icon: MessageSquare },
@@ -49,6 +50,7 @@ export default function DashboardLayout({
   const isAdministrator = hasRole('administrator');
   const isTeacher = hasRole('ucitel');
   const isMobile = useIsMobile();
+  usePageTitleUpdater();
 
 
   useEffect(() => {
