@@ -45,20 +45,11 @@ service cloud.firestore {
       allow get: if request.auth != null && 
                    (request.auth.uid == resource.data.senderId || request.auth.uid in resource.data.recipientIds);
 
-      // Uživatel může vypisovat (list) zprávy, pouze pokud dotaz explicitně filtruje zprávy, kde je příjemcem.
-      // Toto pravidlo je klíčové pro bezpečné načítání doručených zpráv.
-      allow list: if request.auth != null && (
-                    request.query.where.size() == 1 &&
-                    'recipientIds' in request.query.where[0] &&
-                    request.query.where[0].recipientIds[1] == 'array-contains' &&
-                    request.query.where[0].recipientIds[2] == request.auth.uid
-                  ) || (
-                    request.query.where.size() == 1 &&
-                    'senderId' in request.query.where[0] &&
-                    request.query.where[0].senderId[1] == '==' &&
-                    request.query.where[0].senderId[2] == request.auth.uid
-                  );
-
+      // Uživatel může vypisovat (list) zprávy, pouze pokud dotaz explicitně filtruje zprávy, kde je příjemcem NEBO odesílatelem.
+      // Toto pravidlo je klíčové pro bezpečné načítání doručených i odeslaných zpráv.
+      allow list: if request.auth != null && 
+                  (request.query.where[0][0] == 'recipientIds' && request.query.where[0][1] == 'array-contains' && request.query.where[0][2] == request.auth.uid) ||
+                  (request.query.where[0][0] == 'senderId' && request.query.where[0][1] == '==' && request.query.where[0][2] == request.auth.uid);
 
       // Kdo může vytvářet zprávy?
       // Jakýkoliv přihlášený uživatel, pokud je ID odesílatele shodné s jeho vlastním ID.
