@@ -55,7 +55,7 @@ export default function TiskVysvedceniPage() {
          if (!firestore || !selectedClassId) return null;
         return query(collection(firestore, 'zapisyHodin'), where('tridaId', '==', selectedClassId));
     }, [firestore, selectedClassId]);
-    const { data: attendanceRecords, isLoading: attendanceLoading } = useCollection<ZapisHodiny>(attendanceRecords);
+    const { data: attendanceRecords, isLoading: attendanceLoading } = useCollection<ZapisHodiny>(attendanceQuery);
 
     useEffect(() => {
         if (teacherClasses && teacherClasses.length > 0 && !selectedClassId) {
