@@ -1,49 +1,45 @@
 
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Pravidla pro ostatní kolekce
-    match /users/{userId} {
-      allow read, write: if request.auth != null;
+
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
     }
-    match /tridy/{tridaId} {
-      allow read, write: if request.auth != null;
+
+    // Helper function to check if user is the sender
+    function isSender(message) {
+      return request.auth.uid == message.senderId;
     }
-    match /predmety/{predmetId} {
-      allow read, write: if request.auth != null;
+
+    // Helper function to check if user is a recipient
+    function isRecipient() {
+      return request.auth.uid in resource.data.recipientIds;
     }
-    match /ucebny/{ucebnaId} {
-      allow read, write: if request.auth != null;
+
+    // Default secure rules for all other collections
+    match /{path=**}/documents {
+      allow read, write: if isAuthenticated();
     }
-     match /znamky/{znamkaId} {
-      allow read, write: if request.auth != null;
-    }
-    match /rozvrhy/{rozvrhId} {
-      allow read, write: if request.auth != null;
-    }
-    match /scheduleTemplates/{templateId} {
-      allow read, write: if request.auth != null;
-    }
-    match /oznameni/{oznameniId} {
-      allow read, write: if request.auth != null;
-    }
-    match /poznamky-zaku/{poznamkaId} {
-      allow read, write: if request.auth != null;
-    }
-    match /udalosti/{udalostId} {
-      allow read, write: if request.auth != null;
-    }
-    match /suplovani/{substitutionId} {
-      allow read, write: if request.auth != null;
-    }
-    
-    // Pravidla pro kolekci 'messages' dle vašeho zadání
+
+    // Specific and secure rules for the 'messages' collection
     match /messages/{messageId} {
-      allow list, get: if request.auth != null;
-      allow create: if request.auth != null;
-      // Poznámka: Ujistěte se, že dokumenty zpráv obsahují pole 'userId' se shodným UID odesílatele,
-      // jinak update/delete selže. Ve vaší struktuře se pole jmenuje 'senderId'.
-      allow update, delete: if resource == null || resource.data.senderId == request.auth.uid;
+      // READ: Allow if user is sender OR is in the recipients list.
+      // This covers both 'get' and 'list' operations securely.
+      // For 'list', Firestore checks this rule against the query's constraints.
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.senderId || request.auth.uid in resource.data.recipientIds);
+
+      // CREATE: Allow if the user is authenticated and is the sender of the message.
+      allow create: if isAuthenticated() && isSender(request.resource.data);
+
+      // UPDATE: Allow sender to update their own message.
+      // Example: To allow recipients to mark as read, a more granular rule would be needed.
+      allow update: if isAuthenticated() && isSender(resource.data);
+
+      // DELETE: For safety, don't allow deletion, but if needed, only the sender should be able to.
+      allow delete: if isAuthenticated() && isSender(resource.data);
     }
   }
 }
