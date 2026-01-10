@@ -160,7 +160,7 @@ export default function TridniKnihaZapisContent() {
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Top form section */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
             <div className="space-y-1">
               <label className="text-sm font-medium">Třída</label>
               <Input value={tridaData?.nazev || ''} readOnly />
@@ -180,27 +180,29 @@ export default function TridniKnihaZapisContent() {
               <label className="text-sm font-medium">Předmět</label>
               <Input value={predmetData?.name || ''} readOnly />
             </div>
-             <div className="flex gap-2 col-span-full xl:col-span-2">
-                 <Button variant="outline">Vybrat hodinu z rozvrhu</Button>
-                 <Button variant="outline">Povolit změnu</Button>
+             <div className="flex flex-wrap gap-2 col-span-full xl:col-span-2">
+                 <Button variant="outline" size="sm">Vybrat hodinu z rozvrhu</Button>
+                 <Button variant="outline" size="sm">Povolit změnu</Button>
             </div>
-             <div className="space-y-1">
+             <div className="space-y-1 col-span-1 md:col-span-2">
               <label className="text-sm font-medium">Skupina</label>
               <Input value={`${tridaData?.nazev || ''} (Celá třída)`} readOnly />
             </div>
-            <div className="md:col-span-2 lg:col-span-4 xl:col-span-2 space-y-1">
+            <div className="col-span-1 md:col-span-2 lg:col-span-4 space-y-1">
               <label className="text-sm font-medium">Probírané učivo</label>
-              <Input value={topic} onChange={(e) => setTopic(e.target.value)} />
+              <div className="flex flex-col sm:flex-row gap-2">
+                 <Input value={topic} onChange={(e) => setTopic(e.target.value)} />
+                 <div className="flex gap-2">
+                    <Button size="sm">Vybrat z probraného učiva</Button>
+                    <Button size="sm">Vybrat z tematických plánů</Button>
+                 </div>
+              </div>
             </div>
-             <div className="flex gap-2 items-end col-span-full xl:col-span-3">
-                 <Button>Vybrat z probraného učiva</Button>
-                 <Button>Vybrat z tematických plánů</Button>
-            </div>
-            <div className="md:col-span-2 lg:col-span-4 xl:col-span-3 space-y-1">
+            <div className="col-span-1 md:col-span-2 lg:col-span-4 space-y-1">
               <label className="text-sm font-medium">Poznámka (BOZP, EU projekty, ...)</label>
               <Textarea value={note} onChange={(e) => setNote(e.target.value)} />
             </div>
-            <div className="flex items-end col-span-full xl:col-span-3">
+            <div className="flex items-end col-span-full">
                  <Button variant="outline">Zápis/zobrazení informací k výuce</Button>
             </div>
           </div>
@@ -214,11 +216,11 @@ export default function TridniKnihaZapisContent() {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="w-[250px]">Příjmení a jméno (ČVTV)</TableHead>
+                            <TableHead className="min-w-[200px]">Příjmení a jméno (ČVTV)</TableHead>
                             {Array.from({ length: 10 }, (_, i) => (
                                 <TableHead key={i} className="text-center w-12">{i + 1}</TableHead>
                             ))}
-                            <TableHead>Důvod absence</TableHead>
+                            <TableHead className="min-w-[150px]">Důvod absence</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -275,8 +277,8 @@ export default function TridniKnihaZapisContent() {
             </div>
 
         </CardContent>
-        <CardFooter className="flex justify-between">
-            <div className="flex gap-2">
+        <CardFooter className="flex flex-col sm:flex-row sm:justify-between gap-4">
+            <div className="flex flex-wrap gap-2">
                  <Button onClick={() => handleSave(false)}>
                     <Save className="mr-2 h-4 w-4" />
                     Uložit a zůstat

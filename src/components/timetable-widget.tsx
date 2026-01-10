@@ -224,6 +224,7 @@ function CancelledLessonBlock({ substitution }: { substitution: Substitution }) 
 
 export function TimetableWidget({ schedules, eventsData, substitutionsData, isTeacher, userId, userClassId, days }: { schedules: Rozvrh[], eventsData: Udalost[], substitutionsData: Substitution[], isTeacher: boolean, userId: string, userClassId?: string, days: Date[] }) {
     const isMobile = useIsMobile();
+    const router = useRouter();
     
     if (isMobile) {
         return null; // Don't render on mobile, MobileTimetable will be used instead
@@ -271,6 +272,18 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
 
         return null;
     };
+    
+    const handleCellClick = (isTeacher: boolean, lessonInfo: any, dayDate: Date, periodIndex: number) => {
+        if(isTeacher || !lessonInfo?.lesson || !lessonInfo?.classId) return;
+
+        const slug = [
+            format(dayDate, 'yyyy-MM-dd'),
+            periodIndex,
+            lessonInfo.classId,
+            lessonInfo.lesson.id
+        ];
+        router.push(`/dashboard/hodina/${slug.join('/')}`);
+    }
 
 
     return (
@@ -323,7 +336,7 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
 
 
                                 return (
-                                    <div key={periodIndex} className="p-0.5 border-b border-r border-border min-h-[70px] relative">
+                                    <div key={periodIndex} className="p-0.5 border-b border-r border-border min-h-[70px] relative" onClick={() => handleCellClick(isTeacher, lessonInfo, dayDate, periodIndex)}>
                                         {isCancelledByEvent ? (
                                              <EventBlock event={event!} />
                                         ) : isCancelledBySub && substitution ? (

@@ -1,13 +1,19 @@
 'use client';
 import React, { useState } from 'react';
 import { cn } from "@/lib/utils";
-import type { LessonBlock, Udalost, Rozvrh, Substitution } from "@/lib/types";
+import type { LessonBlock, Udalost, Rozvrh, Substitution, User, Predmet } from "@/lib/types";
 import { format, getDay, isSameDay, parseISO } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
-import { Info } from 'lucide-react';
+import { Info, PlusCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 
 const dayNames = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
 const defaultTimeSlots = [
@@ -23,6 +29,37 @@ interface MobileTimetableProps {
     userId: string;
     userClassId?: string;
     days: Date[];
+}
+
+function TeacherLessonContextMenu({ children, lesson, dayInfo, period, classId }: { children: React.ReactNode, lesson: LessonBlock, dayInfo: { fullDate: Date }, period: number, classId: string }) {
+    const router = useRouter();
+
+    const handleNavigation = (path: string, params: Record<string, string>) => {
+        const query = new URLSearchParams(params).toString();
+        router.push(`${path}?${query}`);
+    }
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild onContextMenu={(e) => e.preventDefault()}>
+                {children}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => handleNavigation('/dashboard/tridni-kniha/zapis', {
+                    tridaId: lesson.classId,
+                    datum: format(dayInfo.fullDate, 'yyyy-MM-dd'),
+                    hodina: (period + 1).toString(),
+                    predmetId: lesson.subjectId,
+                })}>Zapsat do třídní knihy</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleNavigation('/dashboard/hodnoceni/nove', {
+                     tridaId: lesson.classId,
+                    predmetId: lesson.subjectId,
+                    datum: format(dayInfo.fullDate, 'yyyy-MM-dd'),
+                    hodina: (period + 1).toString()
+                })}>Zadat hodnocení</DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
 }
 
 export function MobileTimetable({
@@ -43,7 +80,7 @@ export function MobileTimetable({
     const selectedDaySchedule = schedules.find(s => isSameDay(parseISO(s.datum), selectedDate));
     
     const lessonsForDay = selectedDaySchedule?.hodiny.map((lesson, index) => {
-        if (!lesson) return null;
+        if (!lesson) return { type: 'empty', period: index };
 
         // Apply logic for teacher/student view
         const isRelevant = isTeacher ? lesson.teacherId === userId : selectedDaySchedule.tridaId === userClassId;
@@ -71,9 +108,12 @@ export function MobileTimetable({
         }
         
         return { type: 'lesson', lesson, period: index };
-    }).filter(Boolean) || [];
+    }).filter(item => item !== null && (isTeacher || item.type !== 'empty')) || [];
+
 
     const handleLessonClick = (lessonData: any, classId: string) => {
+        if(isTeacher) return;
+
         const lesson = lessonData.lesson || lessonData.substituted;
         if (!lesson) return;
         
@@ -121,8 +161,9 @@ export function MobileTimetable({
                      if (item.type === 'lesson' || item.type === 'substituted') {
                         const lesson = item.type === 'substituted' ? item.substituted : item.lesson;
                         const originalLesson = item.type === 'substituted' ? item.original : null;
+                        const dayInfo = { fullDate: selectedDate };
                         
-                        return (
+                        const lessonCard = (
                             <div 
                                 key={idx} 
                                 className={cn("flex gap-4 rounded-lg bg-card border p-3", originalLesson && "border-primary/50")}
@@ -144,7 +185,13 @@ export function MobileTimetable({
                                     )}
                                 </div>
                             </div>
-                        )
+                        );
+
+                        return isTeacher ? (
+                            <TeacherLessonContextMenu key={idx} lesson={lesson} dayInfo={dayInfo} period={item.period} classId={selectedDaySchedule.tridaId}>
+                                {lessonCard}
+                            </TeacherLessonContextMenu>
+                        ) : lessonCard;
                      }
                      if (item.type === 'event') {
                         return (

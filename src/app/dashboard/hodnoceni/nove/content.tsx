@@ -163,18 +163,19 @@ function NewGradingContent() {
   }
 
   return (
+    <div className="p-4 md:p-6">
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight">Zadání hodnocení</h1>
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Zadání hodnocení</h1>
         <Button variant="ghost" size="icon">
           <Printer className="h-6 w-6" />
         </Button>
       </div>
       
       <Card>
-        <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-4 items-end">
+        <CardContent className="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-4 items-end">
             {/* Předmět */}
-            <div className="grid gap-1.5">
+            <div className="grid gap-1.5 col-span-1">
                 <Label>Předmět:</Label>
                 <Controller
                     name="predmetId"
@@ -189,7 +190,7 @@ function NewGradingContent() {
             </div>
             
             {/* Datum */}
-            <div className="grid gap-1.5">
+            <div className="grid gap-1.5 col-span-1">
                 <Label>Datum:</Label>
                 <Controller
                     name="datum"
@@ -211,7 +212,7 @@ function NewGradingContent() {
             </div>
 
             {/* Vyučovací hodina */}
-            <div className="grid gap-1.5">
+            <div className="grid gap-1.5 col-span-1">
                 <Label>Vyučovací hodina:</Label>
                 <Controller
                     name="hodina"
@@ -227,10 +228,10 @@ function NewGradingContent() {
                 />
             </div>
             
-             <Button>Vybrat hodinu z rozvrhu</Button>
+             <Button className="col-span-1">Vybrat hodinu z rozvrhu</Button>
             
             {/* Druh hodnocení */}
-            <div className="grid gap-1.5">
+            <div className="grid gap-1.5 col-span-1">
                 <Label>Druh hodnocení:</Label>
                 <Select defaultValue="0.7">
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -242,9 +243,9 @@ function NewGradingContent() {
             </div>
             
             {/* Téma */}
-            <div className="lg:col-span-2 xl:col-span-2 grid gap-1.5">
+            <div className="md:col-span-2 lg:col-span-2 xl:col-span-2 grid gap-1.5">
                 <Label>Téma:</Label>
-                 <div className="flex gap-2">
+                 <div className="flex flex-col sm:flex-row gap-2">
                     <Controller name="tema" control={control} render={({ field }) => <Input {...field} />} />
                     <Button type="button" variant="outline">Vybrat z témat</Button>
                 </div>
@@ -257,7 +258,7 @@ function NewGradingContent() {
             </div>
             
             {/* Započítáváno do */}
-            <div className="grid gap-1.5">
+            <div className="grid gap-1.5 col-span-1">
                 <Label>Započítáváno do:</Label>
                 <Select defaultValue="2">
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -269,7 +270,7 @@ function NewGradingContent() {
             </div>
 
             {/* Zveřejnění */}
-            <div className="grid gap-1.5">
+            <div className="md:col-span-2 grid gap-1.5">
                 <Label>Zveřejnění:</Label>
                 <Controller
                     name="zverejneni"
@@ -282,7 +283,7 @@ function NewGradingContent() {
                             </div>
                             <div className="flex items-center space-x-2">
                                 <RadioGroupItem value="odlozit" id="odlozit" />
-                                <Label htmlFor="odlozit">Odložit zveřejnění do</Label>
+                                <Label htmlFor="odlozit">Odložit</Label>
                             </div>
                         </RadioGroup>
                     )}
@@ -290,7 +291,7 @@ function NewGradingContent() {
             </div>
             
             {/* Způsob hodnocení */}
-            <div className="grid gap-1.5">
+            <div className="md:col-span-2 grid gap-1.5">
                 <Label>Způsob hodnocení:</Label>
                 <Controller
                     name="zpusobHodnoceni"
@@ -322,17 +323,17 @@ function NewGradingContent() {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="w-12 text-center">ČVTV</TableHead>
-                            <TableHead className="w-20 text-center">
-                                <div className="flex flex-col items-center">
-                                    <Label htmlFor="selectAll">Zahrnout</Label>
+                            <TableHead className="w-12 text-center hidden sm:table-cell">ČVTV</TableHead>
+                            <TableHead className="w-16 text-center">
+                                <div className="flex flex-col items-center gap-1">
+                                    <Label htmlFor="selectAll">Zahr.</Label>
                                     <Checkbox id="selectAll" onCheckedChange={(checked) => handleSelectAll(Boolean(checked))} />
                                 </div>
                             </TableHead>
                             <TableHead>Příjmení a jméno</TableHead>
                             <TableHead className="w-24">Známka</TableHead>
                             <TableHead>Slovní hodnocení</TableHead>
-                             <TableHead className="w-20 text-center">
+                             <TableHead className="w-20 text-center hidden sm:table-cell">
                                 <div className="flex flex-col items-center">
                                     <Label>Hromadný výběr</Label>
                                     <Checkbox />
@@ -343,7 +344,7 @@ function NewGradingContent() {
                     <TableBody>
                         {fields.map((field, index) => (
                            <TableRow key={field.id}>
-                                <TableCell className="text-center text-muted-foreground">{index + 1}</TableCell>
+                                <TableCell className="text-center text-muted-foreground hidden sm:table-cell">{index + 1}</TableCell>
                                 <TableCell className="text-center">
                                     <Controller
                                         name={`studenti.${index}.zahrnout`}
@@ -366,27 +367,28 @@ function NewGradingContent() {
                                         render={({ field }) => <Input {...field} />}
                                     />
                                 </TableCell>
-                                <TableCell className="text-center"><Checkbox /></TableCell>
+                                <TableCell className="text-center hidden sm:table-cell"><Checkbox /></TableCell>
                            </TableRow>
                         ))}
                     </TableBody>
                 </Table>
             </div>
         </CardContent>
-        <CardFooter className="p-3 flex flex-wrap justify-between items-center bg-muted/50 gap-4">
+        <CardFooter className="p-3 flex flex-col sm:flex-row sm:flex-wrap justify-between items-center bg-muted/50 gap-4">
              <p className="text-sm text-muted-foreground">Počet dětí/žáků/studentů: {fields.length} (Zahrnuto: {selectedCount})</p>
-            <div className="flex gap-2">
-                <Button type="button">Vybrat všechny pro hrom. nastavení</Button>
-                <Button type="button">Nastavit stejnou známku vybraným</Button>
+            <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm">Vybrat všechny pro hrom. nastavení</Button>
+                <Button type="button" size="sm">Nastavit stejnou známku</Button>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
                 <Button type="submit">Uložit a zůstat</Button>
                 <Button type="submit">Uložit a nové</Button>
-                <Button type="button" variant="outline" onClick={() => router.back()}>Zpět bez uložení</Button>
+                <Button type="button" variant="outline" onClick={() => router.back()}>Zpět</Button>
             </div>
         </CardFooter>
       </Card>
     </form>
+    </div>
   );
 }
 
