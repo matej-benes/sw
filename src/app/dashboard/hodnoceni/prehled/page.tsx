@@ -2,7 +2,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, collectionGroup, query, where, doc } from 'firebase/firestore';
+import { collection, collectionGroup, query, where, doc, getDoc } from 'firebase/firestore';
 import type { Znamka, User } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -54,21 +54,22 @@ function EditGradeDialog({ grade, isOpen, onClose, onSave }: { grade: Znamka | n
   const { handleSubmit, control, reset } = useForm<GradeEditFormData>({
     resolver: zodResolver(gradeEditSchema),
     defaultValues: {
-      hodnota: grade?.hodnota || 1,
-      tema: grade?.tema || '',
-      slovniHodnoceni: grade?.slovniHodnoceni || '',
+      hodnota: 1,
+      tema: '',
+      slovniHodnoceni: '',
     }
   });
 
   useEffect(() => {
-    if (grade) {
+    // Only reset the form when the dialog is open and a grade is selected
+    if (isOpen && grade) {
       reset({
         hodnota: grade.hodnota,
         tema: grade.tema || '',
         slovniHodnoceni: grade.slovniHodnoceni || ''
       });
     }
-  }, [grade, reset]);
+  }, [grade, isOpen, reset]);
   
   if (!isOpen || !grade) return null;
 
@@ -114,19 +115,24 @@ export default function HodnoceniPrehledPage() {
     return query(collectionGroup(firestore, 'znamky'), where('ucitelId', '==', user.id));
   }, [firestore, user?.id]);
 
-  const usersQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, 'users');
-  }, [firestore]);
-
   const { data: grades, isLoading: gradesLoading } = useCollection<Znamka>(teacherGradesQuery);
+  
+  const studentIds = useMemo(() => {
+    if (!grades) return [];
+    return [...new Set(grades.map(g => g.studentId))];
+  }, [grades]);
+
+  const usersQuery = useMemoFirebase(() => {
+    if (!firestore || studentIds.length === 0) return null;
+    return query(collection(firestore, 'users'), where('id', 'in', studentIds));
+  }, [firestore, studentIds]);
+
   const { data: users, isLoading: usersLoading } = useCollection<User>(usersQuery);
 
   const studentNames = useMemo(() => {
     if (!users) return new Map<string, string>();
     return new Map(users.map(u => [u.id, u.name]));
   }, [users]);
-
 
   const getStudentName = useCallback((studentId: string) => {
     return studentNames.get(studentId) || 'Načítání...';
@@ -149,7 +155,7 @@ export default function HodnoceniPrehledPage() {
     setDeletingGrade(null);
   };
   
-  const isLoading = userLoading || gradesLoading || usersLoading;
+  const isLoading = userLoading || gradesLoading || (studentIds.length > 0 && usersLoading);
 
   return (
     <>
