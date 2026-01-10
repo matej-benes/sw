@@ -131,7 +131,7 @@ export function MobileTimetable({
                                 <div className="flex-grow">
                                     <p className="font-semibold">{lesson.subjectName}</p>
                                     <p className="text-sm text-muted-foreground">
-                                        {isTeacher ? lesson.className : lesson.teacherName} | {lesson.ucebnaName || 'N/A'}
+                                        {lesson.className} | {lesson.ucebnaName || 'N/A'}
                                     </p>
                                     {originalLesson && (
                                     <p className="text-xs text-primary/80 line-through">
