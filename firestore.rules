@@ -4,7 +4,6 @@ service cloud.firestore {
   match /databases/{database}/documents {
     
     // Obecná pravidla - Povolit přístup pouze přihlášeným uživatelům.
-    // Toto je bezpečnější výchozí bod než "allow read, write: if true;".
     match /users/{userId} {
       allow read, write: if request.auth != null;
     }
@@ -39,7 +38,6 @@ service cloud.firestore {
         allow read, write: if request.auth != null;
     }
 
-
     // Zabezpečená pravidla pro kolekci 'messages'
     match /messages/{messageId} {
     
@@ -47,9 +45,20 @@ service cloud.firestore {
       allow get: if request.auth != null && 
                    (request.auth.uid == resource.data.senderId || request.auth.uid in resource.data.recipientIds);
 
-      // Uživatel může vypisovat (list) zprávy, pouze pokud je přihlášen.
-      // Aplikace MUSÍ vždy použít dotaz (where), který omezí výsledky jen na zprávy daného uživatele.
-      allow list: if request.auth != null;
+      // Uživatel může vypisovat (list) zprávy, pouze pokud dotaz explicitně filtruje zprávy, kde je příjemcem.
+      // Toto pravidlo je klíčové pro bezpečné načítání doručených zpráv.
+      allow list: if request.auth != null && (
+                    request.query.where.size() == 1 &&
+                    'recipientIds' in request.query.where[0] &&
+                    request.query.where[0].recipientIds[1] == 'array-contains' &&
+                    request.query.where[0].recipientIds[2] == request.auth.uid
+                  ) || (
+                    request.query.where.size() == 1 &&
+                    'senderId' in request.query.where[0] &&
+                    request.query.where[0].senderId[1] == '==' &&
+                    request.query.where[0].senderId[2] == request.auth.uid
+                  );
+
 
       // Kdo může vytvářet zprávy?
       // Jakýkoliv přihlášený uživatel, pokud je ID odesílatele shodné s jeho vlastním ID.
