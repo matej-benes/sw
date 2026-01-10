@@ -32,6 +32,7 @@ import {
   getDay,
 } from 'date-fns';
 import { cs } from 'date-fns/locale';
+import { WhatsNewDialog } from '@/components/dashboard/whats-new-dialog';
 
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
 import { collection, query, where, getDocs, doc, writeBatch, getDoc } from 'firebase/firestore';
@@ -44,6 +45,7 @@ import type {
   Udalost,
   Substitution,
   ScheduleTemplate,
+  Omluvenka,
 } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Input } from '@/components/ui/input';
@@ -52,12 +54,14 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { MobileTimetable } from '@/components/mobile-timetable';
+import { useUnreadMessages } from '@/hooks/use-unread-messages';
 
 
 export default function DashboardPage() {
   const firestore = useFirestore();
   const { user, hasRole, loading: isUserLoading } = useAuth();
   const isMobile = useIsMobile();
+  const { unreadCount } = useUnreadMessages();
   
   // Data fetching
   const { data: predmety } = useCollection<Predmet>(
@@ -103,6 +107,23 @@ export default function DashboardPage() {
       [firestore]
     )
   );
+  
+  const teacherClassesQuery = useMemoFirebase(() => {
+    if (!firestore || !user || !hasRole('ucitel')) return null;
+    return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
+  }, [firestore, user, hasRole]);
+  const { data: teacherClasses } = useCollection<Trida>(teacherClassesQuery);
+  const isClassTeacher = (teacherClasses?.length || 0) > 0;
+
+  const pendingExcusesQuery = useMemoFirebase(() => {
+      if (!firestore || !isClassTeacher || !teacherClasses) return null;
+      const classIds = teacherClasses.map(c => c.id);
+      if (classIds.length === 0) return null;
+      return query(collection(firestore, 'omluvenky'), where('status', '==', 'pending'), where('tridaId', 'in', classIds));
+  }, [firestore, isClassTeacher, teacherClasses]);
+
+  const { data: pendingExcuses } = useCollection<Omluvenka>(pendingExcusesQuery);
+
 
   // State
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -300,6 +321,12 @@ export default function DashboardPage() {
   }
 
   return (
+    <>
+    <WhatsNewDialog 
+        unreadMessagesCount={unreadCount} 
+        pendingExcusesCount={pendingExcuses?.length || 0}
+        isClassTeacher={isClassTeacher}
+    />
     <div className="space-y-6">
       <div 
         className="flex items-center gap-2 cursor-pointer group"
@@ -395,5 +422,6 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }
