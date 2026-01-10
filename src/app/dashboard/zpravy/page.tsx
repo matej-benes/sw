@@ -176,27 +176,26 @@ export default function ZpravyPage() {
   const { data: allUsers, isLoading: usersLoading } = useCollection<User>(useMemoFirebase(() => firestore ? collection(firestore, "users") : null, [firestore]));
   const { data: allClasses, isLoading: classesLoading } = useCollection<Trida>(useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]));
   
-  // SINGLE QUERY FOR ALL MESSAGES
-  const allMessagesQuery = useMemoFirebase(() => {
+  const receivedMessagesQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     return query(
-      collection(firestore, 'messages'),
-      or(
+        collection(firestore, 'messages'),
         where('recipientIds', 'array-contains', user.id),
-        where('senderId', '==', user.id)
-      ),
-      orderBy('createdAt', 'desc')
+        orderBy('createdAt', 'desc')
     );
   }, [firestore, user]);
 
-  const { data: allMessages, isLoading: messagesLoading } = useCollection<Message>(allMessagesQuery);
-
-  const { receivedMessages, sentMessages } = useMemo(() => {
-    if (!allMessages || !user) return { receivedMessages: [], sentMessages: [] };
-    const received = allMessages.filter(m => m.recipientIds.includes(user.id));
-    const sent = allMessages.filter(m => m.senderId === user.id);
-    return { receivedMessages: received, sentMessages: sent };
-  }, [allMessages, user]);
+  const sentMessagesQuery = useMemoFirebase(() => {
+      if (!firestore || !user) return null;
+      return query(
+          collection(firestore, 'messages'),
+          where('senderId', '==', user.id),
+          orderBy('createdAt', 'desc')
+      );
+  }, [firestore, user]);
+  
+  const { data: receivedMessages, isLoading: receivedLoading } = useCollection<Message>(receivedMessagesQuery);
+  const { data: sentMessages, isLoading: sentLoading } = useCollection<Message>(sentMessagesQuery);
 
 
   const handleSendMessage = async () => {
@@ -273,7 +272,7 @@ export default function ZpravyPage() {
     }
   };
 
-  const isDataLoading = userLoading || usersLoading || classesLoading || messagesLoading;
+  const isDataLoading = userLoading || usersLoading || classesLoading || receivedLoading || sentLoading;
 
   const getSenderName = useCallback((senderId: string) => {
     return allUsers?.find(u => u.id === senderId)?.name || 'Neznámý';
