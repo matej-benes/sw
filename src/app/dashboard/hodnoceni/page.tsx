@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import Link from 'next/link';
 
 function calculateAverage(grades: Znamka[]) {
     if (grades.length === 0) return '–';
@@ -59,6 +60,12 @@ export default function HodnoceniPage() {
     return calculateAverage(znamky);
   }, [znamky]);
 
+  const isStudentOrParent = hasRole('ziak') || hasRole('rodic');
+  const isTeacher = hasRole('ucitel');
+
+  if (isLoading) {
+    return <div>Načítání...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -67,84 +74,102 @@ export default function HodnoceniPage() {
         <p className="text-muted-foreground">Přehled vašeho studijního prospěchu.</p>
       </div>
 
-       <Tabs defaultValue="prubezne" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="prubezne">Průběžné hodnocení</TabsTrigger>
-                <TabsTrigger value="predmet">Hodnocení v předmětu</TabsTrigger>
+       <Tabs defaultValue={isStudentOrParent ? "prubezne" : "prehled"} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
+                {isStudentOrParent && <TabsTrigger value="prubezne">Průběžné hodnocení</TabsTrigger>}
+                {isStudentOrParent && <TabsTrigger value="predmet">Hodnocení v předmětu</TabsTrigger>}
+                {isTeacher && <Link href="/dashboard/hodnoceni/prehled" className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"><TabsTrigger value="prehled">Přehled hodnocení</TabsTrigger></Link>}
             </TabsList>
-            <TabsContent value="prubezne">
-                <Card>
-                    <CardHeader>
-                    <CardTitle>
-                        {hasRole('rodic') ? `Průběžné známky` : 'Moje průběžné známky'}
-                    </CardTitle>
-                    <CardDescription>
-                        Celkový průměr: <span className="font-bold text-primary">{totalAverage}</span>
-                    </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                    <Table>
-                        <TableHeader>
-                        <TableRow>
-                            <TableHead>Předmět</TableHead>
-                            <TableHead className="text-center">Známka</TableHead>
-                            <TableHead>Datum</TableHead>
-                            <TableHead>Téma</TableHead>
-                        </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                         {isLoading ? (
-                            <TableRow><TableCell colSpan={4} className="h-24 text-center">Načítání známek...</TableCell></TableRow>
-                         ) : znamky && znamky.length > 0 ? (
-                            znamky.map((znamka, index) => (
-                            <TableRow key={index}>
-                                <TableCell className="font-medium">{znamka.predmet}</TableCell>
-                                <TableCell className="text-center font-bold text-lg">{znamka.hodnota}</TableCell>
-                                <TableCell>{format(znamka.datum.toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
-                                <TableCell className="text-muted-foreground">{znamka.tema || '-'}</TableCell>
-                            </TableRow>
-                            ))
-                        ) : (
+            
+            {isStudentOrParent && (
+            <>
+                <TabsContent value="prubezne">
+                    <Card>
+                        <CardHeader>
+                        <CardTitle>
+                            {hasRole('rodic') ? `Průběžné známky` : 'Moje průběžné známky'}
+                        </CardTitle>
+                        <CardDescription>
+                            Celkový průměr: <span className="font-bold text-primary">{totalAverage}</span>
+                        </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                        <Table>
+                            <TableHeader>
                             <TableRow>
-                            <TableCell colSpan={4} className="h-24 text-center">
-                                Zatím nemáte žádné známky.
-                            </TableCell>
+                                <TableHead>Předmět</TableHead>
+                                <TableHead className="text-center">Známka</TableHead>
+                                <TableHead>Datum</TableHead>
+                                <TableHead>Téma</TableHead>
                             </TableRow>
-                        )}
-                        </TableBody>
-                    </Table>
-                    </CardContent>
-                </Card>
-            </TabsContent>
-            <TabsContent value="predmet">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Hodnocení podle předmětů</CardTitle>
-                        <CardDescription>Souhrnný přehled známek a průměrů v jednotlivých předmětech.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {isLoading ? <p>Načítání...</p> : Object.keys(groupedGrades).length > 0 ? (
-                           Object.entries(groupedGrades).map(([subject, grades]) => (
-                             <Card key={subject} className="overflow-hidden">
-                                <CardHeader className="flex flex-row items-center justify-between bg-muted/50 p-4">
-                                    <CardTitle className="text-lg">{subject}</CardTitle>
-                                    <Badge>Průměr: {calculateAverage(grades)}</Badge>
-                                </CardHeader>
-                                <CardContent className="p-4">
-                                    <div className="flex flex-wrap gap-2">
-                                        {grades.map((g, index) => (
-                                            <Badge key={index} variant="secondary" className="text-base">{g.hodnota}</Badge>
-                                        ))}
-                                    </div>
-                                </CardContent>
-                             </Card>
-                           ))
-                        ) : (
-                            <p className="text-center text-muted-foreground py-10">Žádná data k zobrazení.</p>
-                        )}
-                    </CardContent>
-                </Card>
-            </TabsContent>
+                            </TableHeader>
+                            <TableBody>
+                             {isLoading ? (
+                                <TableRow><TableCell colSpan={4} className="h-24 text-center">Načítání známek...</TableCell></TableRow>
+                             ) : znamky && znamky.length > 0 ? (
+                                znamky.map((znamka, index) => (
+                                <TableRow key={index}>
+                                    <TableCell className="font-medium">{znamka.predmet}</TableCell>
+                                    <TableCell className="text-center font-bold text-lg">{znamka.hodnota}</TableCell>
+                                    <TableCell>{format(znamka.datum.toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
+                                    <TableCell className="text-muted-foreground">{znamka.tema || '-'}</TableCell>
+                                </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                <TableCell colSpan={4} className="h-24 text-center">
+                                    Zatím nemáte žádné známky.
+                                </TableCell>
+                                </TableRow>
+                            )}
+                            </TableBody>
+                        </Table>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                <TabsContent value="predmet">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Hodnocení podle předmětů</CardTitle>
+                            <CardDescription>Souhrnný přehled známek a průměrů v jednotlivých předmětech.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            {isLoading ? <p>Načítání...</p> : Object.keys(groupedGrades).length > 0 ? (
+                               Object.entries(groupedGrades).map(([subject, grades]) => (
+                                 <Card key={subject} className="overflow-hidden">
+                                    <CardHeader className="flex flex-row items-center justify-between bg-muted/50 p-4">
+                                        <CardTitle className="text-lg">{subject}</CardTitle>
+                                        <Badge>Průměr: {calculateAverage(grades)}</Badge>
+                                    </CardHeader>
+                                    <CardContent className="p-4">
+                                        <div className="flex flex-wrap gap-2">
+                                            {grades.map((g, index) => (
+                                                <Badge key={index} variant="secondary" className="text-base">{g.hodnota}</Badge>
+                                            ))}
+                                        </div>
+                                    </CardContent>
+                                 </Card>
+                               ))
+                            ) : (
+                                <p className="text-center text-muted-foreground py-10">Žádná data k zobrazení.</p>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </>
+            )}
+             {isTeacher && (
+                <TabsContent value="prehled">
+                    {/* Content will be on the /prehled page */}
+                     <Card>
+                        <CardContent className="pt-6">
+                            <p className="text-center text-muted-foreground">
+                                Zde naleznete přehled vámi zadaných hodnocení.
+                            </p>
+                        </CardContent>
+                     </Card>
+                </TabsContent>
+            )}
         </Tabs>
     </div>
   );

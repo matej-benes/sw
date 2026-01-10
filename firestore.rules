@@ -37,9 +37,16 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       match /znamky/{znamkaId} {
-         allow get, list: if isAuthenticated() && (isOwner(userId) || isMyStudent(userId) || hasAnyRole(['ucitel', 'administrator']));
-         allow write: if hasAnyRole(['ucitel', 'administrator']);
+         allow get: if isAuthenticated() && (isOwner(userId) || isMyStudent(userId) || hasAnyRole(['ucitel', 'administrator']));
+         allow list: if isAuthenticated() && (isOwner(userId) || isMyStudent(userId));
+         allow create: if hasAnyRole(['ucitel', 'administrator']);
+         allow update, delete: if hasAnyRole(['ucitel', 'administrator']) && resource.data.ucitelId == request.auth.uid;
       }
+    }
+    
+    // Allow teachers to query their own grades across all students
+    match /{path=**}/znamky/{znamkaId} {
+      allow get, list: if hasAnyRole(['ucitel', 'administrator']);
     }
 
     match /tridy/{tridaId} {
