@@ -62,18 +62,13 @@ export default function DashboardPage() {
       [firestore]
     )
   );
-  const { data: ucitele } = useCollection<User>(
-    useMemoFirebase(
-      () =>
-        firestore
-          ? query(
-              collection(firestore, 'users'),
-              where('roles', 'array-contains', 'ucitel')
-            )
-          : null,
-      [firestore]
-    )
-  );
+  
+  const allStaffQuery = useMemoFirebase(() => {
+      if (!firestore) return null;
+      return query(collection(firestore, "users"), where("roles", "array-contains-any", ["ucitel", "asistent pedagoga", "vedouci pracovnik"]));
+  }, [firestore]);
+  const { data: allStaff } = useCollection<User>(allStaffQuery);
+
   const { data: ucebny } = useCollection<Ucebna>(
     useMemoFirebase(
       () => (firestore ? collection(firestore, 'ucebny') : null),
@@ -163,20 +158,25 @@ export default function DashboardPage() {
     return schedulesData.filter((s) => s.tridaId === targetClassId);
   }, [schedulesData, selectedClassId, hasRole, user]);
 
-  const { studentClassName, classTeacherName } = useMemo(() => {
-    if (!user || !tridy || !ucitele || hasRole('ucitel')) {
-      return { studentClassName: null, classTeacherName: null };
+  const classInfo = useMemo(() => {
+    if (!user || !tridy || !allStaff || hasRole('ucitel')) {
+      return { studentClassName: null, classTeacherName: null, substitutes: [], assistants: [] };
     }
     const studentClass = tridy.find(t => t.id === user.tridaId);
     if (!studentClass) {
-      return { studentClassName: null, classTeacherName: null };
+      return { studentClassName: null, classTeacherName: null, substitutes: [], assistants: [] };
     }
-    const classTeacher = ucitele.find(t => t.id === studentClass.ucitelId);
+    const classTeacher = allStaff.find(t => t.id === studentClass.ucitelId);
+    const substitutes = (studentClass.zastupciIds || []).map(id => allStaff.find(t => t.id === id)?.name).filter(Boolean) as string[];
+    const assistants = (studentClass.asistentiIds || []).map(id => allStaff.find(t => t.id === id)?.name).filter(Boolean) as string[];
+
     return {
       studentClassName: studentClass.nazev,
       classTeacherName: classTeacher?.name || 'Nenalezen',
+      substitutes,
+      assistants,
     };
-  }, [user, tridy, ucitele, hasRole]);
+  }, [user, tridy, allStaff, hasRole]);
 
 
   const isDataLoading = !schedulesData || !eventsData || !substitutionsData || !tridy || isUserLoading;
@@ -241,12 +241,26 @@ export default function DashboardPage() {
               </Button>
             </div>
             
-            {(hasRole('ziak') || hasRole('rodic')) && studentClassName && (
+            {(hasRole('ziak') || hasRole('rodic')) && classInfo.studentClassName && (
               <div className="flex items-center gap-3 text-sm">
                 <Separator orientation="vertical" className="h-8 hidden md:block" />
                 <div className="text-left">
-                    <p className="font-semibold text-lg">{studentClassName}</p>
-                    <p className="text-sm text-muted-foreground">Třídní učitel: {classTeacherName}</p>
+                    <p className="font-semibold text-lg">{classInfo.studentClassName}</p>
+                    <div className="text-sm text-muted-foreground">
+                      <p>
+                        <span className="font-semibold">Třídní učitel:</span> {classInfo.classTeacherName}
+                      </p>
+                      {classInfo.substitutes.length > 0 && (
+                         <p>
+                           <span className="font-semibold">Zástupci:</span> {classInfo.substitutes.join(', ')}
+                         </p>
+                      )}
+                      {classInfo.assistants.length > 0 && (
+                        <p>
+                          <span className="font-semibold">Asistenti:</span> {classInfo.assistants.join(', ')}
+                        </p>
+                      )}
+                    </div>
                 </div>
               </div>
             )}
