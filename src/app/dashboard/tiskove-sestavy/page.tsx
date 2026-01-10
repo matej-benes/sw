@@ -83,7 +83,7 @@ export default function TiskoveSestavyPage() {
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            <Button variant="ghost" size="sm" className="mr-2">
+                                            <Button variant="ghost" size="sm" className="mr-2" onClick={() => window.print()}>
                                                 <FileText className="mr-2 h-4 w-4" /> Tisk
                                             </Button>
                                             <Button variant="outline" size="sm">

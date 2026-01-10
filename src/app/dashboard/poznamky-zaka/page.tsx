@@ -58,7 +58,7 @@ export default function PoznamkaZakaPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold tracking-tight">Poznámka žáka/studenta</h1>
-        <Button variant="ghost" size="icon">
+        <Button variant="ghost" size="icon" onClick={() => window.print()}>
           <Printer className="h-6 w-6" />
         </Button>
       </div>

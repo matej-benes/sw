@@ -167,7 +167,7 @@ function NewGradingContent() {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Zadání hodnocení</h1>
-        <Button variant="ghost" size="icon">
+        <Button variant="ghost" size="icon" onClick={() => window.print()}>
           <Printer className="h-6 w-6" />
         </Button>
       </div>
@@ -393,5 +393,3 @@ function NewGradingContent() {
 }
 
 export default NewGradingContent;
-
-    
