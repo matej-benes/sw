@@ -34,7 +34,7 @@ import {
 import { cs } from 'date-fns/locale';
 import { WhatsNewDialog } from '@/components/dashboard/whats-new-dialog';
 
-import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, useDoc } from '@/firebase';
 import { collection, query, where, getDocs, doc, writeBatch, getDoc } from 'firebase/firestore';
 import type {
   Trida,
@@ -133,6 +133,27 @@ export default function DashboardPage() {
   );
   const [isFullWeekView, setIsFullWeekView] = useState(false);
 
+  // Parent/student specific data fetching
+  const studentRef = useMemoFirebase(() => {
+      if (!firestore || !user) return null;
+      const studentId = hasRole('ziak') ? user.id : user.studentId;
+      if (!studentId) return null;
+      return doc(firestore, 'users', studentId);
+  }, [firestore, user, hasRole]);
+  const { data: studentData } = useDoc<User>(studentRef);
+
+  const studentClassRef = useMemoFirebase(() => {
+    if (!firestore || !studentData?.tridaId) return null;
+    return doc(firestore, 'tridy', studentData.tridaId);
+  }, [firestore, studentData]);
+  const { data: studentClassData } = useDoc<Trida>(studentClassRef);
+
+  const classTeacherRef = useMemoFirebase(() => {
+    if (!firestore || !studentClassData?.ucitelId) return null;
+    return doc(firestore, 'users', studentClassData.ucitelId);
+  }, [firestore, studentClassData]);
+  const { data: classTeacherData } = useDoc<User>(classTeacherRef);
+
 
   // Memoized derived data
   const weekDays = useMemo(() => {
@@ -173,8 +194,11 @@ export default function DashboardPage() {
   }, [tridy, selectedClassId, hasRole, user?.tridaId]);
 
   const targetClassId = useMemo(() => {
-    return hasRole('ucitel') ? selectedClassId : user?.tridaId;
-  }, [hasRole, selectedClassId, user?.tridaId]);
+    if (hasRole('ucitel')) return selectedClassId;
+    if (hasRole('ziak')) return user?.tridaId;
+    if (hasRole('rodic')) return studentData?.tridaId;
+    return undefined;
+  }, [hasRole, selectedClassId, user, studentData]);
 
 
   // Logic to generate schedules from template if they don't exist
@@ -262,38 +286,23 @@ export default function DashboardPage() {
 
 
   const filteredSchedules = useMemo(() => {
-    if (!schedulesData) return [];
-
-    if (!user) return [];
-    
-    // For teachers, filter by selected class ID. For others, filter by their own class ID.
-    const targetId = hasRole('ucitel') ? selectedClassId : user.tridaId;
-
-    if (!targetId) return [];
-
-    return schedulesData.filter((s) => s.tridaId === targetId);
-  }, [schedulesData, selectedClassId, hasRole, user]);
-
+    if (!schedulesData || !targetClassId) return [];
+    return schedulesData.filter((s) => s.tridaId === targetClassId);
+  }, [schedulesData, targetClassId]);
+  
   const classInfo = useMemo(() => {
-    if (!user || !tridy || !allStaff) {
-      return { studentClassName: null, classTeacherName: null, substitutes: [], assistants: [] };
+    if (!studentClassData || !allStaff) {
+      return { className: null, classTeacherName: null, substitutes: [], assistants: [] };
     }
-    const studentClass = tridy.find(t => t.id === user.tridaId);
-    if (!studentClass) {
-      return { studentClassName: null, classTeacherName: null, substitutes: [], assistants: [] };
-    }
-    const classTeacher = allStaff.find(t => t.id === studentClass.ucitelId);
-    
-    const substitutes = (studentClass.zastupciIds || []).map(id => allStaff.find(t => t.id === id)?.name).filter(Boolean) as string[];
-    const assistants = (studentClass.asistentiIds || []).map(id => allStaff.find(t => t.id === id)?.name).filter(Boolean) as string[];
-
+    const substitutes = (studentClassData.zastupciIds || []).map(id => allStaff.find(t => t.id === id)?.name).filter(Boolean) as string[];
+    const assistants = (studentClassData.asistentiIds || []).map(id => allStaff.find(t => t.id === id)?.name).filter(Boolean) as string[];
     return {
-      studentClassName: studentClass.nazev,
-      classTeacherName: classTeacher?.name || 'Nenalezen',
+      className: studentClassData.nazev,
+      classTeacherName: classTeacherData?.name || 'Nenalezen',
       substitutes,
       assistants,
     };
-  }, [user, tridy, allStaff]);
+  }, [studentClassData, allStaff, classTeacherData]);
 
 
   const isDataLoading = !schedulesData || !eventsData || !substitutionsData || !tridy || isUserLoading;
@@ -314,7 +323,7 @@ export default function DashboardPage() {
         substitutionsData={substitutionsData || []}
         isTeacher={hasRole('ucitel')}
         userId={user.id}
-        userClassId={user.tridaId}
+        userClassId={targetClassId}
         days={weekDays}
       />
     );
@@ -384,23 +393,26 @@ export default function DashboardPage() {
               </Button>
             </div>
             
-            {(hasRole('ziak') || hasRole('rodic')) && classInfo.studentClassName && (
+            {(hasRole('ziak') || hasRole('rodic')) && classInfo.className && (
               <div className="flex items-center gap-3 text-sm">
                 <Separator orientation="vertical" className="h-8 hidden md:block" />
                 <div className="text-left">
-                    <p className="font-semibold text-lg">{classInfo.studentClassName}</p>
+                    {hasRole('rodic') && studentData && (
+                        <p className="font-semibold text-base">Dítě: {studentData.name}</p>
+                    )}
+                    <p className="font-semibold text-lg">{classInfo.className}</p>
                     <div className="text-sm text-muted-foreground">
                       <p>
                         <span className="font-semibold">Třídní učitel:</span> {classInfo.classTeacherName}
                       </p>
                       {classInfo.substitutes.length > 0 && (
                          <p>
-                           <span className="font-semibold">{classInfo.substitutes.length > 1 ? 'Zástupci třídního učitele:' : 'Zástupce třídního učitele:'}</span> {classInfo.substitutes.join(', ')}
+                           <span className="font-semibold">{classInfo.substitutes.length > 1 ? 'Zástupci:' : 'Zástupce:'}</span> {classInfo.substitutes.join(', ')}
                          </p>
                       )}
                       {classInfo.assistants.length > 0 && (
                         <p>
-                          <span className="font-semibold">{classInfo.assistants.length > 1 ? 'Asistenti pedagoga:' : 'Asistent pedagoga:'}</span> {classInfo.assistants.join(', ')}
+                          <span className="font-semibold">{classInfo.assistants.length > 1 ? 'Asistenti:' : 'Asistent:'}</span> {classInfo.assistants.join(', ')}
                         </p>
                       )}
                     </div>
@@ -416,7 +428,7 @@ export default function DashboardPage() {
                 substitutionsData={substitutionsData || []}
                 isTeacher={hasRole('ucitel')}
                 userId={user.id}
-                userClassId={user.tridaId}
+                userClassId={targetClassId}
                 days={weekDays}
             />
         </CardContent>

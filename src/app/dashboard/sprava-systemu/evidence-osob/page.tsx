@@ -45,7 +45,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -59,6 +59,9 @@ import {
   arrayRemove,
   setDoc,
   writeBatch,
+  query,
+  where,
+  getDocs,
 } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
@@ -83,16 +86,19 @@ const userSchema = z.object({
   roles: z.array(z.string()).min(1, 'Uživatel musí mít alespoň jednu roli'),
   pin: z.string().optional(),
   tridaId: z.string().optional().nullable(),
+  studentId: z.string().optional().nullable(),
 });
 
 type UserFormData = z.infer<typeof userSchema>;
 
 function UserForm({
   user,
+  allUsers,
   onSave,
   closeDialog,
 }: {
   user?: User | null;
+  allUsers: User[],
   onSave: (data: Partial<User>) => void;
   closeDialog: () => void;
 }) {
@@ -115,6 +121,7 @@ function UserForm({
       roles: user?.roles || [],
       pin: user?.pin || '',
       tridaId: user?.tridaId || null,
+      studentId: user?.studentId || null,
     },
   });
 
@@ -131,12 +138,19 @@ function UserForm({
   const currentPin = watch('pin');
   const roles = watch('roles');
   const isZiak = roles.includes('ziak');
+  const isRodic = roles.includes('rodic');
 
   useEffect(() => {
     if (!isZiak) {
       setValue('tridaId', null);
     }
-  }, [isZiak, setValue]);
+     if (!isRodic) {
+      setValue('studentId', null);
+    }
+  }, [isZiak, isRodic, setValue]);
+  
+  const students = useMemo(() => allUsers.filter(u => u.roles.includes('ziak')), [allUsers]);
+  const parents = useMemo(() => allUsers.filter(u => u.roles.includes('rodic')), [allUsers]);
 
 
   return (
@@ -188,29 +202,58 @@ function UserForm({
       </div>
 
        {isZiak && (
+        <>
+            <div className="space-y-1">
+                <Label htmlFor="tridaId">Třída</Label>
+                <Controller
+                    name="tridaId"
+                    control={control}
+                    render={({ field }) => (
+                        <Select onValueChange={field.onChange} value={field.value || ''}>
+                            <SelectTrigger><SelectValue placeholder="Vyberte třídu" /></SelectTrigger>
+                            <SelectContent>
+                                {classes?.map((c) => (<SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>))}
+                            </SelectContent>
+                        </Select>
+                    )}
+                />
+            </div>
+            <div className="space-y-1">
+                <Label htmlFor="studentId">Rodič</Label>
+                <Controller
+                    name="studentId" // Using studentId to store parent id for a student
+                    control={control}
+                    render={({ field }) => (
+                        <Select onValueChange={field.onChange} value={field.value || ''}>
+                            <SelectTrigger><SelectValue placeholder="Vyberte rodiče" /></SelectTrigger>
+                            <SelectContent>
+                                {parents.map((p) => (<SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>))}
+                            </SelectContent>
+                        </Select>
+                    )}
+                />
+            </div>
+        </>
+       )}
+
+       {isRodic && (
         <div className="space-y-1">
-            <Label htmlFor="tridaId">Třída</Label>
-            <Controller
-                name="tridaId"
+            <Label htmlFor="studentId">Dítě (Žák)</Label>
+             <Controller
+                name="studentId"
                 control={control}
                 render={({ field }) => (
                     <Select onValueChange={field.onChange} value={field.value || ''}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Vyberte třídu" />
-                        </SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="Vyberte dítě" /></SelectTrigger>
                         <SelectContent>
-                            {classes?.map((c) => (
-                                <SelectItem key={c.id} value={c.id}>
-                                    {c.nazev}
-                                </SelectItem>
-                            ))}
+                            {students.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
                         </SelectContent>
                     </Select>
                 )}
             />
-            {errors.tridaId && <p className="text-sm text-destructive">{errors.tridaId.message}</p>}
         </div>
        )}
+
 
        <div className="space-y-2">
         <Label htmlFor="pin">Registrační PIN</Label>
@@ -298,65 +341,71 @@ function AdminUserManagement() {
       const dataToSave = {
           ...formData,
           tridaId: formData.tridaId || null,
+          studentId: formData.studentId || null,
       };
 
       try {
-        if (editingUser) {
+        const batch = writeBatch(firestore);
+
+        if (editingUser) { // --- UPDATE EXISTING USER ---
             const userRef = doc(firestore, 'users', editingUser.id);
             const originalUserDoc = await getDoc(userRef);
             const originalUserData = originalUserDoc.data() as User | undefined;
 
-            await updateDocumentNonBlocking(userRef, dataToSave);
+            batch.update(userRef, dataToSave);
 
-            // If class changed for a student, update the ziaciIds in both old and new class
+            // If class changed for a student
             if (dataToSave.roles?.includes('ziak')) {
                 const originalTridaId = originalUserData?.tridaId;
                 const newTridaId = dataToSave.tridaId;
-
                 if (originalTridaId !== newTridaId) {
-                    const batch = writeBatch(firestore);
-                    // Remove from old class
-                    if (originalTridaId) {
-                        const oldTridaRef = doc(firestore, 'tridy', originalTridaId);
-                        batch.update(oldTridaRef, { ziaciIds: arrayRemove(editingUser.id) });
-                    }
-                    // Add to new class
-                    if (newTridaId) {
-                        const newTridaRef = doc(firestore, 'tridy', newTridaId);
-                        batch.update(newTridaRef, { ziaciIds: arrayUnion(editingUser.id) });
-                    }
-                    await batch.commit();
+                    if (originalTridaId) batch.update(doc(firestore, 'tridy', originalTridaId), { ziaciIds: arrayRemove(editingUser.id) });
+                    if (newTridaId) batch.update(doc(firestore, 'tridy', newTridaId), { ziaciIds: arrayUnion(editingUser.id) });
+                }
+            }
+             // If parent/student relationship changed
+            const newStudentId = dataToSave.studentId;
+            const originalStudentId = originalUserData?.studentId;
+
+            if (originalStudentId !== newStudentId) {
+                // If this is a parent, update the new student
+                if (dataToSave.roles?.includes('rodic') && newStudentId) {
+                    batch.update(doc(firestore, 'users', newStudentId), { studentId: editingUser.id });
+                }
+                // If this is a student, update the new parent
+                if (dataToSave.roles?.includes('ziak') && newStudentId) {
+                     batch.update(doc(firestore, 'users', newStudentId), { studentId: editingUser.id });
                 }
             }
 
-            toast({
-              title: 'Uživatel aktualizován',
-              description: `Uživatel ${dataToSave.name} byl úspěšně aktualizován.`,
-            });
-        } else {
-            // This is a new user (pre-registration)
+
+        } else { // --- CREATE NEW USER ---
             const newUserDocRef = doc(collection(firestore, 'users'));
             const newUserForDb = {
                 ...dataToSave,
                 id: newUserDocRef.id,
                 avatarUrl: `https://picsum.photos/seed/${newUserDocRef.id}/100/100`,
             };
-            
-            const batch = writeBatch(firestore);
             batch.set(newUserDocRef, newUserForDb);
 
             if (newUserForDb.roles?.includes('ziak') && newUserForDb.tridaId) {
-                const tridaRef = doc(firestore, 'tridy', newUserForDb.tridaId);
-                batch.update(tridaRef, { ziaciIds: arrayUnion(newUserForDb.id) });
+                batch.update(doc(firestore, 'tridy', newUserForDb.tridaId), { ziaciIds: arrayUnion(newUserForDb.id) });
             }
-            
-            await batch.commit();
-
-            toast({
-              title: 'Uživatel přidán',
-              description: `Uživatel ${dataToSave.name} byl úspěšně přidán s PINem pro registraci.`,
-            });
+            if(newUserForDb.roles?.includes('rodic') && newUserForDb.studentId) {
+                 batch.update(doc(firestore, 'users', newUserForDb.studentId), { studentId: newUserForDb.id });
+            }
+            if(newUserForDb.roles?.includes('ziak') && newUserForDb.studentId) { // studentId is parentId here
+                 batch.update(doc(firestore, 'users', newUserForDb.studentId), { studentId: newUserForDb.id });
+            }
         }
+        
+        await batch.commit();
+
+        toast({
+            title: editingUser ? 'Uživatel aktualizován' : 'Uživatel přidán',
+            description: `Uživatel ${dataToSave.name} byl úspěšně zpracován.`,
+        });
+
       } catch(e) {
           console.error("Error saving user:", e);
           toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se uložit uživatele.' });
@@ -455,6 +504,7 @@ function AdminUserManagement() {
           {isDialogOpen && (
              <UserForm
                 user={editingUser}
+                allUsers={users || []}
                 onSave={handleSaveUser}
                 closeDialog={() => setIsDialogOpen(false)}
             />
