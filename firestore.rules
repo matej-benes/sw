@@ -46,7 +46,7 @@ service cloud.firestore {
     
     // Allow teachers to query their own grades across all students
     match /{path=**}/znamky/{znamkaId} {
-      allow get, list: if hasAnyRole(['ucitel', 'administrator']);
+      allow list: if hasAnyRole(['ucitel', 'administrator']);
     }
 
     match /tridy/{tridaId} {
