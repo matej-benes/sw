@@ -80,76 +80,103 @@ export default function ZpravyPage() {
   const activeConversation = useMemo(() => {
       return conversations?.find(c => c.id === activeConversationId);
   }, [conversations, activeConversationId]);
-
-
+  
   const handleSendMessage = async () => {
     if (!user || !firestore) return;
     if (!message.trim()) {
         toast({ variant: "destructive", title: "Prázdná zpráva" });
         return;
     }
-    
+
     setIsSending(true);
 
-    let conversationId = activeConversationId;
-    let finalRecipients = recipients;
-
-    // If we have an active conversation, send to its participants
-    if (conversationId && activeConversation) {
-        finalRecipients = activeConversation.participantIds;
-    } 
-    // If we have selected recipients but no active conversation
-    else if (finalRecipients.length > 0) {
-        const allParticipantIds = [...new Set([user.id, ...finalRecipients])].sort();
-
-        // Check if a conversation with these participants already exists
-        const conversationsRef = collection(firestore, 'conversations');
-        const q = query(conversationsRef, where('participantIds', '==', allParticipantIds));
-        const querySnapshot = await getDocs(q);
-
-        if (!querySnapshot.empty) {
-            conversationId = querySnapshot.docs[0].id;
-        } else {
-            // Create a new conversation
-            const conversationData = {
-                participantIds: allParticipantIds,
+    try {
+        if (activeConversationId) {
+            // Sending to an existing conversation
+            const messagesColRef = collection(firestore, 'conversations', activeConversationId, 'messages');
+            await addDoc(messagesColRef, {
+                senderId: user.id,
+                text: message,
+                createdAt: serverTimestamp(),
+            });
+            await addDocumentNonBlocking(doc(firestore, 'conversations', activeConversationId), {
                 lastMessage: message.substring(0, 50),
                 lastMessageAt: serverTimestamp(),
-            };
-            const newConversationDoc = await addDoc(conversationsRef, conversationData);
-            conversationId = newConversationDoc.id;
+            });
+        } else if (recipients.length > 0) {
+            // Sending to a new recipient or group of recipients
+            let finalRecipientIds: string[] = [];
+
+            for (const recipientId of recipients) {
+                const classInfo = allClasses?.find(c => c.id === recipientId);
+                if (classInfo) {
+                    finalRecipientIds.push(...classInfo.ziaciIds);
+                } else {
+                    finalRecipientIds.push(recipientId);
+                }
+            }
+            
+            finalRecipientIds = [...new Set(finalRecipientIds)]; // Remove duplicates
+
+            const batch = writeBatch(firestore);
+
+            for (const recipientId of finalRecipientIds) {
+                 if (recipientId === user.id) continue;
+                
+                const participantIds = [user.id, recipientId].sort();
+                const conversationsRef = collection(firestore, 'conversations');
+                const q = query(conversationsRef, where('participantIds', '==', participantIds));
+                const querySnapshot = await getDocs(q);
+
+                let conversationId: string;
+                if (!querySnapshot.empty) {
+                    conversationId = querySnapshot.docs[0].id;
+                } else {
+                    const newConversationDocRef = doc(conversationsRef);
+                    const conversationData = {
+                        participantIds: participantIds,
+                        lastMessage: message.substring(0, 50),
+                        lastMessageAt: serverTimestamp(),
+                    };
+                    batch.set(newConversationDocRef, conversationData);
+                    conversationId = newConversationDocRef.id;
+                }
+                
+                const messageDocRef = doc(collection(firestore, 'conversations', conversationId, 'messages'));
+                batch.set(messageDocRef, {
+                    senderId: user.id,
+                    text: message,
+                    createdAt: serverTimestamp(),
+                });
+                
+                const conversationDocRef = doc(firestore, 'conversations', conversationId);
+                batch.update(conversationDocRef, {
+                    lastMessage: message.substring(0, 50),
+                    lastMessageAt: serverTimestamp(),
+                });
+            }
+
+            await batch.commit();
+
+        } else {
+            toast({ variant: 'destructive', title: 'Chybí příjemce' });
+            setIsSending(false);
+            return;
         }
-        setActiveConversationId(conversationId);
-    } else {
-        toast({ variant: 'destructive', title: 'Chybí příjemce' });
-        setIsSending(false);
-        return;
-    }
 
-    if (!conversationId) {
+        setMessage('');
+        setRecipients([]);
+        if (!activeConversationId) {
+             toast({ title: 'Zprávy odeslány' });
+        }
+    } catch (e) {
+        console.error(e);
         toast({ variant: 'destructive', title: 'Chyba při odesílání' });
+    } finally {
         setIsSending(false);
-        return;
     }
+};
 
-    // Add the message to the conversation
-    const messagesColRef = collection(firestore, 'conversations', conversationId, 'messages');
-    await addDoc(messagesColRef, {
-        senderId: user.id,
-        text: message,
-        createdAt: serverTimestamp(),
-    });
-    
-    // Update the last message on the conversation
-    await addDocumentNonBlocking(doc(firestore, 'conversations', conversationId), {
-        lastMessage: message.substring(0, 50),
-        lastMessageAt: serverTimestamp(),
-    });
-
-    setMessage('');
-    setRecipients([]);
-    setIsSending(false);
-  };
   
   const recipientOptions = useMemo(() => {
     const users = allUsers?.map(u => ({ id: u.id, label: u.name, type: 'user' as const, avatarUrl: u.avatarUrl, role: u.roles.join(', ') })) || [];
@@ -177,6 +204,47 @@ export default function ZpravyPage() {
     }).filter(Boolean);
   }, [recipients, allUsers, allClasses]);
   
+  const getRecipientInfoForStudent = (student: User) => {
+      if (!allClasses || !allUsers || !hasRole('ziak')) return [];
+      
+      const studentClass = allClasses.find(c => c.id === student.tridaId);
+      if(!studentClass) return [];
+      
+      const classTeacher = allUsers.find(u => u.id === studentClass.ucitelId);
+      const substitutes = studentClass.zastupciIds?.map(id => allUsers.find(u => u.id === id)).filter(Boolean) as User[];
+      const assistants = studentClass.asistentiIds?.map(id => allUsers.find(u => u.id === id)).filter(Boolean) as User[];
+      
+      const specialRoles: { user: User, role: string }[] = [];
+      if(classTeacher) specialRoles.push({ user: classTeacher, role: 'Třídní učitel'});
+      substitutes.forEach(sub => specialRoles.push({ user: sub, role: 'Zástupce třídního' }));
+      assistants.forEach(as => specialRoles.push({ user: as, role: 'Asistent pedagoga ve vaší třídě' }));
+
+      return specialRoles;
+  }
+
+  const allTeachers = useMemo(() => allUsers?.filter(u => u.roles.includes('ucitel')), [allUsers]);
+
+  const studentRecipientOptions = useMemo(() => {
+      if (!user || !hasRole('ziak') || !allTeachers) return [];
+      
+      const specialRoles = getRecipientInfoForStudent(user);
+      const specialRoleIds = specialRoles.map(r => r.user.id);
+
+      const specialRoleOptions = specialRoles.map(r => ({
+          ...r.user,
+          label: `${r.user.name} (${r.role})`,
+      }));
+      
+      const otherTeachers = allTeachers
+          .filter(t => !specialRoleIds.includes(t.id))
+          .map(t => ({
+              ...t,
+              label: `${t.name} (Učitel)`
+          }));
+
+      return [...specialRoleOptions, ...otherTeachers];
+  }, [user, hasRole, allTeachers, allClasses]);
+
 
   return (
     <>
@@ -191,6 +259,12 @@ export default function ZpravyPage() {
               <Card className="h-full flex flex-col">
                   <CardHeader>
                       <CardTitle>Konverzace</CardTitle>
+                        {!activeConversation && hasRole('ucitel') && (
+                            <Button type="button" variant="outline" className="w-full justify-start mt-2" onClick={() => { setActiveConversationId(null); setRecipients([]); setIsRecipientDialogOpen(true); }}>
+                                <UserPlus className="mr-2 h-4 w-4" />
+                                Nová zpráva
+                            </Button>
+                        )}
                   </CardHeader>
                   <CardContent className="flex-grow overflow-y-auto">
                       {conversationsLoading ? <p>Načítání...</p> : (
@@ -255,21 +329,36 @@ export default function ZpravyPage() {
                    <div ref={messagesEndRef} />
               </CardContent>
                <CardContent className="border-t pt-4">
-                 {!activeConversation && (
+                 {!activeConversation && hasRole('ucitel') && selectedRecipientDetails.length > 0 && (
                      <div className="space-y-2 mb-4">
                         <Label>Příjemce:</Label>
-                        <Button type="button" variant="outline" className="w-full justify-start" onClick={() => { setActiveConversationId(null); setIsRecipientDialogOpen(true); }}>
+                        <div className="pt-2 flex flex-wrap gap-2 border p-2 rounded-md">
+                            {selectedRecipientDetails.map(r => (
+                                <Badge key={r!.id} variant="secondary">
+                                    {r!.label}
+                                    <button onClick={() => toggleRecipient(r!.id)} className="ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2">
+                                        <X className="h-3 w-3" />
+                                        <span className="sr-only">Odstranit příjemce</span>
+                                    </button>
+                                </Badge>
+                            ))}
+                        </div>
+                    </div>
+                 )}
+                 {!activeConversation && hasRole('ziak') && (
+                    <div className="space-y-2 mb-4">
+                        <Label>Příjemce:</Label>
+                        <Button type="button" variant="outline" className="w-full justify-start" onClick={() => setIsRecipientDialogOpen(true)}>
                             <UserPlus className="mr-2 h-4 w-4" />
-                            Přidat příjemce
+                            Vybrat učitele
                         </Button>
-                        {selectedRecipientDetails.length > 0 && (
+                         {selectedRecipientDetails.length > 0 && (
                             <div className="pt-2 flex flex-wrap gap-2">
                                 {selectedRecipientDetails.map(r => (
                                     <Badge key={r!.id} variant="secondary">
                                         {r!.label}
                                         <button onClick={() => toggleRecipient(r!.id)} className="ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2">
                                             <X className="h-3 w-3" />
-                                            <span className="sr-only">Odstranit příjemce</span>
                                         </button>
                                     </Badge>
                                 ))}
@@ -302,14 +391,15 @@ export default function ZpravyPage() {
       </div>
       
        <Dialog open={isRecipientDialogOpen} onOpenChange={setIsRecipientDialogOpen}>
-            <DialogContent className="sm:max-w-2xl h-[80vh] flex flex-col">
-                <DialogHeader>
+            <DialogContent className="w-full max-w-2xl h-auto max-h-[80vh] flex flex-col p-0">
+                 <DialogHeader className="p-6 pb-0">
                     <DialogTitle>Vybrat příjemce</DialogTitle>
                 </DialogHeader>
-                <Command className="flex-grow overflow-hidden">
+                <Command className="flex-grow overflow-hidden px-6">
                     <CommandInput placeholder="Hledat uživatele nebo třídy..." />
                     <CommandList className="max-h-full">
                         <CommandEmpty>Žádní uživatelé nenalezeni.</CommandEmpty>
+                        {hasRole('ucitel') && (
                         <CommandGroup heading="Třídy">
                            {allClasses?.map(c => {
                                 const isSelected = recipients.includes(c.id);
@@ -322,8 +412,9 @@ export default function ZpravyPage() {
                                 )
                            })}
                         </CommandGroup>
-                        <CommandGroup heading="Uživatelé">
-                            {allUsers?.filter(u => u.id !== user?.id).map((option) => {
+                        )}
+                        <CommandGroup heading={hasRole('ucitel') ? 'Uživatelé' : 'Učitelé'}>
+                            {(hasRole('ucitel') ? allUsers?.filter(u => u.id !== user?.id) : studentRecipientOptions)?.map((option) => {
                                 const isSelected = recipients.includes(option.id);
                                 return (
                                     <CommandItem
@@ -336,19 +427,23 @@ export default function ZpravyPage() {
                                             <AvatarImage src={option.avatarUrl} />
                                             <AvatarFallback>{getInitials(option.name)}</AvatarFallback>
                                         </Avatar>
-                                        <span>{option.name} <span className="text-xs text-muted-foreground">({option.roles.join(', ')})</span></span>
+                                        <span>{(option as any).label || option.name} <span className="text-xs text-muted-foreground">({!hasRole('ucitel') ? '' : option.roles.join(', ')})</span></span>
                                     </CommandItem>
                                 );
                             })}
                         </CommandGroup>
                     </CommandList>
                 </Command>
-                <DialogFooter>
+                <DialogFooter className="p-6 pt-2 bg-muted/50 border-t">
+                    <Button variant="ghost" onClick={() => setIsRecipientDialogOpen(false)}>Zavřít</Button>
                     <Button onClick={() => setIsRecipientDialogOpen(false)}>
                         <Check className="mr-2 h-4 w-4" />
                         Potvrdit ({recipients.length})
                     </Button>
                 </DialogFooter>
+                 <Button variant="ghost" size="icon" className="absolute top-4 right-4" onClick={() => setIsRecipientDialogOpen(false)}>
+                    <X className="h-4 w-4" />
+                </Button>
             </DialogContent>
         </Dialog>
     </>
