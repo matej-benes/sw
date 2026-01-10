@@ -96,7 +96,8 @@ function EditGradeDialog({ grade, isOpen, onClose, onSave }: { grade: Znamka | n
 
 function StudentName({ studentId, users }: { studentId: string, users: User[] | null }) {
     const studentName = useMemo(() => {
-        return users?.find(u => u.id === studentId)?.name || 'Načítání...';
+        if (!users) return 'Načítání...';
+        return users.find(u => u.id === studentId)?.name || 'Neznámý žák';
     }, [users, studentId]);
 
     return <span>{studentName}</span>;
@@ -124,7 +125,7 @@ export default function HodnoceniPrehledPage() {
   }, [grades]);
   
   const usersQuery = useMemoFirebase(() => {
-      if (!firestore || studentIds.length === 0) return null;
+      if (!firestore || !studentIds || studentIds.length === 0) return null;
       return query(collection(firestore, 'users'), where('id', 'in', studentIds));
   }, [firestore, studentIds]);
 
@@ -148,7 +149,7 @@ export default function HodnoceniPrehledPage() {
     setDeletingGrade(null);
   };
   
-  const isLoading = userLoading || gradesLoading || usersLoading;
+  const isLoading = userLoading || gradesLoading || (studentIds.length > 0 && usersLoading);
 
   return (
     <>
