@@ -1,8 +1,8 @@
 'use client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Save, Loader2, Trash2, Edit } from "lucide-react";
+import { PlusCircle, Save, Loader2, Trash2, Edit, CalendarIcon, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -10,13 +10,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useFirestore, useCollection, useMemoFirebase, useDoc, setDocumentNonBlocking } from '@/firebase';
-import type { Trida, LessonBlock, User, Predmet, Ucebna, ScheduleTemplate } from '@/lib/types';
-import { collection, query, where } from 'firebase/firestore';
+import { useFirestore, useCollection, useMemoFirebase, useDoc, setDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
+import type { Trida, LessonBlock, User, Predmet, Ucebna, ScheduleTemplate, Rozvrh } from '@/lib/types';
+import { collection, query, where, doc, getDoc, writeBatch } from 'firebase/firestore';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { setDoc, doc } from 'firebase/firestore';
 import {
   Dialog,
   DialogContent,
@@ -27,6 +26,12 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format, parseISO } from "date-fns";
+import { cs } from "date-fns/locale";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+
 
 const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
 const defaultTimeSlots = [
@@ -462,7 +467,6 @@ function ScheduleEditor() {
     );
 }
 
-// Placeholder for new components
 function SubstitutionPlanner() {
     return (
         <Card>
@@ -478,32 +482,151 @@ function SubstitutionPlanner() {
 }
 
 function SchedulePreview() {
-    const [view, setView] = useState<'static' | 'with_changes'>('with_changes');
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+    
+    const tridyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]);
+    const { data: classes, isLoading: classesLoading } = useCollection<Trida>(tridyCollection);
+
+    const scheduleId = useMemo(() => {
+        if (!selectedClassId) return null;
+        return `${selectedClassId}-${format(selectedDate, 'yyyy-MM-dd')}`;
+    }, [selectedClassId, selectedDate]);
+
+    const scheduleRef = useMemoFirebase(() => scheduleId ? doc(firestore, 'rozvrhy', scheduleId) : null, [scheduleId, firestore]);
+    const { data: scheduleData, isLoading: scheduleLoading } = useDoc<Rozvrh>(scheduleRef);
+
+    useEffect(() => {
+        if (classes && classes.length > 0 && !selectedClassId) {
+            setSelectedClassId(classes[0].id);
+        }
+    }, [classes, selectedClassId]);
+
+    const handleDeleteLesson = async (periodIndex: number) => {
+        if (!scheduleRef || !scheduleData) return;
+
+        const newHodiny = [...scheduleData.hodiny];
+        newHodiny[periodIndex] = null;
+
+        try {
+            await updateDocumentNonBlocking(scheduleRef, { hodiny: newHodiny });
+            toast({
+                title: "Hodina smazána",
+                description: `Hodina byla pro tento den odstraněna z rozvrhu.`,
+            });
+        } catch (error) {
+            console.error("Error deleting lesson:", error);
+            toast({
+                variant: "destructive",
+                title: "Chyba",
+                description: "Nepodařilo se smazat hodinu.",
+            });
+        }
+    };
+    
+    const isLoading = classesLoading || scheduleLoading;
 
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Náhled rozvrhu</CardTitle>
-                <CardDescription>Zobrazení aktuálního stavu rozvrhů a suplování.</CardDescription>
+                <CardTitle>Náhled a úprava denního rozvrhu</CardTitle>
+                <CardDescription>Zobrazení aktuálního stavu rozvrhu pro vybraný den s možností jednorázových úprav.</CardDescription>
             </CardHeader>
-            <CardContent>
-                <Tabs value={view} onValueChange={(value) => setView(value as any)} className="w-full">
-                    <TabsList>
-                        <TabsTrigger value="with_changes">Rozvrh se změnami</TabsTrigger>
-                        <TabsTrigger value="static">Statický rozvrh</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="with_changes" className="mt-4">
-                       <p>Zde se zobrazí rozvrh včetně všech suplování, odpadlých hodin a událostí.</p>
-                    </TabsContent>
-                     <TabsContent value="static" className="mt-4">
-                       <p>Zde se zobrazí základní podoba rozvrhu dle šablony.</p>
-                    </TabsContent>
-                </Tabs>
+            <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-4 items-center">
+                    <Select onValueChange={setSelectedClassId} value={selectedClassId || ''} disabled={classesLoading}>
+                        <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Vyberte třídu" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {classes?.map(c => <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                        <Button
+                            variant={"outline"}
+                            className="w-[280px] justify-start text-left font-normal"
+                        >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {selectedDate ? format(selectedDate, "PPP", {locale: cs}) : <span>Vyberte datum</span>}
+                        </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                        <Calendar
+                            mode="single"
+                            selected={selectedDate}
+                            onSelect={(day) => day && setSelectedDate(day)}
+                            initialFocus
+                        />
+                        </PopoverContent>
+                    </Popover>
+                </div>
+                {isLoading ? (
+                     <div className="text-center p-8">Načítání rozvrhu...</div>
+                ) : !scheduleData ? (
+                    <div className="text-center p-8 text-muted-foreground">Pro tento den nebyl nalezen žádný rozvrh. Zkuste jiný den nebo třídu.</div>
+                ) : (
+                    <div className="border rounded-lg overflow-x-auto">
+                        <table className="w-full text-sm">
+                           <thead>
+                                <tr className="bg-muted/50">
+                                    <th className="p-2 text-left font-semibold">Hodina</th>
+                                    <th className="p-2 text-left font-semibold">Čas</th>
+                                    <th className="p-2 text-left font-semibold">Předmět</th>
+                                    <th className="p-2 text-left font-semibold">Učitel</th>
+                                    <th className="p-2 text-left font-semibold">Učebna</th>
+                                    <th className="p-2 text-center font-semibold">Akce</th>
+                                </tr>
+                           </thead>
+                            <tbody>
+                                {scheduleData.hodiny.map((lesson, index) => (
+                                    <tr key={index} className="border-t">
+                                        <td className="p-2 font-medium">{index + 1}.</td>
+                                        <td className="p-2 text-muted-foreground">{scheduleData.timeSlots[index]}</td>
+                                        {lesson ? (
+                                            <>
+                                                <td className="p-2 font-semibold">{lesson.subjectName} ({lesson.subjectShortcut})</td>
+                                                <td className="p-2">{lesson.teacherName}</td>
+                                                <td className="p-2">{lesson.ucebnaName}</td>
+                                                <td className="p-2 text-center">
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+                                                                <X className="h-4 w-4" />
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Opravdu chcete smazat tuto hodinu?</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    Tato akce trvale odstraní hodinu <strong>{lesson.subjectName}</strong> z rozvrhu pro den <strong>{format(selectedDate, "d. M. yyyy")}.</strong> Tato změna se neprojeví v šabloně.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Zrušit</AlertDialogCancel>
+                                                                <AlertDialogAction onClick={() => handleDeleteLesson(index)}>Smazat</AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                </td>
+                                            </>
+                                        ) : (
+                                            <td colSpan={4} className="p-2 text-center text-muted-foreground italic">Volná hodina</td>
+                                        )}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
             </CardContent>
         </Card>
     );
 }
-
 
 export default function RozvrhySuplovaniPage() {
     return (
@@ -517,7 +640,7 @@ export default function RozvrhySuplovaniPage() {
                     <TabsList>
                         <TabsTrigger value="rozvrhy">Šablony rozvrhů</TabsTrigger>
                         <TabsTrigger value="suplovani">Plánování suplování</TabsTrigger>
-                        <TabsTrigger value="nahled">Náhled</TabsTrigger>
+                        <TabsTrigger value="nahled">Náhled a úpravy</TabsTrigger>
                     </TabsList>
                     <Button>
                         <PlusCircle className="mr-2 h-4 w-4" />
