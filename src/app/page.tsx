@@ -153,19 +153,23 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
 
             const userDoc = querySnapshot.docs[0];
             const userWithPin = { id: userDoc.id, ...userDoc.data() } as User;
-            let userToRegister: User = userWithPin;
-
+            let userToRegister: User;
+            let studentForParent: User | null = null;
+            
+            // Scenario 1: PIN belongs to a parent. This is invalid.
             if (userWithPin.roles.includes('rodic')) {
-                 toast({
+                toast({
                     variant: 'destructive',
-                    title: 'Nesprávný PIN',
-                    description: 'Pro registraci rodičovského účtu zadejte prosím PIN, který patří Vašemu dítěti.'
+                    title: 'Nesprávný typ PINu',
+                    description: 'Pro registraci rodičovského účtu zadejte PIN, který patří Vašemu dítěti.'
                 });
                 setIsLoading(false);
                 return;
             }
             
+            // Scenario 2: PIN belongs to a student. This means a parent is registering.
             if (userWithPin.roles.includes('ziak') && userWithPin.studentId) {
+                studentForParent = userWithPin;
                 const parentDocRef = doc(firestore, 'users', userWithPin.studentId);
                 const parentDoc = await getDoc(parentDocRef);
                 if (parentDoc.exists()) {
@@ -173,13 +177,17 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 } else {
                      throw new Error("Propojený rodičovský účet nebyl nalezen. Kontaktujte administrátora.");
                 }
+            } else {
+            // Scenario 3: PIN belongs to a student (without a linked parent yet) or a teacher/staff
+                userToRegister = userWithPin;
             }
 
-            let tridaName: string | null = "N/A";
-            const classId = userWithPin.tridaId;
 
-            if (classId) {
-                const tridaRef = doc(firestore, 'tridy', classId);
+            let tridaName: string | null = "N/A";
+            const classIdForDisplay = userWithPin.tridaId || userToRegister.tridaId;
+
+            if (classIdForDisplay) {
+                const tridaRef = doc(firestore, 'tridy', classIdForDisplay);
                 const tridaDoc = await getDoc(tridaRef);
                 if (tridaDoc.exists()) {
                     tridaName = tridaDoc.data().nazev;
@@ -220,27 +228,28 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 email: values.email,
                 roles: userToRegister.roles,
                 avatarUrl: userToRegister.avatarUrl || `https://picsum.photos/seed/${newFirebaseUser.uid}/100/100`,
-                tridaId: userToRegister.roles.includes('ziak') ? userToRegister.tridaId : undefined,
+                tridaId: userToRegister.roles.includes('ziak') ? userToRegister.tridaId : userWithPin.tridaId,
                 studentId: userToRegister.roles.includes('rodic') ? userWithPin.id : undefined,
             };
 
             const newUserDocRef = doc(firestore, 'users', newFirebaseUser.uid);
             batch.set(newUserDocRef, finalUserData);
 
-            // Delete the original pre-registration placeholder user
-            const originalUserDocRef = doc(firestore, 'users', userToRegister.id);
-            batch.delete(originalUserDocRef);
-
-            // If a student used their PIN to register their parent,
-            // we now need to delete the student's PIN user placeholder as well
+            // Delete the original pre-registration placeholder user(s)
+            batch.delete(doc(firestore, 'users', userToRegister.id));
             if (userToRegister.id !== userWithPin.id) {
-                 const studentPinUserRef = doc(firestore, 'users', userWithPin.id);
-                 batch.delete(studentPinUserRef);
+                 batch.delete(doc(firestore, 'users', userWithPin.id));
             }
 
-            // Update student's `tridaId` membership
-            if (finalUserData.roles.includes('ziak') && userWithPin.tridaId) {
-                const tridaRef = doc(firestore, 'tridy', userWithPin.tridaId);
+            // If a parent registered, update student's studentId to point to the new parent's UID
+            if(finalUserData.roles.includes('rodic')) {
+                const studentRef = doc(firestore, 'users', userWithPin.id);
+                batch.update(studentRef, { studentId: newFirebaseUser.uid });
+            }
+
+            // If a student registers, update their class membership
+            if (finalUserData.roles.includes('ziak') && finalUserData.tridaId) {
+                const tridaRef = doc(firestore, 'tridy', finalUserData.tridaId);
                 const tridaDoc = await getDoc(tridaRef);
                 if (tridaDoc.exists()) {
                     const ziaciIds = (tridaDoc.data().ziaciIds || []).filter((id: string) => id !== userWithPin.id);

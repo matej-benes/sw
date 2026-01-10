@@ -357,7 +357,7 @@ function NewGradingContent() {
                                     <Controller
                                         name={`studenti.${index}.znamka`}
                                         control={control}
-                                        render={({ field }) => <Input {...field} type="number" min="1" max="5" />}
+                                        render={({ field }) => <Input {...field} type="text" />}
                                     />
                                 </TableCell>
                                 <TableCell>
