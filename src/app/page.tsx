@@ -183,7 +183,6 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
 
             if (querySnapshot.empty) {
                 toast({ variant: 'destructive', title: 'Chyba', description: 'Neplatný PIN kód.' });
-                setIsLoading(false);
                 return;
             }
 
@@ -196,21 +195,25 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                     title: 'Nesprávný PIN', 
                     description: 'Pro registraci rodičovského účtu zadejte prosím PIN, který patří Vašemu dítěti.' 
                 });
-                setIsLoading(false);
                 return;
             }
             
             let userToRegister = userWithPin;
             let studentData: User | null = null;
             
+            // Check if a student's PIN was used to find a parent
             if (userWithPin.roles.includes('ziak') && userWithPin.studentId) {
                 studentData = userWithPin;
-                const parentDocRef = doc(firestore, 'users', userWithPin.studentId);
-                const parentDoc = await getDoc(parentDocRef);
-                if (parentDoc.exists()) {
-                      userToRegister = { id: parentDoc.id, ...parentDoc.data() } as User;
+                // Find the parent associated with this student
+                const parentQuery = query(usersRef, where('studentId', '==', studentData.id), where('roles', 'array-contains', 'rodic'));
+                const parentSnapshot = await getDocs(parentQuery);
+
+                if (!parentSnapshot.empty) {
+                    const parentDoc = parentSnapshot.docs[0];
+                    userToRegister = { id: parentDoc.id, ...parentDoc.data() } as User;
                 } else {
-                      throw new Error("Propojený rodičovský účet nebyl nalezen.");
+                     // This case is unlikely if data is consistent, but good to handle
+                     throw new Error("Propojený rodičovský účet nebyl nalezen.");
                 }
             }
             
