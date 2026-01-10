@@ -28,7 +28,8 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if isAuthenticated();
-      allow list: if request.query.where[0][0] == 'pin' || isAdmin();
+      // Allow listing ONLY for admins OR for a specific query by PIN for registration
+      allow list: if (request.query.where[0][0] == 'pin' && request.query.where[0][2] != '') || isAdmin();
       allow create: if isAdmin();
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();

@@ -133,7 +133,6 @@
         }
       },
       "required": [
-        "id",
         "studentId",
         "predmet",
         "hodnota",

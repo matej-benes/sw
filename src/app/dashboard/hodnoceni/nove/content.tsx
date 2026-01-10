@@ -69,7 +69,8 @@ function NewGradingContent() {
   
   const tridaRef = useMemoFirebase(() => tridaId ? doc(firestore, 'tridy', tridaId) : null, [firestore, tridaId]);
   const { data: tridaData } = useDoc<Trida>(tridaRef);
-  const rozvrhRef = useMemoFirebase(() => tridaId ? doc(firestore, 'rozvrhy', tridaId) : null, [firestore, tridaId]);
+  const rozvrhId = tridaId ? `${tridaId}-${format(new Date(), 'yyyy-MM-dd')}` : null;
+  const rozvrhRef = useMemoFirebase(() => rozvrhId ? doc(firestore, 'rozvrhy', rozvrhId) : null, [firestore, rozvrhId]);
   const { data: rozvrhData } = useDoc<Rozvrh>(rozvrhRef);
   
   const timeSlots = useMemo(() => rozvrhData?.timeSlots || [], [rozvrhData]);
@@ -120,11 +121,11 @@ function NewGradingContent() {
     }
 
     try {
-        const znamkyCollection = collection(firestore, 'znamky');
+      const znamkyCollection = collection(firestore, `users/${teacherUser.uid}/znamky`);
         
         for (const student of data.studenti) {
             if (student.zahrnout && student.znamka) {
-                const newZnamka: Omit<Znamka, 'id'> = {
+                const newZnamka: Znamka = {
                     studentId: student.studentId,
                     predmet: predmety?.find(p => p.id === data.predmetId)?.name || 'Neznámý',
                     hodnota: parseInt(student.znamka, 10),
@@ -134,7 +135,7 @@ function NewGradingContent() {
                     tema: data.tema,
                     druhHodnoceni: 'písemné', // example
                 };
-                await addDocumentNonBlocking(znamkyCollection, newZnamka);
+                await addDocumentNonBlocking(collection(firestore, 'znamky'), newZnamka);
             }
         }
         

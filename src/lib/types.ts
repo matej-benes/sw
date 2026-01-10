@@ -12,7 +12,7 @@ export interface User {
 }
 
 export interface Znamka {
-  id: string;
+  id?: string;
   studentId: string;
   predmet: string;
   hodnota: number;
