@@ -178,10 +178,18 @@ export const MultiSelect = React.forwardRef<
                     </Button>
                 </PopoverTrigger>
                 <PopoverContent
-                    className="w-full p-0"
+                    className="w-full p-0 relative"
                     align="start"
                     onEscapeKeyDown={() => setIsPopoverOpen(false)}
                 >
+                     <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="absolute top-2 right-2 h-6 w-6 z-10"
+                        onClick={() => setIsPopoverOpen(false)}
+                    >
+                        <XIcon className="h-4 w-4 text-muted-foreground" />
+                    </Button>
                     <Command>
                         <CommandInput
                             placeholder="Hledat..."
