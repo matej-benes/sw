@@ -36,9 +36,9 @@ export interface InternalQuery extends Query<DocumentData> {
       toString(): string;
     },
     filters: {
-        _a: {
-            // This is a simplified representation of the internal filter structure
-            // It helps us check for undefined values in 'where' clauses
+        // This is a simplified representation of the internal filter structure
+        // It helps us check for undefined values in 'where' clauses
+        _a?: {
             g: any[]; 
         }
     }[]
@@ -75,7 +75,8 @@ export function useCollection<T = any>(
         const internalQuery = memoizedTargetRefOrQuery as unknown as InternalQuery;
         if (internalQuery._query?.filters) {
             for (const filter of internalQuery._query.filters) {
-                if (filter._a.g.includes(undefined)) {
+                // Safely check if _a and g exist before accessing them
+                if (filter._a && filter._a.g.includes(undefined)) {
                     // One of the 'where' clause values is undefined. Stop here.
                     setData(null);
                     setIsLoading(false);
