@@ -116,7 +116,7 @@ export default function DashboardPage() {
   const isClassTeacher = (teacherClasses?.length || 0) > 0;
 
   const pendingExcusesQuery = useMemoFirebase(() => {
-      if (!firestore || !isClassTeacher || !teacherClasses) return null;
+      if (!firestore || !isClassTeacher || !teacherClasses || teacherClasses.length === 0) return null;
       const classIds = teacherClasses.map(c => c.id);
       if (classIds.length === 0) return null;
       return query(collection(firestore, 'omluvenky'), where('status', '==', 'pending'), where('tridaId', 'in', classIds));
