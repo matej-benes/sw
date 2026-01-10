@@ -107,12 +107,12 @@ export default function DashboardPage() {
   // Memoized derived data
   const weekDays = useMemo(() => {
     const start = startOfWeek(currentDate, { weekStartsOn: 1 });
-    return Array.from({ length: 5 }, (_, i) => addDays(start, i));
+    return Array.from({ length: 7 }, (_, i) => addDays(start, i));
   }, [currentDate]);
 
   const weekLabel = useMemo(() => {
     const start = weekDays[0];
-    const end = weekDays[4];
+    const end = weekDays[6];
     return `${format(start, 'd. M.')} - ${format(end, 'd. M. yyyy')}`;
   }, [weekDays]);
 

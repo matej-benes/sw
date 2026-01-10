@@ -24,7 +24,7 @@ const defaultTimeSlots = [
     "07:55-08:40", "08:55-09:40", "09:55-10:40", "10:45-11:30",
     "11:35-12:20", "12:30-13:15", "13:20-14:05", "14:15-15:00",
 ];
-const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek'];
+const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
 
 type DayMappingInfo = { short: string; date: string; dayIndex: number, fullDate: Date };
 
