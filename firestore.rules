@@ -54,7 +54,7 @@ service cloud.firestore {
     
     match /udalosti/{udalostId} {
         allow get, list: if isAuthenticated();
-        allow write: if isAuthenticated();
+        allow create, delete: if isAuthenticated();
     }
      
      match /suplovani/{substitutionId} {
