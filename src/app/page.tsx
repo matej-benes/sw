@@ -152,10 +152,9 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             }
 
             const userWithPinDoc = querySnapshot.docs[0];
-            const userWithPinData = userWithPinDoc.data();
-            const userWithPin = { id: userWithPinDoc.id, ...userWithPinData } as User;
+            const userWithPin = { id: userWithPinDoc.id, ...userWithPinDoc.data() } as User;
             
-            // This is a pre-registered parent account. Parent should use student's PIN.
+            // If user with PIN is a parent, they must use their child's PIN.
             if (userWithPin.roles.includes('rodic')) {
                 toast({ 
                     variant: 'destructive', 
@@ -169,18 +168,23 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             let userToRegister = userWithPin;
             
             // This is a student account. Check if it's linked to a parent account.
+            // If so, we are registering the PARENT, not the student.
             if (userWithPin.roles.includes('ziak') && userWithPin.studentId) {
                 const parentDocRef = doc(firestore, 'users', userWithPin.studentId);
                 const parentDoc = await getDoc(parentDocRef);
                 if (parentDoc.exists()) {
                     userToRegister = { id: parentDoc.id, ...parentDoc.data() } as User;
+                    // Important: The studentId on the parent record is the ID of the student document.
+                    // We need to pass this along so we can update the student's record later if needed.
+                    userToRegister.studentId = userWithPin.id; 
                 } else {
                      throw new Error("Propojený rodičovský účet nebyl nalezen. Kontaktujte administrátora.");
                 }
             }
             
               let tridaName: string | null = "N/A";
-              const classId = userToRegister.tridaId;
+              // Get class name for student, or for teacher if they have a class
+              const classId = userWithPin.tridaId;
 
               if (classId) {
                 const tridaRef = doc(firestore, 'tridy', classId);
@@ -223,14 +227,17 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 roles: registrationData.user.roles,
                 avatarUrl: registrationData.user.avatarUrl || `https://picsum.photos/seed/${firebaseUser.uid}/100/100`,
                 tridaId: registrationData.user.tridaId || null,
+                 // If a parent is registering, their studentId will be the ID of their child.
+                 // If a student is registering, this will be null (or their parent's old ID, which is fine).
                 studentId: registrationData.user.studentId || null,
             });
-
+            
+            // Delete the original pre-registration document (which had the PIN)
             const originalUserDocRef = doc(firestore, 'users', registrationData.user.id);
             batch.delete(originalUserDocRef);
 
-            // If a student was registered, their ID in their class needs to be updated to the new auth UID
-            if (registrationData.user.roles.includes('ziak') && registrationData.user.tridaId) {
+            // If a student was registered directly, their ID in their class needs to be updated to the new auth UID
+            if (registrationData.user.roles.includes('ziak') && registrationData.user.tridaId && registrationData.user.id !== registrationData.user.studentId) {
                 const tridaRef = doc(firestore, 'tridy', registrationData.user.tridaId);
                 const tridaDoc = await getDoc(tridaRef);
                 if (tridaDoc.exists()) {
@@ -303,9 +310,12 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                     <CardContent>
                         <div className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm">
                             <p><strong>Jméno:</strong> {registrationData.user.name}</p>
-                            <p><strong>{registrationData.user.roles.includes('ziak') ? 'Třída' : 'Role'}:</strong> {registrationData.user.roles.includes('rodic') ? 'Rodič' : (registrationData.tridaName || 'Zaměstnanec školy')}</p>
+                            <p><strong>Role:</strong> {registrationData.user.roles.map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(', ')}</p>
                              {registrationData.user.roles.includes('rodic') && registrationData.user.studentId && (
                                 <p className="text-muted-foreground text-xs">Registrujete se jako rodič. Jméno dítěte se zobrazí po přihlášení.</p>
+                            )}
+                             {registrationData.user.roles.includes('ziak') && (
+                                <p><strong>Třída:</strong> {registrationData.tridaName || 'N/A'}</p>
                             )}
                         </div>
                         <Form {...registrationForm}>
