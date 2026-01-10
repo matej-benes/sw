@@ -241,6 +241,19 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             const originalUserDocRef = doc(firestore, 'users', registrationData.user.id);
             await deleteDoc(originalUserDocRef);
 
+            // 4. If the user is a student, we must update the ziaciIds in the trida document with the new UID.
+            if (registrationData.user.roles.includes('ziak') && registrationData.user.tridaId) {
+                const tridaRef = doc(firestore, 'tridy', registrationData.user.tridaId);
+                const tridaDoc = await getDoc(tridaRef);
+                if (tridaDoc.exists()) {
+                    const ziaciIds = tridaDoc.data().ziaciIds || [];
+                    // Remove the old ID and add the new UID
+                    const updatedZiaciIds = ziaciIds.filter((id: string) => id !== registrationData.user.id);
+                    updatedZiaciIds.push(firebaseUser.uid);
+                    await updateDoc(tridaRef, { ziaciIds: updatedZiaciIds });
+                }
+            }
+
 
             toast({ title: 'Registrace úspěšná', description: 'Váš účet byl vytvořen, nyní se můžete přihlásit.' });
             onLoginClick(); // Switch back to login form
