@@ -15,6 +15,10 @@ import { MobileNav } from '@/components/layout/mobile-nav';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 
+const mainNavLinks = [
+    { name: 'Komunikace', href: '/dashboard/zpravy', icon: MessageSquare },
+];
+
 const adminNavLinks = [
     { name: 'Studijní materiály', href: '/dashboard/materialy', icon: FileQuestion },
 ];
@@ -90,6 +94,7 @@ export default function DashboardLayout({
         </div>
         <div className="flex-1">
             <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
+                 {renderNavLinks(mainNavLinks)}
                  {(isTeacher || isAdministrator) && (
                     <>
                         <div className='my-2'></div>
