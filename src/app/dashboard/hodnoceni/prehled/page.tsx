@@ -129,7 +129,7 @@ export default function HodnoceniPrehledPage() {
       
       const [classesSnap, substituteClassesSnap] = await Promise.all([
         getDocs(classesQuery),
-        getDocs(substituteClassesSnap)
+        getDocs(substituteClassesQuery)
       ]);
       
       const allTeacherClasses = [...classesSnap.docs, ...substituteClassesSnap.docs]
