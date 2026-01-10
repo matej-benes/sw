@@ -29,6 +29,11 @@ service cloud.firestore {
     function hasAnyRole(roles) {
         return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(roles);
     }
+    
+    function isMyClassStudent(studentId) {
+        let studentDoc = get(/databases/$(database)/documents/users/$(studentId));
+        return studentDoc.data.tridaId != null && isClassTeacher(studentDoc.data.tridaId);
+    }
 
     match /users/{userId} {
       allow get, list: if isAuthenticated();
@@ -37,8 +42,8 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       match /znamky/{znamkaId} {
-         allow get: if isAuthenticated() && (isOwner(userId) || isMyStudent(userId) || hasAnyRole(['ucitel', 'administrator']));
-         allow list: if isAuthenticated() && (isOwner(userId) || isMyStudent(userId));
+         allow get: if isAuthenticated() && (isOwner(userId) || isMyStudent(userId) || isMyClassStudent(userId) || isAdmin());
+         allow list: if isAuthenticated() && (isOwner(userId) || isMyStudent(userId) || isMyClassStudent(userId) || isAdmin());
          allow create: if hasAnyRole(['ucitel', 'administrator']);
          allow update, delete: if hasAnyRole(['ucitel', 'administrator']) && resource.data.ucitelId == request.auth.uid;
       }
@@ -46,7 +51,7 @@ service cloud.firestore {
     
     // Allow teachers to query their own grades across all students
     match /{path=**}/znamky/{znamkaId} {
-      allow get, list: if hasAnyRole(['ucitel', 'administrator']);
+      allow list: if hasAnyRole(['ucitel', 'administrator']) && resource.data.ucitelId == request.auth.uid;
     }
 
     match /tridy/{tridaId} {

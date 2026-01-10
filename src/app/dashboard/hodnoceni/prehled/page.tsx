@@ -1,9 +1,9 @@
 'use client';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useFirestore, useCollection, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, collectionGroup, query, where, doc, getDoc } from 'firebase/firestore';
-import type { Znamka, User } from '@/lib/types';
+import { collection, collectionGroup, query, where, doc, getDoc, getDocs } from 'firebase/firestore';
+import type { Znamka, User, Trida } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -109,27 +109,78 @@ export default function HodnoceniPrehledPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
+  const [grades, setGrades] = useState<Znamka[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
+
   const [editingGrade, setEditingGrade] = useState<Znamka | null>(null);
   const [deletingGrade, setDeletingGrade] = useState<Znamka | null>(null);
   
-  const teacherGradesQuery = useMemoFirebase(() => {
-    if (!firestore || !user?.id) return null;
-    return query(collectionGroup(firestore, 'znamky'), where('ucitelId', '==', user.id));
-  }, [firestore, user?.id]);
+  const fetchTeacherData = useCallback(async () => {
+    if (!firestore || !user?.id) return;
 
-  const { data: grades, isLoading: gradesLoading } = useCollection<Znamka>(teacherGradesQuery);
+    setDataLoading(true);
+    
+    try {
+      // 1. Find all classes where the user is a teacher, substitute or assistant
+      const classesQuery = query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
+      const substituteClassesQuery = query(collection(firestore, 'tridy'), where('zastupciIds', 'array-contains', user.id));
+      // Not including assistants for now, can be added if needed
+      
+      const [classesSnap, substituteClassesSnap] = await Promise.all([
+        getDocs(classesQuery),
+        getDocs(substituteClassesQuery)
+      ]);
+      
+      const allTeacherClasses = [...classesSnap.docs, ...substituteClassesSnap.docs]
+          .map(doc => ({ id: doc.id, ...doc.data() } as Trida))
+          .filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i); // unique classes
+      
+      if (allTeacherClasses.length === 0) {
+        setGrades([]);
+        setUsers([]);
+        setDataLoading(false);
+        return;
+      }
 
-  const studentIds = useMemo(() => {
-    if (!grades) return [];
-    return [...new Set(grades.map(g => g.studentId))];
-  }, [grades]);
-  
-  const usersQuery = useMemoFirebase(() => {
-      if (!firestore || !studentIds || studentIds.length === 0) return null;
-      return query(collection(firestore, 'users'), where('__name__', 'in', studentIds));
-  }, [firestore, studentIds]);
+      // 2. Get all student IDs from these classes
+      const allStudentIds = allTeacherClasses.flatMap(c => c.ziaciIds);
+      if (allStudentIds.length === 0) {
+        setGrades([]);
+        setUsers([]);
+        setDataLoading(false);
+        return;
+      }
+      
+      // 3. Fetch all grades created by this teacher
+      const gradesQuery = query(collectionGroup(firestore, 'znamky'), where('ucitelId', '==', user.id));
+      const gradesSnap = await getDocs(gradesQuery);
+      const allTeacherGrades = gradesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Znamka));
+      
+      // 4. Fetch the user data for the relevant students
+      const uniqueStudentIds = [...new Set(allTeacherGrades.map(g => g.studentId))];
+      if (uniqueStudentIds.length > 0) {
+        const usersQuery = query(collection(firestore, 'users'), where('__name__', 'in', uniqueStudentIds));
+        const usersSnap = await getDocs(usersQuery);
+        setUsers(usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)));
+      } else {
+        setUsers([]);
+      }
+      
+      setGrades(allTeacherGrades);
+      
+    } catch(error) {
+      console.error("Error fetching teacher grades:", error);
+      toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se načíst data o známkách.'});
+    } finally {
+      setDataLoading(false);
+    }
+    
+  }, [firestore, user?.id, toast]);
 
-  const { data: users, isLoading: usersLoading } = useCollection<User>(usersQuery);
+  useEffect(() => {
+    fetchTeacherData();
+  }, [fetchTeacherData]);
 
 
   const handleSave = async (data: GradeEditFormData) => {
@@ -139,6 +190,7 @@ export default function HodnoceniPrehledPage() {
     await updateDocumentNonBlocking(gradeRef, data);
     toast({ title: "Známka aktualizována." });
     setEditingGrade(null);
+    fetchTeacherData(); // Re-fetch data
   };
 
   const handleDelete = async () => {
@@ -147,9 +199,10 @@ export default function HodnoceniPrehledPage() {
     await deleteDocumentNonBlocking(gradeRef);
     toast({ title: "Známka smazána." });
     setDeletingGrade(null);
+    fetchTeacherData(); // Re-fetch data
   };
   
-  const isLoading = userLoading || gradesLoading || (studentIds.length > 0 && usersLoading);
+  const isLoading = userLoading || dataLoading;
 
   return (
     <>
