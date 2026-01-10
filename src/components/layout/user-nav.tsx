@@ -16,6 +16,7 @@ import { Badge } from '../ui/badge';
 import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import type { Trida, User } from '@/lib/types';
+import { Separator } from '../ui/separator';
 
 export function UserNav() {
   const { user, signOut, hasRole } = useAuth();
@@ -51,25 +52,33 @@ export function UserNav() {
     ziak: 'Žák',
     administrator: 'Administrátor',
     'vedouci pracovnik': 'Vedoucí pracovník',
+    'asistent pedagoga': 'Asistent pedagoga',
   };
 
   return (
     <div className="flex items-center gap-4">
-       <div className="hidden text-right md:block">
-          <p className="text-sm font-medium leading-none">{user.name}</p>
-          {isZiak ? (
-             <div className="text-xs text-muted-foreground mt-1">
-                <p>Třída: {tridaData?.nazev || '...'}</p>
-                <p>Třídní učitel: {ucitelData?.name || '...'}</p>
+       <div className="hidden text-right md:flex items-center gap-4">
+          <div className="text-right">
+            <p className="text-sm font-medium leading-none">{user.name}</p>
+             {!isZiak && (
+                <div className="flex flex-wrap justify-end gap-1 mt-1">
+                    {user.roles.map(role => (
+                    <Badge key={role} variant="secondary" className="text-xs">
+                        {roleTranslations[role] || role}
+                    </Badge>
+                    ))}
+                </div>
+             )}
+          </div>
+
+           {isZiak && (
+             <div className="flex items-center gap-3 text-sm">
+                <Separator orientation="vertical" className="h-8" />
+                <div className="text-left">
+                    <p className="font-semibold">{tridaData?.nazev || '...'}</p>
+                    <p className="text-xs text-muted-foreground">{ucitelData?.name || '...'}</p>
+                </div>
              </div>
-          ) : (
-             <div className="flex flex-wrap justify-end gap-1 mt-1">
-                {user.roles.map(role => (
-                <Badge key={role} variant="secondary" className="text-xs">
-                    {roleTranslations[role] || role}
-                </Badge>
-                ))}
-            </div>
           )}
         </div>
       <DropdownMenu>
