@@ -94,12 +94,8 @@ function EditGradeDialog({ grade, isOpen, onClose, onSave }: { grade: Znamka | n
   )
 }
 
-function StudentName({ studentId, users }: { studentId: string, users: User[] | null }) {
-    const studentName = useMemo(() => {
-        if (!users) return 'Načítání...';
-        return users.find(u => u.id === studentId)?.name || 'Neznámý žák';
-    }, [users, studentId]);
-
+function StudentName({ studentId, users }: { studentId: string, users: Map<string, User> }) {
+    const studentName = users.get(studentId)?.name || 'Neznámý žák';
     return <span>{studentName}</span>;
 }
 
@@ -110,7 +106,7 @@ export default function HodnoceniPrehledPage() {
   const { toast } = useToast();
 
   const [grades, setGrades] = useState<Znamka[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<Map<string, User>>(new Map());
   const [dataLoading, setDataLoading] = useState(true);
 
   const [editingGrade, setEditingGrade] = useState<Znamka | null>(null);
@@ -122,63 +118,33 @@ export default function HodnoceniPrehledPage() {
     setDataLoading(true);
     
     try {
-      // 1. Find all classes where the user is a teacher, substitute or assistant
-      const classesQuery = query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
-      const substituteClassesQuery = query(collection(firestore, 'tridy'), where('zastupciIds', 'array-contains', user.id));
-      // Not including assistants for now, can be added if needed
-      
-      const [classesSnap, substituteClassesSnap] = await Promise.all([
-        getDocs(classesQuery),
-        getDocs(substituteClassesQuery)
-      ]);
-      
-      const allTeacherClasses = [...classesSnap.docs, ...substituteClassesSnap.docs]
-          .map(doc => ({ id: doc.id, ...doc.data() } as Trida))
-          .filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i); // unique classes
-      
-      if (allTeacherClasses.length === 0) {
-        setGrades([]);
-        setUsers([]);
-        setDataLoading(false);
-        return;
-      }
+      // 1. Fetch all grades created by this teacher
+      const gradesQuery = query(
+          collectionGroup(firestore, 'znamky'),
+          where('ucitelId', '==', user.id)
+      );
+      const gradesSnap = await getDocs(gradesQuery);
+      const allTeacherGrades = gradesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Znamka));
 
-      // 2. Get all student IDs from these classes
-      const allStudentIds = allTeacherClasses.flatMap(c => c.ziaciIds);
-      if (allStudentIds.length === 0) {
-        setGrades([]);
-        setUsers([]);
-        setDataLoading(false);
-        return;
-      }
-      
-      // 3. Fetch all grades created by this teacher for students in their classes
-      const allTeacherGrades: Znamka[] = [];
-      // To avoid hitting 'in' query limit of 30, we might need to batch this.
-      // For now, assuming student count is reasonable.
-      if (allStudentIds.length > 0) {
-          const gradesQuery = query(
-            collectionGroup(firestore, 'znamky'), 
-            where('studentId', 'in', allStudentIds),
-            where('ucitelId', '==', user.id)
-          );
-          const gradesSnap = await getDocs(gradesQuery);
-          gradesSnap.forEach(doc => {
-            allTeacherGrades.push({ id: doc.id, ...doc.data() } as Znamka);
-          });
-      }
-      
-      // 4. Fetch the user data for the relevant students
-      const uniqueStudentIds = [...new Set(allTeacherGrades.map(g => g.studentId))];
-      if (uniqueStudentIds.length > 0) {
-        const usersQuery = query(collection(firestore, 'users'), where('__name__', 'in', uniqueStudentIds));
-        const usersSnap = await getDocs(usersQuery);
-        setUsers(usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)));
-      } else {
-        setUsers([]);
-      }
-      
       setGrades(allTeacherGrades);
+      
+      // 2. Fetch the user data for the relevant students
+      const studentIds = [...new Set(allTeacherGrades.map(g => g.studentId))];
+      if (studentIds.length > 0) {
+          const usersMap = new Map<string, User>();
+          // Fetch users in chunks of 30 due to 'in' query limit
+          for (let i = 0; i < studentIds.length; i += 30) {
+              const chunk = studentIds.slice(i, i + 30);
+              const usersQuery = query(collection(firestore, 'users'), where('__name__', 'in', chunk));
+              const usersSnap = await getDocs(usersQuery);
+              usersSnap.forEach(doc => {
+                  usersMap.set(doc.id, { id: doc.id, ...doc.data() } as User);
+              });
+          }
+          setUsers(usersMap);
+      } else {
+        setUsers(new Map());
+      }
       
     } catch(error) {
       console.error("Error fetching teacher grades:", error);
@@ -190,8 +156,10 @@ export default function HodnoceniPrehledPage() {
   }, [firestore, user?.id, toast]);
 
   useEffect(() => {
-    fetchTeacherData();
-  }, [fetchTeacherData]);
+    if(!userLoading) {
+      fetchTeacherData();
+    }
+  }, [userLoading, fetchTeacherData]);
 
 
   const handleSave = async (data: GradeEditFormData) => {
