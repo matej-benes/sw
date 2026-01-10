@@ -19,6 +19,8 @@ import {
 } from '@/components/ui/tooltip';
 import { format, getDay, parse, parseISO, startOfWeek, addDays, isSameDay } from 'date-fns';
 import { cs } from 'date-fns/locale';
+import { useIsMobile } from '@/hooks/use-mobile';
+
 
 const defaultTimeSlots = [
     "07:55-08:40", "08:55-09:40", "09:55-10:40", "10:45-11:30",
@@ -228,6 +230,11 @@ function CancelledLessonBlock({ substitution }: { substitution: Substitution }) 
 }
 
 export function TimetableWidget({ schedules, eventsData, substitutionsData, isTeacher, userId, userClassId, days }: { schedules: Rozvrh[], eventsData: Udalost[], substitutionsData: Substitution[], isTeacher: boolean, userId: string, userClassId?: string, days: Date[] }) {
+    const isMobile = useIsMobile();
+    
+    if (isMobile) {
+        return null; // Don't render on mobile, MobileTimetable will be used instead
+    }
     
     const timeSlots = schedules[0]?.timeSlots || defaultTimeSlots;
     
