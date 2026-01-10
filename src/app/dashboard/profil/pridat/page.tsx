@@ -27,7 +27,7 @@ export default function AddProfilePage() {
 
     useEffect(() => {
         if (isMobile === false) { 
-            router.replace('/dashboard');
+            router.replace('/dashboard/profil');
         }
     }, [isMobile, router]);
 
@@ -45,8 +45,9 @@ export default function AddProfilePage() {
             await addUser(values.email, values.password);
             toast({
                 title: 'Účet přidán',
-                description: 'Nový účet byl úspěšně přidán do seznamu.',
+                description: 'Účet byl přidán do seznamu. Nyní se můžete přepnout.',
             });
+            // Redirect to the switch page so the user can see the new account and switch to it
             router.push('/dashboard/profil/prepnout');
         } catch (error) {
             toast({

@@ -47,10 +47,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 
    useEffect(() => {
-    const storedAccounts = JSON.parse(localStorage.getItem(ACCOUNTS_STORAGE_KEY) || '[]') as StoredUser[];
-    const storedActiveAccount = JSON.parse(localStorage.getItem(ACTIVE_ACCOUNT_STORAGE_KEY) || 'null') as StoredUser | null;
-    setAccounts(storedAccounts);
-    setActiveAccount(storedActiveAccount);
+    try {
+        const storedAccounts = JSON.parse(localStorage.getItem(ACCOUNTS_STORAGE_KEY) || '[]') as StoredUser[];
+        const storedActiveAccount = JSON.parse(localStorage.getItem(ACTIVE_ACCOUNT_STORAGE_KEY) || 'null') as StoredUser | null;
+        setAccounts(storedAccounts);
+        setActiveAccount(storedActiveAccount);
+    } catch (e) {
+        console.error("Failed to parse auth data from localStorage", e);
+    }
   }, []);
 
   const updateStoredAccounts = (newAccounts: StoredUser[], newActive: StoredUser | null) => {
@@ -65,22 +69,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
       setLoading(true);
       if (firebaseUser) {
-        if (activeAccount && firebaseUser.uid === activeAccount.uid) {
            const userDocRef = doc(firestore, 'users', firebaseUser.uid);
            const docSnap = await getDoc(userDocRef);
            if (docSnap.exists()) {
              setUser({ id: docSnap.id, ...docSnap.data() } as User);
            } else {
+             console.log(`No user document found for UID: ${firebaseUser.uid}, signing out.`);
+             await firebaseSignOut(auth);
              setUser(null);
            }
-        }
       } else {
         setUser(null);
       }
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [auth, firestore, activeAccount]);
+  }, [auth, firestore]);
 
 
   const signIn = async (email: string, pass: string): Promise<void> => {
@@ -99,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       updateStoredAccounts(updatedAccounts, newAccount);
-      // The onIdTokenChanged listener will handle setting the user state
+      // The onIdTokenChanged listener will handle setting the user state.
     } catch (error) {
       console.error("Sign in error", error);
       setLoading(false);
@@ -109,7 +113,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const addUser = async (email: string, pass: string): Promise<void> => {
     setLoading(true);
+    const originalUser = auth.currentUser;
+
     try {
+      // Temporarily sign out to not confuse the state
+      if (originalUser) {
+        await firebaseSignOut(auth);
+      }
+      
       const userCredential = await signInWithEmailAndPassword(auth, email, pass);
       const { user: fbUser } = userCredential;
       
@@ -118,7 +129,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (!currentAccounts.some(acc => acc.uid === newAccount.uid)) {
         const newAccounts = [...currentAccounts, newAccount];
-        // Only update the list of accounts, DO NOT change the active account
         localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(newAccounts));
         setAccounts(newAccounts);
       }
@@ -127,16 +137,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
        console.error("Add user error", error);
        throw new Error('Nepodařilo se přidat účet. Zkontrolujte přihlašovací údaje.');
     } finally {
+        // IMPORTANT: Sign out the newly added user and let the app go back to a logged-out state.
+        // The user will then need to log in again or switch. This prevents state confusion.
+        await firebaseSignOut(auth);
         setLoading(false);
-        // Sign out the temporarily authenticated user, which will trigger onIdTokenChanged 
-        // to re-evaluate auth state with the original active user's token (if they exist).
-        // This relies on Firebase's underlying token management.
-        if(auth.currentUser?.email !== activeAccount?.email) {
-            await firebaseSignOut(auth);
-            // After signing out the temp user, re-auth the active one if needed
-            // This part is tricky without storing passwords. A page reload or re-login might be necessary
-            // For now, let's assume the session for the active user persists.
-        }
     }
   };
 
@@ -149,18 +153,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const removeUser = async (uid: string) => {
     const newAccounts = accounts.filter(a => a.uid !== uid);
     if (activeAccount?.uid === uid) {
-      const nextUser = newAccounts.length > 0 ? newAccounts[0] : null;
-      if (nextUser) {
-        // Since we don't store passwords, we can't automatically sign in.
-        // We'll sign out and let the user sign in to the next available account.
-        await signOut();
-        toast({ title: 'Aktivní účet odebrán', description: 'Prosím, přihlaste se znovu.' });
-      } else {
-        await signOut();
-      }
-       updateStoredAccounts(newAccounts, null);
+      // If we remove the active account, we must sign out completely.
+      await signOut();
+      updateStoredAccounts([], null);
+      toast({ title: 'Aktivní účet odebrán', description: 'Prosím, přihlaste se znovu.' });
     } else {
+      // Just remove from the list if it's not the active one.
       updateStoredAccounts(newAccounts, activeAccount);
+      toast({ title: 'Účet odebrán ze seznamu.'});
     }
   };
 
