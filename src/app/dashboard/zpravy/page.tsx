@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { Loader2, Send, UserPlus, Inbox, Send as SendIcon, Pencil, CheckCircle, Eye } from 'lucide-react';
 import { useFirestore, useCollection, useDoc, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
-import { collection, doc, query, where, Timestamp, orderBy, updateDoc, arrayUnion, or } from 'firebase/firestore';
+import { collection, doc, query, where, Timestamp, updateDoc, arrayUnion } from 'firebase/firestore';
 import type { Trida, User, Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import {
@@ -154,7 +154,6 @@ function MessageDetailDialog({ message, isOpen, onOpenChange, allUsers }: { mess
                 </DialogClose>
             </DialogFooter>
         </DialogContent>
-    </Dialog>
   );
 }
 
