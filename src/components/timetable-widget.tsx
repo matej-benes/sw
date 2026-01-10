@@ -24,28 +24,10 @@ const defaultTimeSlots = [
     "07:55-08:40", "08:55-09:40", "09:55-10:40", "10:45-11:30",
     "11:35-12:20", "12:30-13:15", "13:20-14:05", "14:15-15:00",
 ];
-const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
 
-type DayMappingInfo = { short: string; date: string; dayIndex: number, fullDate: Date };
+const dayNames = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'];
 
-const generateDayMapping = () => {
-    const today = new Date();
-    const monday = startOfWeek(today, { weekStartsOn: 1 });
-    const mapping: { [key: string]: DayMappingInfo } = {};
-
-    daysOfWeek.forEach((day, index) => {
-        const date = addDays(monday, index);
-        mapping[day] = {
-            short: format(date, 'EEEEEE', { locale: cs }),
-            date: format(date, 'd.M.'),
-            dayIndex: index + 1,
-            fullDate: date,
-        };
-    });
-    return mapping;
-}
-
-const dayMapping = generateDayMapping();
+type DayMappingInfo = { short: string; date: string; fullDate: Date };
 
 
 function LessonTooltipContent({ lesson, dayInfo, period }: { lesson: LessonBlock, dayInfo: DayMappingInfo, period: number }) {
@@ -245,17 +227,14 @@ function CancelledLessonBlock({ substitution }: { substitution: Substitution }) 
     )
 }
 
-export function TimetableWidget({ schedules, eventsData, substitutionsData, isTeacher, userId, userClassId }: { schedules: Rozvrh[], eventsData: Udalost[], substitutionsData: Substitution[], isTeacher: boolean, userId: string, userClassId?: string }) {
+export function TimetableWidget({ schedules, eventsData, substitutionsData, isTeacher, userId, userClassId, days }: { schedules: Rozvrh[], eventsData: Udalost[], substitutionsData: Substitution[], isTeacher: boolean, userId: string, userClassId?: string, days: Date[] }) {
     
     const timeSlots = schedules[0]?.timeSlots || defaultTimeSlots;
     
-    const findEventForCell = (day: string, periodIndex: number) => {
-        const dayInfo = dayMapping[day];
-        if (!dayInfo) return null;
-
+    const findEventForCell = (dayDate: Date, periodIndex: number) => {
         return eventsData.find(event => {
             const eventDate = parseISO(event.datum);
-            const isSame = isSameDay(eventDate, dayInfo.fullDate);
+            const isSame = isSameDay(eventDate, dayDate);
             if (!isSame) return false;
             
             const lessonStartTime = timeSlots[periodIndex]?.split('-')[0];
@@ -263,26 +242,22 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
         });
     };
     
-    const findSubstitutionForCell = (day: string, periodIndex: number, classId: string) => {
-        const dayInfo = dayMapping[day];
-        if (!dayInfo) return null;
-
-        return substitutionsData.find(sub => {
+    const findSubstitutionForCell = (dayDate: Date, periodIndex: number, classId: string) => {
+         return substitutionsData.find(sub => {
              const subDate = parseISO(sub.date);
-             const isSame = isSameDay(subDate, dayInfo.fullDate);
-             return isSame && sub.originalLesson.day === day && sub.originalLesson.period === periodIndex && sub.originalLesson.classId === classId;
+             const dayName = dayNames[getDay(dayDate)];
+             const isSame = isSameDay(subDate, dayDate);
+             return isSame && sub.originalLesson.day === dayName && sub.originalLesson.period === periodIndex && sub.originalLesson.classId === classId;
         })
     };
 
 
-    const getLessonForCell = (day: string, periodIndex: number) => {
+    const getLessonForCell = (dayDate: Date, periodIndex: number) => {
         if (!schedules) return null;
-        const dayInfo = dayMapping[day];
-        if (!dayInfo) return null;
-
+        
         for (const schedule of schedules) {
-            const scheduleDate = new Date(schedule.datum + 'T00:00:00');
-            if (isSameDay(scheduleDate, dayInfo.fullDate)) {
+            const scheduleDate = parseISO(schedule.datum);
+            if (isSameDay(scheduleDate, dayDate)) {
                  const lesson = schedule.hodiny[periodIndex];
                  if (lesson) {
                      if (isTeacher) {
@@ -313,65 +288,70 @@ export function TimetableWidget({ schedules, eventsData, substitutionsData, isTe
                 ))}
 
                 {/* Body */}
-                {daysOfWeek.map(day => (
-                    <React.Fragment key={day}>
-                        <div className="flex flex-col items-center justify-center p-2 bg-muted/50 border-b border-r border-border">
-                           <div className="font-bold">{dayMapping[day]?.short || day.substring(0,2)}</div>
-                           <div className="text-xs text-muted-foreground">{dayMapping[day]?.date || ''}</div>
-                        </div>
-                        {timeSlots.map((_, periodIndex) => {
-                            const dayInfo = dayMapping[day];
-                            const lessonInfo = getLessonForCell(day, periodIndex);
-                            const lesson = lessonInfo?.lesson;
-                            
-                            const event = findEventForCell(day, periodIndex);
-                            const substitution = lesson ? findSubstitutionForCell(day, periodIndex, lessonInfo.classId) : null;
-                            
-                            const isCancelledByEvent = event && event.nahrazujeHodiny;
+                {days.map(dayDate => {
+                    const dayInfo: DayMappingInfo = {
+                        short: format(dayDate, 'EEEEEE', { locale: cs }),
+                        date: format(dayDate, 'd.M.'),
+                        fullDate: dayDate,
+                    };
+                    
+                    return (
+                        <React.Fragment key={dayDate.toISOString()}>
+                            <div className="flex flex-col items-center justify-center p-2 bg-muted/50 border-b border-r border-border">
+                               <div className="font-bold">{dayInfo.short}</div>
+                               <div className="text-xs text-muted-foreground">{dayInfo.date}</div>
+                            </div>
+                            {timeSlots.map((_, periodIndex) => {
+                                const lessonInfo = getLessonForCell(dayDate, periodIndex);
+                                const lesson = lessonInfo?.lesson;
+                                
+                                const event = findEventForCell(dayDate, periodIndex);
+                                const substitution = lesson ? findSubstitutionForCell(dayDate, periodIndex, lessonInfo.classId) : null;
+                                
+                                const isCancelledByEvent = event && event.nahrazujeHodiny;
 
-                            const isSubstituted = !!substitution;
-                            const isCancelledBySub = substitution?.changes.type.includes('zruseno');
+                                const isSubstituted = !!substitution;
+                                const isCancelledBySub = substitution?.changes.type.includes('zruseno');
 
-                            let substitutedLesson: LessonBlock | null = null;
-                            if (isSubstituted && !isCancelledBySub) {
-                                // This is a simplified representation. A full implementation would fetch new teacher/subject names.
-                                substitutedLesson = { ...lesson!, ...substitution!.changes };
-                                if (substitution!.changes.teacherId) substitutedLesson.teacherName = "Zástup"; // Placeholder
-                            }
+                                let substitutedLesson: LessonBlock | null = null;
+                                if (isSubstituted && !isCancelledBySub) {
+                                    // This is a simplified representation. A full implementation would fetch new teacher/subject names.
+                                    substitutedLesson = { ...lesson!, ...substitution!.changes };
+                                    if (substitution!.changes.teacherId) substitutedLesson.teacherName = "Zástup"; // Placeholder
+                                }
 
 
-                            return (
-                                <div key={periodIndex} className="p-0.5 border-b border-r border-border min-h-[70px] relative">
-                                    {isCancelledByEvent ? (
-                                         <EventBlock event={event!} />
-                                    ) : isCancelledBySub && substitution ? (
-                                        <CancelledLessonBlock substitution={substitution} />
-                                    ) : (
-                                        <>
-                                            {lesson && dayInfo && (
-                                                <LessonBlockCmp lesson={lesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} isSubstituted={isSubstituted}/>
-                                            )}
-                                            {substitutedLesson && dayInfo && (
-                                                <div className="absolute inset-0.5">
-                                                    <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} />
-                                                </div>
-                                            )}
-                                            
-                                            {!lesson && !event && isTeacher && (
-                                                <EmptySlotContextMenu>
-                                                    <div className="h-full w-full cursor-pointer"></div>
-                                                </EmptySlotContextMenu>
-                                            )}
-                                        </>
-                                    )}
-                                </div>
-                            )
-                        })}
-                    </React.Fragment>
-                ))}
+                                return (
+                                    <div key={periodIndex} className="p-0.5 border-b border-r border-border min-h-[70px] relative">
+                                        {isCancelledByEvent ? (
+                                             <EventBlock event={event!} />
+                                        ) : isCancelledBySub && substitution ? (
+                                            <CancelledLessonBlock substitution={substitution} />
+                                        ) : (
+                                            <>
+                                                {lesson && dayInfo && (
+                                                    <LessonBlockCmp lesson={lesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} isSubstituted={isSubstituted}/>
+                                                )}
+                                                {substitutedLesson && dayInfo && (
+                                                    <div className="absolute inset-0.5">
+                                                        <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} />
+                                                    </div>
+                                                )}
+                                                
+                                                {!lesson && !event && isTeacher && (
+                                                    <EmptySlotContextMenu>
+                                                        <div className="h-full w-full cursor-pointer"></div>
+                                                    </EmptySlotContextMenu>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                )
+                            })}
+                        </React.Fragment>
+                    )
+                })}
             </div>
         </div>
     );
 }
-
-    

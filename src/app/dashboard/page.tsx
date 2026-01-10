@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar as CalendarIcon,
+  ChevronDown,
 } from 'lucide-react';
 import { TimetableWidget } from '@/components/timetable-widget';
 import {
@@ -27,6 +28,7 @@ import {
   addWeeks,
   isSameDay,
   isWithinInterval,
+  parseISO,
 } from 'date-fns';
 import { cs } from 'date-fns/locale';
 
@@ -46,8 +48,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-
-const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
+import { cn } from '@/lib/utils';
 
 export default function DashboardPage() {
   const firestore = useFirestore();
@@ -104,18 +105,24 @@ export default function DashboardPage() {
   const [selectedClassId, setSelectedClassId] = useState<string | undefined>(
     undefined
   );
+  const [isFullWeekView, setIsFullWeekView] = useState(false);
+
 
   // Memoized derived data
   const weekDays = useMemo(() => {
-    const start = startOfWeek(currentDate, { weekStartsOn: 1 });
-    return Array.from({ length: 7 }, (_, i) => addDays(start, i));
-  }, [currentDate]);
+    if (isFullWeekView) {
+        const start = startOfWeek(currentDate, { weekStartsOn: 1 });
+        return Array.from({ length: 7 }, (_, i) => addDays(start, i));
+    }
+    // Compact view: today and tomorrow
+    return [currentDate, addDays(currentDate, 1)];
+  }, [currentDate, isFullWeekView]);
 
   const weekLabel = useMemo(() => {
-    const start = weekDays[0];
-    const end = weekDays[6];
+    const start = startOfWeek(currentDate, { weekStartsOn: 1 });
+    const end = addDays(start, 6);
     return `${format(start, 'd. M.')} - ${format(end, 'd. M. yyyy')}`;
-  }, [weekDays]);
+  }, [currentDate]);
 
   const tridyOptions = useMemo(
     () =>
@@ -239,6 +246,7 @@ export default function DashboardPage() {
       return { studentClassName: null, classTeacherName: null, substitutes: [], assistants: [] };
     }
     const classTeacher = allStaff.find(t => t.id === studentClass.ucitelId);
+    
     const substitutes = (studentClass.zastupciIds || []).map(id => allStaff.find(t => t.id === id)?.name).filter(Boolean) as string[];
     const assistants = (studentClass.asistentiIds || []).map(id => allStaff.find(t => t.id === id)?.name).filter(Boolean) as string[];
 
@@ -263,11 +271,17 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Kalendář</h1>
-        <p className="text-muted-foreground">
-          Váš týdenní přehled událostí.
-        </p>
+      <div 
+        className="flex items-center gap-2 cursor-pointer group"
+        onClick={() => setIsFullWeekView(prev => !prev)}
+        >
+        <div>
+            <h1 className="text-3xl font-bold tracking-tight">Kalendář</h1>
+            <p className="text-muted-foreground">
+            {isFullWeekView ? 'Váš týdenní přehled událostí.' : 'Váš přehled na dnešek a zítřek.'}
+            </p>
+        </div>
+        <ChevronDown className={cn("h-6 w-6 text-muted-foreground transition-transform group-hover:text-foreground", isFullWeekView && "rotate-180")} />
       </div>
 
       <Card>
@@ -346,6 +360,7 @@ export default function DashboardPage() {
                 isTeacher={hasRole('ucitel')}
                 userId={user.id}
                 userClassId={user.tridaId}
+                days={weekDays}
             />
         </CardContent>
       </Card>
