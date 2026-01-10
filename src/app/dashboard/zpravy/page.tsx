@@ -178,7 +178,6 @@ export default function ZpravyPage() {
   
   const receivedMessagesQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
-    // CRITICAL FIX: Removed orderBy to simplify the query and avoid needing composite indexes.
     return query(
         collection(firestore, 'messages'),
         where('recipientIds', 'array-contains', user.id)
@@ -187,7 +186,6 @@ export default function ZpravyPage() {
 
   const sentMessagesQuery = useMemoFirebase(() => {
       if (!firestore || !user) return null;
-      // CRITICAL FIX: Removed orderBy to simplify the query.
       return query(
           collection(firestore, 'messages'),
           where('senderId', '==', user.id)
