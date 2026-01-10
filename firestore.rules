@@ -15,63 +15,81 @@ service cloud.firestore {
 
     // Rules for 'users' collection
     match /users/{userId} {
-      // Allow any authenticated user to read user profiles (names, roles, etc.)
-      // Allow a user to create their own profile (during registration) or update it.
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
     }
 
-    // Rules for 'tridy', 'predmety', 'ucebny', and other general collections
+    // Rules for 'tridy' collection
     match /tridy/{tridaId} {
-      allow read, write: if isAuthenticated();
+      allow get, list: if isAuthenticated();
+      allow write: if isAuthenticated();
     }
+    
+    // Rules for 'predmety' collection
     match /predmety/{predmetId} {
-      allow read, write: if isAuthenticated();
+      allow get, list: if isAuthenticated();
+      allow write: if isAuthenticated();
     }
+    
+    // Rules for 'ucebny' collection
     match /ucebny/{ucebnaId} {
-      allow read, write: if isAuthenticated();
+      allow get, list: if isAuthenticated();
+      allow write: if isAuthenticated();
     }
+    
+    // Rules for 'rozvrhy' collection
     match /rozvrhy/{rozvrhId} {
-        allow read, write: if isAuthenticated();
+        allow get, list: if isAuthenticated();
+        allow write: if isAuthenticated();
     }
+    
+    // Rules for 'scheduleTemplates' collection
     match /scheduleTemplates/{templateId} {
-        allow read, write: if isAuthenticated();
+        allow get, list: if isAuthenticated();
+        allow write: if isAuthenticated();
     }
+     
+     // Rules for 'oznameni' collection
      match /oznameni/{oznameniId} {
-        allow read, write: if isAuthenticated();
+        allow get, list: if isAuthenticated();
+        allow write: if isAuthenticated();
     }
+    
+    // Rules for 'poznamky-zaku' collection
     match /poznamky-zaku/{poznamkaId} {
-        allow read, write: if isAuthenticated();
+        allow get, list: if isAuthenticated();
+        allow write: if isAuthenticated();
     }
+    
+    // Rules for 'udalosti' collection
     match /udalosti/{udalostId} {
-        allow read, write: if isAuthenticated();
+        allow get, list: if isAuthenticated();
+        allow write: if isAuthenticated();
     }
+     
+     // Rules for 'suplovani' collection
      match /suplovani/{substitutionId} {
-        allow read, write: if isAuthenticated();
+        allow get, list: if isAuthenticated();
+        allow write: if isAuthenticated();
     }
+    
+    // Rules for 'znamky' subcollection
     match /users/{userId}/znamky/{znamkaId} {
-       allow read, write: if isAuthenticated();
+       allow get, list: if isAuthenticated();
+       allow write: if isAuthenticated();
     }
 
 
     // Specific and secure rules for the 'messages' collection
     match /messages/{messageId} {
-      // READ: Allow if user is sender OR is in the recipients list.
-      // This covers both 'get' and 'list' operations securely.
-      // For 'list', Firestore checks this rule against the query's constraints.
-      allow read: if isAuthenticated() && (request.auth.uid == resource.data.senderId || request.auth.uid in resource.data.recipientIds);
-
-      // CREATE: Allow if the user is authenticated and is the sender of the message.
+      allow get: if isAuthenticated() && (request.auth.uid == resource.data.senderId || request.auth.uid in resource.data.recipientIds);
+      allow list: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid;
-
-      // UPDATE: Allow sender to update their own message.
-      // Or allow a recipient to mark as read.
       allow update: if isAuthenticated() && 
                     (request.auth.uid == resource.data.senderId ||
                      (request.auth.uid in resource.data.recipientIds && 
                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy'])));
-
-      // DELETE: For safety, don't allow deletion, but if needed, only the sender should be able to.
-      allow delete: if isAuthenticated() && request.auth.uid == resource.data.senderId;
+      allow delete: if false; 
     }
   }
 }
