@@ -182,8 +182,10 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             const querySnapshot = await getDocs(q);
 
             if (!querySnapshot.empty) {
-                const userWithPin = querySnapshot.docs[0].data() as User;
-                // If the PIN belongs directly to a parent account, instruct them to use the child's PIN
+                const userWithPinDoc = querySnapshot.docs[0];
+                const userWithPin = { id: userWithPinDoc.id, ...userWithPinDoc.data() } as User;
+                
+                // If the PIN belongs directly to a parent account, it's the wrong PIN.
                 if (userWithPin.roles.includes('rodic')) {
                     toast({ 
                         variant: 'destructive', 
@@ -194,27 +196,44 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                     return;
                 }
                 
-                // PIN belongs to a teacher, admin, or a student directly, proceed
-                const userDoc = querySnapshot.docs[0];
-                 const userData = { ...userDoc.data(), id: userDoc.id } as User;
+                // The PIN belongs to a student or a teacher/admin.
+                let userToRegister = userWithPin;
+                let studentData: User | null = null;
+                
+                // If the PIN belongs to a student who has a parent linked, we should register the parent.
+                if (userWithPin.roles.includes('ziak') && userWithPin.studentId) {
+                    studentData = userWithPin;
+                    const parentDocRef = doc(firestore, 'users', userWithPin.studentId);
+                    const parentDoc = await getDoc(parentDocRef);
+                    if (parentDoc.exists()) {
+                         userToRegister = { id: parentDoc.id, ...parentDoc.data() } as User;
+                    } else {
+                        // This case should ideally not happen if data is consistent
+                         throw new Error("Propojený rodičovský účet nebyl nalezen.");
+                    }
+                }
+                
                  let tridaName: string | null = "N/A";
-                 if (userData.tridaId) {
-                    const tridaRef = doc(firestore, 'tridy', userData.tridaId);
+                 const classId = studentData?.tridaId || userToRegister.tridaId;
+
+                 if (classId) {
+                    const tridaRef = doc(firestore, 'tridy', classId);
                     const tridaDoc = await getDoc(tridaRef);
                     if (tridaDoc.exists()) {
                         tridaName = tridaDoc.data().nazev;
                     }
                  }
-                setRegistrationData({ user: userData, tridaName });
-                registrationForm.setValue('email', userData.email);
+                setRegistrationData({ user: userToRegister, tridaName });
+                registrationForm.setValue('email', userToRegister.email);
                 setStep(2);
+
             } else {
                 toast({ variant: 'destructive', title: 'Chyba', description: 'Neplatný PIN kód.' });
             }
 
         } catch (error) {
             console.error("PIN verification error:", error);
-            toast({ variant: 'destructive', title: 'Chyba', description: 'Při ověřování PINu došlo k chybě.' });
+            toast({ variant: 'destructive', title: 'Chyba', description: (error as Error).message || 'Při ověřování PINu došlo k chybě.' });
         } finally {
             setIsLoading(false);
         }
