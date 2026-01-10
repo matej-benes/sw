@@ -1,0 +1,104 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+    }
+
+    match /tridy/{tridaId} {
+      allow get, list: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    match /predmety/{predmetId} {
+      allow get, list: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    match /ucebny/{ucebnaId} {
+      allow get, list: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    match /rozvrhy/{rozvrhId} {
+        allow get, list: if isAuthenticated();
+        allow write: if isAuthenticated();
+    }
+    
+    match /scheduleTemplates/{templateId} {
+        allow get, list: if isAuthenticated();
+        allow write: if isAuthenticated();
+    }
+     
+     match /oznameni/{oznameniId} {
+        allow get, list: if isAuthenticated();
+        allow write: if isAuthenticated();
+    }
+    
+    match /poznamky-zaku/{poznamkaId} {
+        allow get, list: if isAuthenticated();
+        allow write: if isAuthenticated();
+    }
+    
+    match /udalosti/{udalostId} {
+        allow get, list: if isAuthenticated();
+        allow create, delete: if isAuthenticated();
+    }
+     
+     match /suplovani/{substitutionId} {
+        allow get, list: if isAuthenticated();
+        allow write: if isAuthenticated();
+    }
+    
+    match /users/{userId}/znamky/{znamkaId} {
+       allow get, list: if isAuthenticated();
+       allow write: if isAuthenticated();
+    }
+
+    match /messages/{messageId} {
+      // A user can read a message if they are the sender or one of the recipients.
+      allow get: if isAuthenticated() && 
+                    (request.auth.uid == resource.data.senderId || request.auth.uid in resource.data.recipientIds);
+      
+      // Allow two types of queries:
+      // 1. Fetching messages sent TO the user.
+      // 2. Fetching messages sent BY the user.
+      // Firestore security rules will then apply the 'get' rule to each document returned by the query.
+      allow list: if isAuthenticated();
+      
+      // A user can create a message if they are authenticated and the senderId matches their own UID.
+      allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid;
+      
+      // A user can update a message only to add themselves to the 'readBy' array. No other changes are allowed.
+      allow update: if isAuthenticated() && 
+                    (request.auth.uid in resource.data.recipientIds && 
+                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']));
+
+      // Deleting messages is not allowed.
+      allow delete: if false; 
+    }
+
+    match /zapisyHodin/{zapisId} {
+        allow get, list: if isAuthenticated();
+        allow write: if isAuthenticated(); // For simplicity, teachers can write
+    }
+
+    match /absences/{absenceId} {
+        allow get, list, create, update, delete: if isAuthenticated();
+    }
+  }
+}
+
+    

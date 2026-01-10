@@ -12,6 +12,8 @@ export function useUnreadMessages() {
 
     const receivedMessagesQuery = useMemoFirebase(() => {
         if (!firestore || !user) return null;
+        // The query must be simple to match the security rules.
+        // Sorting will be done on the client-side.
         return query(collection(firestore, 'messages'), where('recipientIds', 'array-contains', user.id));
     }, [firestore, user]);
     
@@ -24,3 +26,5 @@ export function useUnreadMessages() {
 
     return { unreadCount, isLoading };
 }
+
+    
