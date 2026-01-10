@@ -11,11 +11,11 @@ export function useUnreadMessages() {
     const firestore = useFirestore();
 
     const receivedMessagesQuery = useMemoFirebase(() => {
-        if (!firestore || !user) return null;
+        if (!firestore || !user?.id) return null; // CRITICAL FIX: Ensure user.id exists
         // The query must be simple to match the security rules.
         // Sorting will be done on the client-side.
         return query(collection(firestore, 'messages'), where('recipientIds', 'array-contains', user.id));
-    }, [firestore, user]);
+    }, [firestore, user?.id]); // CRITICAL FIX: Depend on user.id directly
     
     const { data: receivedMessages, isLoading } = useCollection<Message>(receivedMessagesQuery);
 
@@ -26,5 +26,3 @@ export function useUnreadMessages() {
 
     return { unreadCount, isLoading };
 }
-
-    
