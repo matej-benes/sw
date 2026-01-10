@@ -3,9 +3,11 @@
 import type { User, Role } from '@/lib/types';
 import { useRouter, usePathname } from 'next/navigation';
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { useUser as useFirebaseUser, useFirestore } from '@/firebase';
+import { useFirestore } from '@/firebase';
 import { getAuth, signInWithEmailAndPassword, signOut as firebaseSignOut, onIdTokenChanged, type User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
+import { firebaseConfig } from '@/firebase/config';
 
 type StoredUser = {
   uid: string;
@@ -87,7 +89,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userCredential = await signInWithEmailAndPassword(auth, email, pass);
       const { user: fbUser } = userCredential;
       const newAccount: StoredUser = { uid: fbUser.uid, email: fbUser.email!, refreshToken: fbUser.refreshToken };
-      updateStoredAccounts([newAccount], newAccount);
+      
+      const existingAccounts = JSON.parse(localStorage.getItem(ACCOUNTS_STORAGE_KEY) || '[]') as StoredUser[];
+      const accountExists = existingAccounts.some(acc => acc.uid === newAccount.uid);
+
+      let updatedAccounts = existingAccounts;
+      if (!accountExists) {
+          updatedAccounts = [...existingAccounts, newAccount];
+      }
+
+      updateStoredAccounts(updatedAccounts, newAccount);
       // The onIdTokenChanged listener will handle setting the user state
     } catch (error) {
       console.error("Sign in error", error);
@@ -107,8 +118,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const newAccounts = [...accounts.filter(a => a.uid !== newAccount.uid), newAccount];
       updateStoredAccounts(newAccounts, activeAccount);
       
-      // We don't switch to the new user, just add them
-      await switchUser(activeAccount!.uid); // Re-authenticate as the original user
+      if(activeAccount) {
+        await switchUser(activeAccount.uid, true); 
+      }
+      
 
       return newAccount;
 
@@ -121,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
 
-  const switchUser = async (uid: string) => {
+  const switchUser = async (uid: string, forceSilent = false) => {
     setLoading(true);
     const accountToSwitch = accounts.find(a => a.uid === uid);
     if (!accountToSwitch) {
@@ -130,8 +143,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     try {
-        await firebaseSignOut(auth); // Sign out first
-        // HACK: This is a way to sign in with a refresh token, not officially documented for client-side but works.
+        if (!forceSilent) {
+          await firebaseSignOut(auth); 
+        }
+        
         const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${firebaseConfig.apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -139,17 +154,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         
         if (!res.ok) {
+            console.error("Token refresh failed:", await res.json());
             throw new Error('Přepnutí selhalo, zkuste se přihlásit znovu.');
         }
 
-        // We don't need the response, onIdTokenChanged will handle the new user
         updateStoredAccounts(accounts, accountToSwitch);
         
     } catch (error) {
          console.error("Switch user error", error);
-        // If switch fails, try to log back in with the original active user
         if(activeAccount) {
-            await switchUser(activeAccount.uid);
+            try {
+              await switchUser(activeAccount.uid, true);
+            } catch (recoveryError) {
+              console.error("Failed to recover original session", recoveryError);
+              await signOut();
+            }
         }
         throw error;
     } finally {
@@ -185,7 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = { user, activeAccount, accounts, signIn, signOut, loading, hasRole, switchUser, removeUser, addUser };
 
-   if (loading && pathname !== '/') {
+   if (loading && !pathname.startsWith('/dashboard/profil/pridat')) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <div className="h-16 w-16 animate-spin rounded-full border-4 border-dashed border-primary"></div>
