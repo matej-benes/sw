@@ -52,14 +52,30 @@ export default function ZpravyPage() {
         return [...studentOptions, ...parentOptions];
     }
 
-    if (isStudent) {
-        // Students can message teachers
-        return allUsers.filter(u => u.roles.includes('ucitel')).map(u => ({ value: u.id, label: `${u.name} (Učitel)` }));
+    if (isStudent && tridaData) {
+        // Students can message teachers, with special labels for their class staff
+        return allUsers
+            .filter(u => u.roles.includes('ucitel') || u.roles.includes('asistent pedagoga'))
+            .map(u => {
+                let label = `${u.name}`;
+                if (u.id === tridaData.ucitelId) {
+                    label += ' (Třídní učitel)';
+                } else if (tridaData.zastupciIds?.includes(u.id)) {
+                    label += ' (Zástupce třídního)';
+                } else if (tridaData.asistentiIds?.includes(u.id)) {
+                    label += ' (Asistent pedagoga ve vaší třídě)';
+                } else if (u.roles.includes('ucitel')) {
+                    label += ' (Učitel)';
+                } else if (u.roles.includes('asistent pedagoga')) {
+                    label += ' (Asistent pedagoga)';
+                }
+                return { value: u.id, label };
+            });
     }
     
     // Default/other roles
     return allUsers.map(u => ({ value: u.id, label: u.name }));
-  }, [allUsers, isTeacher, isStudent]);
+  }, [allUsers, isTeacher, isStudent, tridaData]);
 
 
   const handleGenerateMessage = async () => {
