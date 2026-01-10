@@ -145,7 +145,11 @@ function UserForm({
       setValue('tridaId', null);
     }
      if (!isRodic) {
-      setValue('studentId', null);
+      // If user is not a parent, studentId might be a parent for a student, so don't clear it.
+      // This logic is tricky. Let's handle it based on context.
+      if (!isZiak) {
+         setValue('studentId', null);
+      }
     }
   }, [isZiak, isRodic, setValue]);
   
@@ -221,7 +225,7 @@ function UserForm({
             <div className="space-y-1">
                 <Label htmlFor="studentId">Rodič</Label>
                 <Controller
-                    name="studentId" // Using studentId to store parent id for a student
+                    name="studentId" 
                     control={control}
                     render={({ field }) => (
                         <Select onValueChange={field.onChange} value={field.value || ''}>
@@ -353,6 +357,25 @@ function AdminUserManagement() {
             const originalUserData = originalUserDoc.data() as User | undefined;
 
             batch.update(userRef, dataToSave);
+            
+            // --- LOGIC FOR RELATIONSHIPS ---
+            const newIsZiak = dataToSave.roles?.includes('ziak');
+            const newIsRodic = dataToSave.roles?.includes('rodic');
+            const newStudentId = dataToSave.studentId; // This can be student ID (for parent) or parent ID (for student)
+            
+            // If user is a student, and we are assigning a parent to them
+            if (newIsZiak && newStudentId) {
+                const parentRef = doc(firestore, 'users', newStudentId);
+                batch.update(parentRef, { studentId: editingUser.id }); // Parent's studentId is the student's ID
+            }
+            
+            // If user is a parent, and we are assigning a student to them
+            if (newIsRodic && newStudentId) {
+                const studentRef = doc(firestore, 'users', newStudentId);
+                batch.update(studentRef, { studentId: editingUser.id }); // Student's studentId is the parent's ID
+            }
+            // --- END LOGIC FOR RELATIONSHIPS ---
+
 
             // If class changed for a student
             if (dataToSave.roles?.includes('ziak')) {
@@ -363,22 +386,6 @@ function AdminUserManagement() {
                     if (newTridaId) batch.update(doc(firestore, 'tridy', newTridaId), { ziaciIds: arrayUnion(editingUser.id) });
                 }
             }
-             // If parent/student relationship changed
-            const newStudentId = dataToSave.studentId;
-            const originalStudentId = originalUserData?.studentId;
-
-            if (originalStudentId !== newStudentId) {
-                // If this is a parent, update the new student
-                if (dataToSave.roles?.includes('rodic') && newStudentId) {
-                    batch.update(doc(firestore, 'users', newStudentId), { studentId: editingUser.id });
-                }
-                // If this is a student, update the new parent
-                if (dataToSave.roles?.includes('ziak') && newStudentId) {
-                     batch.update(doc(firestore, 'users', newStudentId), { studentId: editingUser.id });
-                }
-            }
-
-
         } else { // --- CREATE NEW USER ---
             const newUserDocRef = doc(collection(firestore, 'users'));
             const newUserForDb = {
@@ -391,12 +398,24 @@ function AdminUserManagement() {
             if (newUserForDb.roles?.includes('ziak') && newUserForDb.tridaId) {
                 batch.update(doc(firestore, 'tridy', newUserForDb.tridaId), { ziaciIds: arrayUnion(newUserForDb.id) });
             }
-            if(newUserForDb.roles?.includes('rodic') && newUserForDb.studentId) {
-                 batch.update(doc(firestore, 'users', newUserForDb.studentId), { studentId: newUserForDb.id });
+            
+            // --- LOGIC FOR RELATIONSHIPS ---
+            const newIsZiak = newUserForDb.roles?.includes('ziak');
+            const newIsRodic = newUserForDb.roles?.includes('rodic');
+            const newStudentId = newUserForDb.studentId; // This can be student ID (for parent) or parent ID (for student)
+            
+            // If user is a student, and we are assigning a parent to them
+            if (newIsZiak && newStudentId) {
+                const parentRef = doc(firestore, 'users', newStudentId);
+                batch.update(parentRef, { studentId: newUserForDb.id });
             }
-            if(newUserForDb.roles?.includes('ziak') && newUserForDb.studentId) { // studentId is parentId here
-                 batch.update(doc(firestore, 'users', newUserForDb.studentId), { studentId: newUserForDb.id });
+            
+            // If user is a parent, and we are assigning a student to them
+            if (newIsRodic && newStudentId) {
+                const studentRef = doc(firestore, 'users', newStudentId);
+                batch.update(studentRef, { studentId: newUserForDb.id });
             }
+            // --- END LOGIC FOR RELATIONSHIPS ---
         }
         
         await batch.commit();
