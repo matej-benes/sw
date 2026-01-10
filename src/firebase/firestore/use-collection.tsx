@@ -66,33 +66,31 @@ export function useCollection<T = any>(
   type StateDataType = ResultItemType[] | null;
 
   const [data, setData] = useState<StateDataType>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true); // Start as true
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
   useEffect(() => {
-    // New safety check: Validate the query itself for `undefined` values in filters.
-    if (memoizedTargetRefOrQuery) {
-        const internalQuery = memoizedTargetRefOrQuery as unknown as InternalQuery;
-        if (internalQuery._query?.filters) {
-            for (const filter of internalQuery._query.filters) {
-                // Safely check if _a and g exist before accessing them
-                if (filter._a && filter._a.g.includes(undefined)) {
-                    // One of the 'where' clause values is undefined. Stop here.
-                    setData(null);
-                    setIsLoading(false);
-                    setError(null);
-                    return;
-                }
-            }
-        }
-    }
-
-
+    // If the query is null or undefined, do nothing.
     if (!memoizedTargetRefOrQuery) {
       setData(null);
       setIsLoading(false);
       setError(null);
       return;
+    }
+
+    // New safety check: Validate the query itself for `undefined` values in filters.
+    const internalQuery = memoizedTargetRefOrQuery as unknown as InternalQuery;
+    if (internalQuery._query?.filters) {
+        for (const filter of internalQuery._query.filters) {
+            // Safely check if _a and g exist before accessing them
+            if (filter._a && filter._a.g.includes(undefined)) {
+                // One of the 'where' clause values is undefined. Stop here.
+                setData(null);
+                setIsLoading(false);
+                setError(null);
+                return;
+            }
+        }
     }
 
     setIsLoading(true);

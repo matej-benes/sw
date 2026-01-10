@@ -1,8 +1,8 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, collectionGroup, query, where, doc } from 'firebase/firestore';
+import { useFirestore, useCollection, useDoc, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { collection, collectionGroup, query, where, doc, getDoc } from 'firebase/firestore';
 import type { Znamka, User } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -94,6 +94,19 @@ function EditGradeDialog({ grade, isOpen, onClose, onSave }: { grade: Znamka | n
   )
 }
 
+function StudentName({ studentId }: { studentId: string }) {
+    const firestore = useFirestore();
+    const studentRef = useMemoFirebase(
+      () => (firestore && studentId ? doc(firestore, 'users', studentId) : null),
+      [firestore, studentId]
+    );
+    const { data: student, isLoading } = useDoc<User>(studentRef);
+
+    if (isLoading) return <span>Načítání...</span>;
+    return <span>{student?.name || 'Neznámý žák'}</span>;
+}
+
+
 export default function HodnoceniPrehledPage() {
   const { user, loading: userLoading } = useAuth();
   const firestore = useFirestore();
@@ -108,19 +121,6 @@ export default function HodnoceniPrehledPage() {
   }, [firestore, user?.id]);
 
   const { data: grades, isLoading: gradesLoading } = useCollection<Znamka>(teacherGradesQuery);
-
-  // Fetch ALL users once. This is simpler and safer than reactive queries based on grades.
-  const usersQuery = useMemoFirebase(() => {
-      if (!firestore) return null;
-      return query(collection(firestore, 'users'));
-  }, [firestore]);
-  const { data: users, isLoading: usersLoading } = useCollection<User>(usersQuery);
-
-  const studentNameMap = useMemo(() => {
-    if (!users) return new Map<string, string>();
-    return new Map(users.map(u => [u.id, u.name]));
-  }, [users]);
-
 
   const handleSave = async (data: GradeEditFormData) => {
     if (!firestore || !editingGrade) return;
@@ -139,7 +139,7 @@ export default function HodnoceniPrehledPage() {
     setDeletingGrade(null);
   };
   
-  const isLoading = userLoading || gradesLoading || usersLoading;
+  const isLoading = userLoading || gradesLoading;
 
   return (
     <>
@@ -166,7 +166,7 @@ export default function HodnoceniPrehledPage() {
               {!isLoading && grades && grades.length > 0 ? (
                 grades.map(grade => (
                   <TableRow key={grade.id}>
-                    <TableCell className="font-medium">{studentNameMap.get(grade.studentId) || 'Neznámý žák'}</TableCell>
+                    <TableCell className="font-medium"><StudentName studentId={grade.studentId} /></TableCell>
                     <TableCell>{grade.predmet}</TableCell>
                     <TableCell className="text-center font-bold">{grade.hodnota}</TableCell>
                     <TableCell>{format(grade.datum.toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
