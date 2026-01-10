@@ -102,29 +102,47 @@ function EditGradeDialog({ grade, isOpen, onClose, onSave }: { grade: Znamka | n
 }
 
 export default function HodnoceniPrehledPage() {
-  const { user, loading } = useAuth();
+  const { user, loading: userLoading } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
 
   const [editingGrade, setEditingGrade] = useState<Znamka | null>(null);
   const [deletingGrade, setDeletingGrade] = useState<Znamka | null>(null);
+  const [studentNames, setStudentNames] = useState<Record<string, string>>({});
 
   const teacherGradesQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     return query(collectionGroup(firestore, 'znamky'), where('ucitelId', '==', user.id));
   }, [firestore, user]);
 
-  const studentsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, 'users');
-  }, [firestore]);
-
   const { data: grades, isLoading: gradesLoading } = useCollection<Znamka>(teacherGradesQuery);
-  const { data: students, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
+  
+  useEffect(() => {
+    if (grades && firestore) {
+      const fetchStudentNames = async () => {
+        const uniqueStudentIds = [...new Set(grades.map(g => g.studentId))];
+        const newNames: Record<string, string> = {};
+        for (const studentId of uniqueStudentIds) {
+          if (!studentNames[studentId]) { // Fetch only if name is not already cached
+            const studentDocRef = doc(firestore, 'users', studentId);
+            const studentDocSnap = await getDoc(studentDocRef);
+            if (studentDocSnap.exists()) {
+              newNames[studentId] = (studentDocSnap.data() as User).name;
+            }
+          }
+        }
+        if (Object.keys(newNames).length > 0) {
+          setStudentNames(prev => ({ ...prev, ...newNames }));
+        }
+      };
+      fetchStudentNames();
+    }
+  }, [grades, firestore, studentNames]);
+
 
   const getStudentName = useCallback((studentId: string) => {
-    return students?.find(s => s.id === studentId)?.name || 'Neznámý žák';
-  }, [students]);
+    return studentNames[studentId] || 'Načítání...';
+  }, [studentNames]);
 
   const handleSave = async (data: GradeEditFormData) => {
     if (!firestore || !editingGrade) return;
@@ -143,7 +161,7 @@ export default function HodnoceniPrehledPage() {
     setDeletingGrade(null);
   };
   
-  const isLoading = loading || gradesLoading || studentsLoading;
+  const isLoading = userLoading || gradesLoading;
 
   return (
     <>
