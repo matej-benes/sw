@@ -60,7 +60,7 @@ export function UserNav() {
        <div className="hidden text-right md:flex items-center gap-4">
           <div className="text-right">
             <p className="text-sm font-medium leading-none">{user.name}</p>
-             {!isZiak && (
+             {(user.roles.length > 0) && (
                 <div className="flex flex-wrap justify-end gap-1 mt-1">
                     {user.roles.map(role => (
                     <Badge key={role} variant="secondary" className="text-xs">
@@ -70,16 +70,6 @@ export function UserNav() {
                 </div>
              )}
           </div>
-
-           {isZiak && (
-             <div className="flex items-center gap-3 text-sm">
-                <Separator orientation="vertical" className="h-8" />
-                <div className="text-left">
-                    <p className="font-semibold">{tridaData?.nazev || '...'}</p>
-                    <p className="text-xs text-muted-foreground">{ucitelData?.name || '...'}</p>
-                </div>
-             </div>
-          )}
         </div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

@@ -42,6 +42,8 @@ import type {
 } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 
 export default function DashboardPage() {
   const firestore = useFirestore();
@@ -161,6 +163,21 @@ export default function DashboardPage() {
     return schedulesData.filter((s) => s.tridaId === targetClassId);
   }, [schedulesData, selectedClassId, hasRole, user]);
 
+  const { studentClassName, classTeacherName } = useMemo(() => {
+    if (!user || !tridy || !ucitele || hasRole('ucitel')) {
+      return { studentClassName: null, classTeacherName: null };
+    }
+    const studentClass = tridy.find(t => t.id === user.tridaId);
+    if (!studentClass) {
+      return { studentClassName: null, classTeacherName: null };
+    }
+    const classTeacher = ucitele.find(t => t.id === studentClass.ucitelId);
+    return {
+      studentClassName: studentClass.nazev,
+      classTeacherName: classTeacher?.name || 'Nenalezen',
+    };
+  }, [user, tridy, ucitele, hasRole]);
+
 
   const isDataLoading = !schedulesData || !eventsData || !substitutionsData || !tridy || isUserLoading;
 
@@ -183,7 +200,7 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader className="flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
-           <div className="flex items-center gap-4">
+           <div className="flex flex-wrap items-center gap-4">
             {hasRole('ucitel') && (
               <>
                 <Select value={viewMode} onValueChange={setViewMode}>
@@ -210,23 +227,29 @@ export default function DashboardPage() {
                 )}
               </>
             )}
-            {!hasRole('ucitel') && (
-                 <div className="w-[180px]">
-                     <Input value={tridy?.find(t => t.id === user?.tridaId)?.nazev || "Načítání..."} readOnly/>
+            
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={handlePrevWeek}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" className="w-48" onClick={handleSetToday}>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {weekLabel}
+              </Button>
+              <Button variant="outline" size="icon" onClick={handleNextWeek}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            {(hasRole('ziak') || hasRole('rodic')) && studentClassName && (
+              <div className="flex items-center gap-3 text-sm">
+                <Separator orientation="vertical" className="h-8 hidden md:block" />
+                <div className="text-left">
+                    <p className="font-semibold text-lg">{studentClassName}</p>
+                    <p className="text-sm text-muted-foreground">Třídní učitel: {classTeacherName}</p>
                 </div>
+              </div>
             )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={handlePrevWeek}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" className="w-48" onClick={handleSetToday}>
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {weekLabel}
-            </Button>
-            <Button variant="outline" size="icon" onClick={handleNextWeek}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
           </div>
         </CardHeader>
         <CardContent>
