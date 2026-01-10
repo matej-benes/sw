@@ -1,18 +1,17 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { generateCommunicationMessage } from '@/ai/flows/generate-communication-message';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { Loader2, Send, Wand2, X, UserPlus, Check } from 'lucide-react';
-import { useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
-import { collection, doc, query, where } from 'firebase/firestore';
-import type { Trida, User } from '@/lib/types';
+import { Loader2, Send, Wand2, X, UserPlus, Check, Users, School } from 'lucide-react';
+import { useFirestore, useCollection, useDoc, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
+import { collection, doc, query, where, getDocs, Timestamp, orderBy, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import type { Trida, User, Conversation, Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import {
   Dialog,
@@ -31,125 +30,132 @@ import {
 } from "@/components/ui/command";
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { format } from 'date-fns';
+import { cs } from 'date-fns/locale';
+
+function getInitials(name: string) {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase();
+}
 
 
 export default function ZpravyPage() {
   const { user, hasRole } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
+  
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [recipients, setRecipients] = useState<string[]>([]);
   const [isRecipientDialogOpen, setIsRecipientDialogOpen] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
-  const isTeacher = hasRole('ucitel');
-  const isStudent = hasRole('ziak');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch all users to be used as potential recipients
-  const usersCollection = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, "users");
-  }, [firestore]);
+  // --- Data Fetching ---
+  const usersCollection = useMemoFirebase(() => firestore ? collection(firestore, "users") : null, [firestore]);
   const { data: allUsers } = useCollection<User>(usersCollection);
 
+  const tridyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]);
+  const { data: allClasses } = useCollection<Trida>(tridyCollection);
 
-  // Fetch student's class to find the class teacher
-  const tridaRef = useMemoFirebase(() => {
-    if (!firestore || !user?.tridaId) return null;
-    return doc(firestore, 'tridy', user.tridaId);
-  }, [firestore, user?.tridaId]);
-  const { data: tridaData } = useDoc<Trida>(tridaRef);
+  const conversationsQuery = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return query(collection(firestore, 'conversations'), where('participantIds', 'array-contains', user.id));
+  }, [firestore, user]);
+  const { data: conversations, isLoading: conversationsLoading } = useCollection<Conversation>(conversationsQuery);
   
+  const messagesQuery = useMemoFirebase(() => {
+    if (!firestore || !activeConversationId) return null;
+    return query(collection(firestore, 'conversations', activeConversationId, 'messages'), orderBy('createdAt', 'asc'));
+  }, [firestore, activeConversationId]);
+  const { data: messages, isLoading: messagesLoading } = useCollection<Message>(messagesQuery);
+  
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-  const recipientOptions = useMemo(() => {
-    if (!allUsers) return [];
 
-    if (isTeacher) {
-        // Teachers can message students and parents
-        const studentOptions = allUsers.filter(u => u.roles.includes('ziak')).map(u => ({ value: u.id, label: `${u.name} (Žák)` }));
-        const parentOptions = allUsers.filter(u => u.roles.includes('rodic')).map(u => ({ value: u.id, label: `${u.name} (Rodič)` }));
-        return [...studentOptions, ...parentOptions];
-    }
+  const activeConversation = useMemo(() => {
+      return conversations?.find(c => c.id === activeConversationId);
+  }, [conversations, activeConversationId]);
 
-    if (isStudent && tridaData) {
-        // Students can message teachers, with special labels for their class staff
-        return allUsers
-            .filter(u => u.roles.includes('ucitel') || u.roles.includes('asistent pedagoga'))
-            .map(u => {
-                let label = `${u.name}`;
-                if (u.id === tridaData.ucitelId) {
-                    label += ' (Třídní učitel)';
-                } else if (tridaData.zastupciIds?.includes(u.id)) {
-                    label += ' (Zástupce třídního)';
-                } else if (tridaData.asistentiIds?.includes(u.id)) {
-                    label += ' (Asistent pedagoga ve vaší třídě)';
-                } else if (u.roles.includes('ucitel')) {
-                    label += ' (Učitel)';
-                } else if (u.roles.includes('asistent pedagoga')) {
-                    label += ' (Asistent pedagoga)';
-                }
-                return { value: u.id, label };
-            });
+
+  const handleSendMessage = async () => {
+    if (!user || !firestore) return;
+    if (!message.trim()) {
+        toast({ variant: "destructive", title: "Prázdná zpráva" });
+        return;
     }
     
-    // Default/other roles
-    return allUsers.map(u => ({ value: u.id, label: u.name }));
-  }, [allUsers, isTeacher, isStudent, tridaData]);
-  
-  const selectedRecipientDetails = useMemo(() => {
-    return recipients.map(id => recipientOptions.find(opt => opt.value === id)).filter(Boolean);
-  }, [recipients, recipientOptions]);
+    setIsSending(true);
 
+    let conversationId = activeConversationId;
+    let finalRecipients = recipients;
 
-  const handleGenerateMessage = async () => {
-    if (!user || !isTeacher) return;
+    // If we have an active conversation, send to its participants
+    if (conversationId && activeConversation) {
+        finalRecipients = activeConversation.participantIds;
+    } 
+    // If we have selected recipients but no active conversation
+    else if (finalRecipients.length > 0) {
+        const allParticipantIds = [...new Set([user.id, ...finalRecipients])].sort();
 
-    setIsLoading(true);
-    try {
-      const result = await generateCommunicationMessage({
-        studentName: 'Tomáš Dvořák',
-        performanceSummary: 'Tomáš se v hodinách zlepšuje, ale stále má problémy s domácími úkoly.',
-        strengths: 'Aktivní při hodinách, dobrá spolupráce.',
-        areasForImprovement: 'Důslednost v plnění domácích úkolů.',
-        teacherName: user.name,
-      });
-      setMessage(result.message);
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Chyba při generování zprávy',
-        description: 'Zprávu se nepodařilo vygenerovat. Zkuste to prosím znovu.',
-      });
-    } finally {
-      setIsLoading(false);
+        // Check if a conversation with these participants already exists
+        const conversationsRef = collection(firestore, 'conversations');
+        const q = query(conversationsRef, where('participantIds', '==', allParticipantIds));
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+            conversationId = querySnapshot.docs[0].id;
+        } else {
+            // Create a new conversation
+            const conversationData = {
+                participantIds: allParticipantIds,
+                lastMessage: message.substring(0, 50),
+                lastMessageAt: serverTimestamp(),
+            };
+            const newConversationDoc = await addDoc(conversationsRef, conversationData);
+            conversationId = newConversationDoc.id;
+        }
+        setActiveConversationId(conversationId);
+    } else {
+        toast({ variant: 'destructive', title: 'Chybí příjemce' });
+        setIsSending(false);
+        return;
     }
-  };
 
-  const handleSendMessage = () => {
-    if (!message) {
-      toast({
-        variant: "destructive",
-        title: "Prázdná zpráva",
-        description: "Nemůžete odeslat prázdnou zprávu.",
-      });
-      return;
+    if (!conversationId) {
+        toast({ variant: 'destructive', title: 'Chyba při odesílání' });
+        setIsSending(false);
+        return;
     }
-     if (recipients.length === 0) {
-      toast({
-        variant: "destructive",
-        title: "Chybí příjemce",
-        description: "Prosím vyberte alespoň jednoho příjemce.",
-      });
-      return;
-    }
-    
-    toast({
-      title: 'Zpráva odeslána',
-      description: 'Vaše zpráva byla úspěšně odeslána.',
+
+    // Add the message to the conversation
+    const messagesColRef = collection(firestore, 'conversations', conversationId, 'messages');
+    await addDoc(messagesColRef, {
+        senderId: user.id,
+        text: message,
+        createdAt: serverTimestamp(),
     });
+    
+    // Update the last message on the conversation
+    await addDocumentNonBlocking(doc(firestore, 'conversations', conversationId), {
+        lastMessage: message.substring(0, 50),
+        lastMessageAt: serverTimestamp(),
+    });
+
     setMessage('');
     setRecipients([]);
+    setIsSending(false);
   };
+  
+  const recipientOptions = useMemo(() => {
+    const users = allUsers?.map(u => ({ id: u.id, label: u.name, type: 'user' as const, avatarUrl: u.avatarUrl, role: u.roles.join(', ') })) || [];
+    const classes = allClasses?.map(c => ({ id: c.id, label: c.nazev, type: 'class' as const })) || [];
+    return [...users, ...classes];
+  }, [allUsers, allClasses]);
 
   const toggleRecipient = (recipientId: string) => {
     setRecipients(prev => 
@@ -159,6 +165,19 @@ export default function ZpravyPage() {
     );
   };
 
+  const selectedRecipientDetails = useMemo(() => {
+    return recipients.map(id => {
+      const user = allUsers?.find(u => u.id === id);
+      if (user) return { id: user.id, label: user.name, type: 'user' };
+      
+      const classInfo = allClasses?.find(c => c.id === id);
+      if (classInfo) return { id: classInfo.id, label: `Třída ${classInfo.nazev}`, type: 'class' };
+      
+      return null;
+    }).filter(Boolean);
+  }, [recipients, allUsers, allClasses]);
+  
+
   return (
     <>
       <div className="space-y-6">
@@ -167,66 +186,113 @@ export default function ZpravyPage() {
           <p className="text-muted-foreground">Posílejte a přijímejte zprávy.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
           <div className="md:col-span-1">
-              <Card>
+              <Card className="h-full flex flex-col">
                   <CardHeader>
                       <CardTitle>Konverzace</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                      <p className="text-muted-foreground text-sm">Zatím zde nejsou žádné konverzace.</p>
+                  <CardContent className="flex-grow overflow-y-auto">
+                      {conversationsLoading ? <p>Načítání...</p> : (
+                          <div className="space-y-2">
+                              {conversations?.map(convo => {
+                                  const otherParticipants = allUsers?.filter(u => convo.participantIds.includes(u.id) && u.id !== user?.id);
+                                  const conversationName = otherParticipants?.map(p => p.name).join(', ') || 'Konverzace';
+                                  
+                                  return (
+                                       <div 
+                                          key={convo.id} 
+                                          className={cn("p-3 rounded-lg cursor-pointer transition-colors", activeConversationId === convo.id ? "bg-muted" : "hover:bg-muted/50")}
+                                          onClick={() => { setActiveConversationId(convo.id); setRecipients([]); }}
+                                      >
+                                          <p className="font-semibold">{conversationName}</p>
+                                          <p className="text-sm text-muted-foreground truncate">{convo.lastMessage}</p>
+                                      </div>
+                                  )
+                              })}
+                          </div>
+                      )}
                   </CardContent>
               </Card>
           </div>
 
           <div className="md:col-span-2">
-            <Card>
+            <Card className="h-full flex flex-col">
               <CardHeader>
-                <CardTitle>Nová zpráva</CardTitle>
-                <CardDescription>Napište novou zprávu.</CardDescription>
+                <CardTitle>{activeConversation ? allUsers?.filter(u => activeConversation.participantIds.includes(u.id) && u.id !== user?.id).map(p => p.name).join(', ') : 'Nová zpráva'}</CardTitle>
+                <CardDescription>
+                  {activeConversation ? `Poslední aktivita: ${activeConversation.lastMessageAt ? format((activeConversation.lastMessageAt as Timestamp).toDate(), 'Pp', { locale: cs }) : 'N/A'}` : 'Napište novou zprávu.'}
+                </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                 <div className="space-y-2">
-                    <Label>Příjemce:</Label>
-                    <Button type="button" variant="outline" className="w-full justify-start" onClick={() => setIsRecipientDialogOpen(true)}>
-                        <UserPlus className="mr-2 h-4 w-4" />
-                        Přidat příjemce
-                    </Button>
-                    {selectedRecipientDetails.length > 0 && (
-                        <div className="pt-2 flex flex-wrap gap-2">
-                            {selectedRecipientDetails.map(r => (
-                                <Badge key={r!.value} variant="secondary">
-                                    {r!.label}
-                                    <button onClick={() => toggleRecipient(r!.value)} className="ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2">
-                                        <X className="h-3 w-3" />
-                                        <span className="sr-only">Odstranit příjemce</span>
-                                    </button>
-                                </Badge>
-                            ))}
-                        </div>
-                    )}
-                  </div>
-                <div className="space-y-2">
-                  <Label htmlFor="message-content">Zpráva</Label>
+              <CardContent className="flex-grow overflow-y-auto space-y-4">
+                  {messagesLoading && <p>Načítání zpráv...</p>}
+                  {!messagesLoading && messages?.map(msg => {
+                      const sender = allUsers?.find(u => u.id === msg.senderId);
+                      const isMe = sender?.id === user?.id;
+                      return (
+                           <div key={msg.id} className={cn("flex items-end gap-2", isMe ? "justify-end" : "justify-start")}>
+                               {!isMe && (
+                                   <Avatar className="h-8 w-8">
+                                       <AvatarImage src={sender?.avatarUrl} />
+                                       <AvatarFallback>{sender ? getInitials(sender.name) : '?'}</AvatarFallback>
+                                   </Avatar>
+                               )}
+                                <div className={cn("max-w-xs md:max-w-md lg:max-w-lg p-3 rounded-lg", isMe ? "bg-primary text-primary-foreground" : "bg-muted")}>
+                                  <p className="text-sm">{msg.text}</p>
+                                   <p className="text-xs text-right mt-1 opacity-70">
+                                      {msg.createdAt ? format((msg.createdAt as Timestamp).toDate(), 'HH:mm') : ''}
+                                  </p>
+                                </div>
+                                {isMe && (
+                                   <Avatar className="h-8 w-8">
+                                       <AvatarImage src={sender?.avatarUrl} />
+                                       <AvatarFallback>{sender ? getInitials(sender.name) : '?'}</AvatarFallback>
+                                   </Avatar>
+                               )}
+                           </div>
+                      )
+                  })}
+                   <div ref={messagesEndRef} />
+              </CardContent>
+               <CardContent className="border-t pt-4">
+                 {!activeConversation && (
+                     <div className="space-y-2 mb-4">
+                        <Label>Příjemce:</Label>
+                        <Button type="button" variant="outline" className="w-full justify-start" onClick={() => { setActiveConversationId(null); setIsRecipientDialogOpen(true); }}>
+                            <UserPlus className="mr-2 h-4 w-4" />
+                            Přidat příjemce
+                        </Button>
+                        {selectedRecipientDetails.length > 0 && (
+                            <div className="pt-2 flex flex-wrap gap-2">
+                                {selectedRecipientDetails.map(r => (
+                                    <Badge key={r!.id} variant="secondary">
+                                        {r!.label}
+                                        <button onClick={() => toggleRecipient(r!.id)} className="ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2">
+                                            <X className="h-3 w-3" />
+                                            <span className="sr-only">Odstranit příjemce</span>
+                                        </button>
+                                    </Badge>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                 )}
+                <div className="relative">
                   <Textarea
                     id="message-content"
                     placeholder="Napište svou zprávu zde..."
-                    rows={8}
+                    rows={3}
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendMessage();
+                        }
+                    }}
                   />
-                </div>
-                <div className="flex justify-between items-center">
-                  {isTeacher && (
-                    <Button variant="outline" onClick={handleGenerateMessage} disabled={isLoading}>
-                      {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-                      Vytvořit s AI
-                    </Button>
-                  )}
-                  <div className="flex-grow"></div>
-                  <Button onClick={handleSendMessage}>
-                    <Send className="mr-2 h-4 w-4" />
-                    Odeslat
+                  <Button size="icon" className="absolute bottom-2 right-2" onClick={handleSendMessage} disabled={isSending}>
+                    {isSending ? <Loader2 className="animate-spin"/> : <Send/>}
                   </Button>
                 </div>
               </CardContent>
@@ -236,25 +302,41 @@ export default function ZpravyPage() {
       </div>
       
        <Dialog open={isRecipientDialogOpen} onOpenChange={setIsRecipientDialogOpen}>
-            <DialogContent className="sm:max-w-xl h-[80vh] flex flex-col">
+            <DialogContent className="sm:max-w-2xl h-[80vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle>Vybrat příjemce</DialogTitle>
                 </DialogHeader>
                 <Command className="flex-grow overflow-hidden">
-                    <CommandInput placeholder="Hledat uživatele..." />
+                    <CommandInput placeholder="Hledat uživatele nebo třídy..." />
                     <CommandList className="max-h-full">
                         <CommandEmpty>Žádní uživatelé nenalezeni.</CommandEmpty>
-                        <CommandGroup>
-                            {recipientOptions.map((option) => {
-                                const isSelected = recipients.includes(option.value);
+                        <CommandGroup heading="Třídy">
+                           {allClasses?.map(c => {
+                                const isSelected = recipients.includes(c.id);
+                                return (
+                                    <CommandItem key={c.id} onSelect={() => toggleRecipient(c.id)} className="cursor-pointer">
+                                        <Checkbox checked={isSelected} className="mr-2" />
+                                        <School className="mr-2 h-4 w-4 text-muted-foreground" />
+                                        <span>Třída {c.nazev}</span>
+                                    </CommandItem>
+                                )
+                           })}
+                        </CommandGroup>
+                        <CommandGroup heading="Uživatelé">
+                            {allUsers?.filter(u => u.id !== user?.id).map((option) => {
+                                const isSelected = recipients.includes(option.id);
                                 return (
                                     <CommandItem
-                                        key={option.value}
-                                        onSelect={() => toggleRecipient(option.value)}
+                                        key={option.id}
+                                        onSelect={() => toggleRecipient(option.id)}
                                         className="cursor-pointer"
                                     >
                                         <Checkbox checked={isSelected} className="mr-2" />
-                                        <span>{option.label}</span>
+                                        <Avatar className="h-6 w-6 mr-2">
+                                            <AvatarImage src={option.avatarUrl} />
+                                            <AvatarFallback>{getInitials(option.name)}</AvatarFallback>
+                                        </Avatar>
+                                        <span>{option.name} <span className="text-xs text-muted-foreground">({option.roles.join(', ')})</span></span>
                                     </CommandItem>
                                 );
                             })}

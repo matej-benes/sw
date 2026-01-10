@@ -367,6 +367,30 @@
             }
         },
         "required": ["id", "tridaId", "timeSlots", "days"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "type": "object",
+      "description": "Represents a messaging conversation between two or more users.",
+      "properties": {
+        "id": { "type": "string" },
+        "participantIds": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "participantIds"]
+    },
+    "Message": {
+      "title": "Message",
+      "type": "object",
+      "description": "Represents a single message within a conversation.",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "senderId", "text", "createdAt"]
     }
   },
   "auth": {
@@ -535,6 +559,29 @@
             "params": [
                 { "name": "substitutionId", "description": "The unique ID of the substitution." }
             ]
+        }
+      },
+      {
+        "path": "/conversations/{conversationId}",
+        "definition": {
+          "entityName": "Conversation",
+          "schema": { "$ref": "#/backend/entities/Conversation" },
+          "description": "Top-level collection for conversations. Each document contains metadata about a conversation.",
+          "params": [
+            { "name": "conversationId", "description": "The unique ID of the conversation." }
+          ]
+        }
+      },
+      {
+        "path": "/conversations/{conversationId}/messages/{messageId}",
+        "definition": {
+          "entityName": "Message",
+          "schema": { "$ref": "#/backend/entities/Message" },
+          "description": "Sub-collection under each conversation document to store individual messages.",
+          "params": [
+            { "name": "conversationId", "description": "The ID of the parent conversation." },
+            { "name": "messageId", "description": "The unique ID of the message." }
+          ]
         }
       }
     ],

@@ -166,3 +166,17 @@ export interface Substitution {
         type: SubstitutionType | SubstitutionType[];
     };
 }
+
+export interface Conversation {
+    id: string;
+    participantIds: string[];
+    lastMessage: string;
+    lastMessageAt: any; // Firestore Timestamp
+}
+
+export interface Message {
+    id: string;
+    senderId: string;
+    text: string;
+    createdAt: any; // Firestore Timestamp
+}
