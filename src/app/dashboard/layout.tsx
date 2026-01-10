@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Menu, ChevronDown, BookCopy, Settings, Users, School, Book, FileQuestion, Home, CalendarDays, MessageSquare, LayoutGrid, Replace, PencilRuler, ClipboardCheck, Backpack } from 'lucide-react';
+import { Menu, ChevronDown, BookCopy, Settings, Users, School, Book, FileQuestion, Home, CalendarDays, MessageSquare, LayoutGrid, Replace, PencilRuler, ClipboardCheck, Backpack, Printer, UserCheck } from 'lucide-react';
 import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
@@ -38,11 +38,17 @@ const teacherNavLinks = [
     { name: 'Omluvenky', href: '/dashboard/omluvenky', icon: ClipboardCheck },
 ]
 
+const printNavLinks = [
+    { name: "Tiskové sestavy", href: "/dashboard/tiskove-sestavy", icon: Printer },
+    { name: "Tisk vysvědčení", href: "/dashboard/tisk-vysvedceni", icon: BookCopy },
+]
+
 const spravaSystemuLinks = [
      { name: "Evidence osob", href: "/dashboard/sprava-systemu/evidence-osob", icon: Users },
      { name: "Třídy", href: "/dashboard/sprava-systemu/tridy", icon: School },
      { name: "Předměty", href: "/dashboard/sprava-systemu/predmety", icon: Book },
      { name: "Učebny", href: "/dashboard/sprava-systemu/ucebny", icon: Home },
+     { name: "Zápisy do 1. ročníku", href: "/dashboard/zapisy", icon: UserCheck },
 ]
 
 export default function DashboardLayout({
@@ -125,6 +131,19 @@ export default function DashboardLayout({
                     <>
                         <div className='my-2'></div>
                         {renderNavLinks(teacherNavLinks)}
+                        <Accordion type="single" collapsible className="w-full" defaultValue={pathname.includes('/dashboard/tisk') ? 'tiskove-vystupy' : undefined}>
+                            <AccordionItem value="tiskove-vystupy" className="border-b-0">
+                                <AccordionTrigger className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary hover:no-underline [&[data-state=open]>svg]:rotate-180">
+                                     <Printer className="h-4 w-4" />
+                                    Tiskové výstupy
+                                </AccordionTrigger>
+                                <AccordionContent className="pl-8 pb-0">
+                                    <nav className='grid gap-1'>
+                                        {renderNavLinks(printNavLinks, true)}
+                                    </nav>
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
                     </>
                  )}
                 {isAdministrator && (
