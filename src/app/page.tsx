@@ -33,50 +33,11 @@ const registrationSchema = z.object({
     password: z.string().min(6, { message: 'Heslo musí mít alespoň 6 znaků.' }),
 });
 
-// Helper function to create/update initial admin user
-const createInitialAdminIfNeeded = async (firestore: any) => {
-  if (!firestore) return;
-  const adminEmail = 'matej.romana@seznam.cz';
-  const newPin = '987654';
-  const usersRef = collection(firestore, 'users');
-  const q = query(usersRef, where("email", "==", adminEmail));
-  const querySnapshot = await getDocs(q);
-
-  if (querySnapshot.empty) {
-    console.log("Creating initial admin user...");
-    const newUserDocRef = doc(usersRef);
-    const adminUser: Omit<User, 'id'> & { pin: string } = {
-      name: 'Matěj Mikolášek',
-      email: adminEmail,
-      roles: ['ucitel', 'administrator', 'vedouci pracovnik'],
-      pin: newPin,
-      avatarUrl: `https://picsum.photos/seed/${newUserDocRef.id}/100/100`,
-    };
-    await setDoc(newUserDocRef, adminUser);
-    console.log("Initial admin user created with PIN:", newPin);
-  } else {
-    // This is not ideal for production but fine for this context.
-    // We update the PIN here to ensure the admin can always register if their account gets deleted from Auth.
-    const adminDoc = querySnapshot.docs[0];
-    if (adminDoc.data().pin !== newPin) {
-       await updateDoc(doc(firestore, 'users', adminDoc.id), { pin: newPin });
-    }
-  }
-};
-
-
 function LoginForm() {
   const { user, signIn, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const firestore = useFirestore();
-
-  useEffect(() => {
-    if (firestore) {
-      createInitialAdminIfNeeded(firestore);
-    }
-  },[firestore]);
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
