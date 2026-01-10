@@ -3,40 +3,40 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Pravidla pro ostatní kolekce - zde je prostor pro jejich budoucí zabezpečení.
-    // Prozatím necháme přístup otevřený pro vývoj, ale v produkci by měly být zabezpečeny.
+    // Obecná pravidla - Povolit přístup pouze přihlášeným uživatelům.
+    // Toto je bezpečnější výchozí bod než "allow read, write: if true;".
     match /users/{userId} {
-      allow read, write: if true; // TODO: Zabezpečit
+      allow read, write: if request.auth != null;
     }
     match /tridy/{tridaId} {
-      allow read, write: if true; // TODO: Zabezpečit
+      allow read, write: if request.auth != null;
     }
     match /predmety/{predmetId} {
-        allow read, write: if true; // TODO: Zabezpečit
+        allow read, write: if request.auth != null;
     }
     match /ucebny/{ucebnaId} {
-        allow read, write: if true; // TODO: Zabezpečit
+        allow read, write: if request.auth != null;
     }
      match /znamky/{znamkaId} {
-        allow read, write: if true; // TODO: Zabezpečit
+        allow read, write: if request.auth != null;
     }
     match /rozvrhy/{rozvrhId} {
-        allow read, write: if true; // TODO: Zabezpečit
+        allow read, write: if request.auth != null;
     }
     match /scheduleTemplates/{templateId} {
-        allow read, write: if true; // TODO: Zabezpečit
+        allow read, write: if request.auth != null;
     }
     match /oznameni/{oznameniId} {
-        allow read, write: if true; // TODO: Zabezpečit
+        allow read, write: if request.auth != null;
     }
     match /poznamky-zaku/{poznamkaId} {
-        allow read, write: if true; // TODO: Zabezpečit
+        allow read, write: if request.auth != null;
     }
     match /udalosti/{udalostId} {
-        allow read, write: if true; // TODO: Zabezpečit
+        allow read, write: if request.auth != null;
     }
     match /suplovani/{substitutionId} {
-        allow read, write: if true; // TODO: Zabezpečit
+        allow read, write: if request.auth != null;
     }
 
 
