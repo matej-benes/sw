@@ -114,8 +114,13 @@ export default function HodnoceniPrehledPage() {
     return query(collectionGroup(firestore, 'znamky'), where('ucitelId', '==', user.id));
   }, [firestore, user]);
 
+  const studentsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'users');
+  }, [firestore]);
+
   const { data: grades, isLoading: gradesLoading } = useCollection<Znamka>(teacherGradesQuery);
-  const { data: students, isLoading: studentsLoading } = useCollection<User>(useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]));
+  const { data: students, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
 
   const getStudentName = useCallback((studentId: string) => {
     return students?.find(s => s.id === studentId)?.name || 'Neznámý žák';
