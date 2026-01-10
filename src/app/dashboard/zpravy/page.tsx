@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { Loader2, Send, UserPlus, Inbox, Send as SendIcon, Pencil, CheckCircle, Eye } from 'lucide-react';
 import { useFirestore, useCollection, useDoc, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
-import { collection, doc, query, where, Timestamp, orderBy, updateDoc, arrayUnion } from 'firebase/firestore';
+import { collection, doc, query, where, Timestamp, orderBy, updateDoc, arrayUnion, or } from 'firebase/firestore';
 import type { Trida, User, Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import {
@@ -176,17 +176,28 @@ export default function ZpravyPage() {
   const { data: allUsers, isLoading: usersLoading } = useCollection<User>(useMemoFirebase(() => firestore ? collection(firestore, "users") : null, [firestore]));
   const { data: allClasses, isLoading: classesLoading } = useCollection<Trida>(useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]));
   
-  const receivedMessagesQuery = useMemoFirebase(() => {
+  // SINGLE QUERY FOR ALL MESSAGES
+  const allMessagesQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
-    return query(collection(firestore, 'messages'), where('recipientIds', 'array-contains', user.id), orderBy('createdAt', 'desc'));
+    return query(
+      collection(firestore, 'messages'),
+      or(
+        where('recipientIds', 'array-contains', user.id),
+        where('senderId', '==', user.id)
+      ),
+      orderBy('createdAt', 'desc')
+    );
   }, [firestore, user]);
-  const { data: receivedMessages, isLoading: receivedLoading } = useCollection<Message>(receivedMessagesQuery);
-  
-  const sentMessagesQuery = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
-    return query(collection(firestore, 'messages'), where('senderId', '==', user.id), orderBy('createdAt', 'desc'));
-  }, [firestore, user]);
-  const { data: sentMessages, isLoading: sentLoading } = useCollection<Message>(sentMessagesQuery);
+
+  const { data: allMessages, isLoading: messagesLoading } = useCollection<Message>(allMessagesQuery);
+
+  const { receivedMessages, sentMessages } = useMemo(() => {
+    if (!allMessages || !user) return { receivedMessages: [], sentMessages: [] };
+    const received = allMessages.filter(m => m.recipientIds.includes(user.id));
+    const sent = allMessages.filter(m => m.senderId === user.id);
+    return { receivedMessages: received, sentMessages: sent };
+  }, [allMessages, user]);
+
 
   const handleSendMessage = async () => {
     if (!user || !firestore || !allClasses) return;
@@ -262,7 +273,7 @@ export default function ZpravyPage() {
     }
   };
 
-  const isDataLoading = userLoading || usersLoading || classesLoading || receivedLoading || sentLoading;
+  const isDataLoading = userLoading || usersLoading || classesLoading || messagesLoading;
 
   const getSenderName = useCallback((senderId: string) => {
     return allUsers?.find(u => u.id === senderId)?.name || 'Neznámý';
