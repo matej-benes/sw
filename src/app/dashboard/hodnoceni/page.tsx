@@ -53,7 +53,7 @@ export default function HodnoceniPage() {
     }, {} as { [subject: string]: Znamka[] });
   }, [znamky]);
 
-  const isLoading = loading || znamkyLoading;
+  const isLoading = loading || (!!studentId && znamkyLoading);
   
   const totalAverage = useMemo(() => {
     if (!znamky || znamky.length === 0) return 'N/A';
@@ -63,7 +63,7 @@ export default function HodnoceniPage() {
   const isStudentOrParent = hasRole('ziak') || hasRole('rodic');
   const isTeacher = hasRole('ucitel');
 
-  if (isLoading) {
+  if (loading) {
     return <div>Načítání...</div>;
   }
 
@@ -78,7 +78,7 @@ export default function HodnoceniPage() {
             <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
                 {isStudentOrParent && <TabsTrigger value="prubezne">Průběžné hodnocení</TabsTrigger>}
                 {isStudentOrParent && <TabsTrigger value="predmet">Hodnocení v předmětu</TabsTrigger>}
-                {isTeacher && <Link href="/dashboard/hodnoceni/prehled" className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"><TabsTrigger value="prehled">Přehled hodnocení</TabsTrigger></Link>}
+                 {isTeacher && <TabsTrigger value="prehled" asChild><Link href="/dashboard/hodnoceni/prehled">Přehled hodnocení</Link></TabsTrigger>}
             </TabsList>
             
             {isStudentOrParent && (
@@ -164,7 +164,7 @@ export default function HodnoceniPage() {
                      <Card>
                         <CardContent className="pt-6">
                             <p className="text-center text-muted-foreground">
-                                Zde naleznete přehled vámi zadaných hodnocení.
+                                Zde naleznete přehled vámi zadaných hodnocení. Pro zobrazení detailů klikněte na tlačítko "Přehled hodnocení" výše.
                             </p>
                         </CardContent>
                      </Card>
