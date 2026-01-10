@@ -26,10 +26,10 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow list: if hasRole('administrator');
-      allow get: if isAuthenticated();
-      allow update, delete: if isOwner(userId) || hasRole('administrator');
+      allow get, list: if isAuthenticated();
+      allow update: if isOwner(userId) || hasRole('administrator');
       allow create: if hasRole('administrator');
+      allow delete: if hasRole('administrator');
     }
 
     match /tridy/{tridaId} {
