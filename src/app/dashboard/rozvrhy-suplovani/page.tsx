@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useFirestore, useCollection, useMemoFirebase, useDoc, setDocumentNonBlocking } from '@/firebase';
-import type { Trida, Rozvrh, LessonBlock, User, Predmet, Ucebna, ScheduleTemplate } from '@/lib/types';
+import type { Trida, LessonBlock, User, Predmet, Ucebna, ScheduleTemplate } from '@/lib/types';
 import { collection, query, where } from 'firebase/firestore';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { cn } from "@/lib/utils";
@@ -36,6 +36,7 @@ const defaultTimeSlots = [
 ];
 
 type ScheduleEditorState = (LessonBlock | null)[][];
+type StorableDay = { dayIndex: number; lessons: (LessonBlock | null)[] };
 
 function TimeSlotEditDialog({
     isOpen,
@@ -257,11 +258,16 @@ function ScheduleEditor() {
     
     useEffect(() => {
         if (selectedClassId) {
-            if (scheduleTemplate) {
-                const validTemplate = Array.isArray(scheduleTemplate.days) && scheduleTemplate.days.length > 0 ? scheduleTemplate.days : [];
-                setSchedule(validTemplate);
+            if (scheduleTemplate && scheduleTemplate.days) {
+                // Convert from Firestore format to 2D array for the editor
+                const newSchedule: ScheduleEditorState = Array(daysOfWeek.length).fill(null).map(() => Array(timeSlots.length).fill(null));
+                scheduleTemplate.days.forEach(day => {
+                    newSchedule[day.dayIndex] = day.lessons;
+                });
+                setSchedule(newSchedule);
                 setTimeSlots(scheduleTemplate.timeSlots || defaultTimeSlots);
             } else if (!templateLoading) {
+                 // No template exists, create an empty one
                 const emptySchedule: ScheduleEditorState = Array(daysOfWeek.length).fill(null).map(() => Array(timeSlots.length).fill(null));
                 setSchedule(emptySchedule);
                 setTimeSlots(defaultTimeSlots);
@@ -278,19 +284,21 @@ function ScheduleEditor() {
         setIsSaving(true);
         try {
             const templateRef = doc(firestore, 'scheduleTemplates', selectedClassId);
-            const templateData: ScheduleTemplate = {
+            
+            // Convert 2D schedule array to a format Firestore accepts
+            const storableDays: StorableDay[] = schedule.map((dayLessons, index) => ({
+                dayIndex: index,
+                lessons: dayLessons || []
+            })).filter(day => day.lessons.some(l => l !== null)); // Only store days with lessons
+
+            const templateData = {
                 id: selectedClassId,
                 tridaId: selectedClassId,
                 timeSlots: timeSlots,
-                days: schedule,
-                // The 'ziaciIds' field is part of the 'Trida' entity, not 'ScheduleTemplate'.
-                // Adding a placeholder here to satisfy a potential implicit requirement,
-                // but this should ideally be handled by fetching the class data if needed.
-                // Or the type definition for ScheduleTemplate should be updated if it needs this field.
-                ziaciIds: [], 
+                days: storableDays,
             };
             
-            setDocumentNonBlocking(templateRef, templateData, { merge: true });
+            await setDocumentNonBlocking(templateRef, templateData, { merge: true });
 
             toast({ title: "Šablona rozvrhu uložena", description: "Změny v šabloně byly úspěšně uloženy." });
         } catch (error) {

@@ -33,7 +33,7 @@ import {
 } from 'date-fns';
 import { cs } from 'date-fns/locale';
 
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
 import { collection, query, where, getDocs, doc, writeBatch, getDoc } from 'firebase/firestore';
 import type {
   Trida,
@@ -192,7 +192,8 @@ export default function DashboardPage() {
         for (let i = 0; i < 7; i++) {
             const dayDate = addDays(weekStart, i);
             const dayDateString = format(dayDate, 'yyyy-MM-dd');
-            const dayLessons = template.days[i] || []; // 0=Mon, 1=Tue...
+            const templateDay = template.days.find(d => d.dayIndex === i);
+            const dayLessons = templateDay ? templateDay.lessons : [];
 
             const rozvrhId = `${targetClassId}-${dayDateString}`;
             const rozvrhRef = doc(firestore, 'rozvrhy', rozvrhId);
