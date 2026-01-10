@@ -61,13 +61,11 @@ export function useCollection<T = any>(
   const [data, setData] = useState<StateDataType>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<FirestoreError | Error | null>(null);
-  const { user, isUserLoading } = useUser();
 
   useEffect(() => {
-    // Wait for user and the query itself.
-    if (!memoizedTargetRefOrQuery || !user) {
+    if (!memoizedTargetRefOrQuery) {
       setData(null);
-      setIsLoading(isUserLoading || !memoizedTargetRefOrQuery);
+      setIsLoading(false);
       setError(null);
       return;
     }
@@ -75,7 +73,6 @@ export function useCollection<T = any>(
     setIsLoading(true);
     setError(null);
 
-    // Directly use memoizedTargetRefOrQuery as it's assumed to be the final query
     const unsubscribe = onSnapshot(
       memoizedTargetRefOrQuery,
       (snapshot: QuerySnapshot<DocumentData>) => {
@@ -88,7 +85,6 @@ export function useCollection<T = any>(
         setIsLoading(false);
       },
       (error: FirestoreError) => {
-        // This logic extracts the path from either a ref or a query
         const path: string =
           memoizedTargetRefOrQuery.type === 'collection'
             ? (memoizedTargetRefOrQuery as CollectionReference).path
@@ -103,13 +99,12 @@ export function useCollection<T = any>(
         setData(null)
         setIsLoading(false)
 
-        // trigger global error propagation
         errorEmitter.emit('permission-error', contextualError);
       }
     );
 
     return () => unsubscribe();
-  }, [memoizedTargetRefOrQuery, user, isUserLoading]); // Re-run if the target query/reference or user changes.
+  }, [memoizedTargetRefOrQuery]);
   
   if(memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
     throw new Error(memoizedTargetRefOrQuery + ' was not properly memoized using useMemoFirebase');

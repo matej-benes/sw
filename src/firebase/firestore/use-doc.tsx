@@ -10,8 +10,6 @@ import {
 } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { useUser } from '../provider';
-
 
 /** Utility type to add an 'id' field to a given type T. */
 type WithId<T> = T & { id: string };
@@ -48,20 +46,17 @@ export function useDoc<T = any>(
   const [data, setData] = useState<StateDataType>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<FirestoreError | Error | null>(null);
-  const { user, isUserLoading } = useUser();
 
   useEffect(() => {
-    // Wait for user and the doc ref itself.
-    if (!memoizedDocRef || !user) {
+    if (!memoizedDocRef) {
       setData(null);
-      setIsLoading(isUserLoading || !memoizedDocRef);
+      setIsLoading(false);
       setError(null);
       return;
     }
 
     setIsLoading(true);
     setError(null);
-    // Optional: setData(null); // Clear previous data instantly
 
     const unsubscribe = onSnapshot(
       memoizedDocRef,
@@ -69,10 +64,9 @@ export function useDoc<T = any>(
         if (snapshot.exists()) {
           setData({ ...(snapshot.data() as T), id: snapshot.id });
         } else {
-          // Document does not exist
           setData(null);
         }
-        setError(null); // Clear any previous error on successful snapshot (even if doc doesn't exist)
+        setError(null);
         setIsLoading(false);
       },
       (error: FirestoreError) => {
@@ -85,13 +79,12 @@ export function useDoc<T = any>(
         setData(null)
         setIsLoading(false)
 
-        // trigger global error propagation
         errorEmitter.emit('permission-error', contextualError);
       }
     );
 
     return () => unsubscribe();
-  }, [memoizedDocRef, user, isUserLoading]); // Re-run if the memoizedDocRef or user changes.
+  }, [memoizedDocRef]);
 
   return { data, isLoading, error };
 }
