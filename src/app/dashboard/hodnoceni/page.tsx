@@ -91,7 +91,7 @@ function TeacherView() {
         
         if (grading) { // Edit mode
             setValue('studentIds', [grading.ziakId]);
-            setValue('predmetId', predmety?.find(p => p.name === grading.predmet)?.id || '');
+            setValue('predmetId', grading.predmetId);
             setValue('znamka', grading.znamka);
             setValue('vaha', grading.vaha);
             setValue('komentar', grading.komentar || '');
@@ -110,7 +110,7 @@ function TeacherView() {
             }
         }
         setIsDialogOpen(true);
-    }, [reset, setValue, tridaIdFromParams, predmetIdFromParams, predmety, allStudents]);
+    }, [reset, setValue, tridaIdFromParams, predmetIdFromParams, allStudents]);
 
     // Set default class or class from params
     useEffect(() => {
@@ -159,6 +159,7 @@ function TeacherView() {
                 if(!student) return;
                 const gradingData = {
                     ...data,
+                    predmetId: predmet.id,
                     studentIds: undefined, // remove from data
                     ziakId: student.id,
                     datum: format(new Date(), 'dd.MM.yyyy'),
@@ -177,6 +178,7 @@ function TeacherView() {
                         const newGradingDoc = doc(collection(firestore, 'gradings'));
                         const gradingData = {
                             ...data,
+                            predmetId: predmet.id,
                             studentIds: undefined,
                             ziakId: studentId,
                             datum: format(new Date(), 'dd.MM.yyyy'),
@@ -414,10 +416,16 @@ function StudentParentView() {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Grading));
             setGradings(data);
             setIsLoading(false);
+        }, (error) => {
+            console.error("Firestore Error:", error);
+            setIsLoading(false);
+            toast({variant: 'destructive', title: 'Chyba oprávnění', description: 'Nepodařilo se načíst hodnocení.'})
         });
         return () => unsubscribe();
     }, [studentId, firestore]);
     
+    const {toast} = useToast();
+
     const gradesBySubject = useMemo(() => {
         return gradings.reduce((acc, g) => {
             if (!acc[g.predmet]) {

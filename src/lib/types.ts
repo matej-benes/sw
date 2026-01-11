@@ -20,6 +20,7 @@ export interface Grading {
   ziakId: string;
   ziakJmeno: string;
   predmet: string;
+  predmetId: string;
   znamka: number;
   vaha: number;
   komentar: string;

@@ -7,6 +7,7 @@ import { cs } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { Info, PlusCircle, Award } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -191,8 +192,8 @@ export function MobileTimetable({
                         const dayInfo = { fullDate: selectedDate };
 
                         const lessonGrades = grades?.filter(g => 
-                            g.predmet === lesson.subjectName && 
-                            g.datum === format(selectedDate, 'dd.MM.yyyy')
+                            g.predmetId === lesson.subjectId && 
+                            format(g.createdAt.toDate(), 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
                         ) || [];
                         
                         const lessonCard = (
@@ -223,10 +224,10 @@ export function MobileTimetable({
                                         <Award className="h-4 w-4 text-primary" />
                                         <div className="flex flex-wrap gap-2">
                                             {lessonGrades.map((grade, gIdx) => (
-                                                <div key={gIdx} className="flex items-baseline">
+                                                <Link key={gIdx} href={`/dashboard/hodnoceni/${grade.id}`} className="flex items-baseline">
                                                     <span className="font-bold text-primary text-lg">{grade.znamka}</span>
                                                     <span className="text-xs text-muted-foreground ml-0.5">({grade.vaha})</span>
-                                                </div>
+                                                </Link>
                                             ))}
                                         </div>
                                     </div>
