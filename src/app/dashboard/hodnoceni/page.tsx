@@ -28,7 +28,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Separator } from '@/components/ui/separator';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -404,6 +404,7 @@ function StudentParentView() {
     const { user } = useAuth();
     const firestore = useFirestore();
     const {toast} = useToast();
+    const router = useRouter();
     
     const studentId = user?.roles.includes('ziak') ? user.id : user?.studentId;
     
@@ -462,8 +463,8 @@ function StudentParentView() {
                 <CardContent>
                     {(gradings || []).length === 0 ? <p>Nemáte žádné známky.</p> : (
                         <ul className="space-y-3">
-                            {(gradings || []).map(g => (
-                                <li key={g.id} className="flex justify-between items-center p-3 border rounded-lg">
+                            {(gradings || []).sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()).map(g => (
+                                <li key={g.id} className="flex justify-between items-center p-3 border rounded-lg cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/dashboard/hodnoceni/${g.id}`)}>
                                     <div>
                                         <p className="font-semibold">{g.predmet}</p>
                                         <p className="text-sm text-muted-foreground">{g.komentar || 'Bez komentáře'}</p>
