@@ -138,7 +138,7 @@ function TeacherView() {
             setIsLoading(false);
         }, (error) => {
             console.error("Error fetching gradings: ", error);
-            toast({ variant: 'destructive', title: 'Chyba načítání hodnocení', description: 'Nemáte dostatečná oprávnění.'});
+            toast({ variant: 'destructive', title: 'Chyba načítání hodnocení'});
             setIsLoading(false);
         });
         return () => unsubscribe();
@@ -411,8 +411,7 @@ function StudentParentView() {
     const gradingsQuery = useMemoFirebase(() => {
         if (!studentId || !firestore) return null;
         // This query now perfectly matches the security rule
-        const q = query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
-        return q;
+        return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
     }, [studentId, firestore]);
 
     const { data: gradings, isLoading, error } = useCollection<Grading>(gradingsQuery);
@@ -535,3 +534,5 @@ export default function HodnoceniPage() {
         </React.Suspense>
     );
 }
+
+    

@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { cn } from "@/lib/utils";
 import type { LessonBlock, Udalost, Rozvrh, Substitution, Grading } from "@/lib/types";
 import { format, getDay, isSameDay, parse, parseISO } from 'date-fns';
@@ -202,7 +202,13 @@ export function MobileTimetable({
         if (!firestore || !currentStudentId) return null;
         return query(collection(firestore, 'gradings'), where('ziakId', '==', currentStudentId));
     }, [firestore, currentStudentId]);
-    const { data: grades, isLoading: gradesLoading } = useCollection<Grading>(gradesQuery);
+    const { data: grades, isLoading: gradesLoading, error } = useCollection<Grading>(gradesQuery);
+    
+    useEffect(() => {
+        if (error) {
+            console.error("Error fetching grades for mobile timetable:", error);
+        }
+    }, [error]);
 
     const timetableForSelectedDay = useMemo(() => {
         const schedule = schedules.find(s => isSameDay(parseISO(s.datum), selectedDate));
@@ -260,7 +266,7 @@ export function MobileTimetable({
             });
 
             return { type: 'lesson', data: lessonToShow, period: periodIndex, timeRange: time, classId: schedule.tridaId, grades: lessonGrades };
-        }).filter(Boolean);
+        }).filter(item => item !== null); // Ensure null items are filtered out
 
         return processedItems;
 
@@ -308,3 +314,5 @@ export function MobileTimetable({
         </div>
     );
 }
+
+    
