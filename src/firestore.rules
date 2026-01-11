@@ -53,7 +53,8 @@ service cloud.firestore {
     
     match /gradings/{gradingId} {
         allow get: if isAuthenticated() && (isAdmin() || hasAnyRole(['ucitel']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
-        allow list: if isAuthenticated() && (isAdmin() || hasAnyRole(['ucitel']) || (request.query.limit <= 30 && request.query.ziakId == request.auth.uid) || (request.query.limit <= 30 && isMyStudent(request.query.ziakId)));
+        // Teacher/admin can list all. Student/parent can only list their own with a limit.
+        allow list: if isAuthenticated() && (isAdmin() || hasAnyRole(['ucitel']) || (request.query.ziakId == request.auth.uid && request.query.limit <= 30) || (isMyStudent(request.query.ziakId) && request.query.limit <= 30));
         allow create: if hasAnyRole(['ucitel', 'administrator']);
         allow update, delete: if resource.data.ucitelId == request.auth.uid || isAdmin();
     }
@@ -95,7 +96,7 @@ service cloud.firestore {
     
     match /udalosti/{udalostId} {
         allow get, list: if isAuthenticated();
-        allow create, delete: if isAdmin();
+        create, delete: if isAdmin();
     }
      
      match /suplovani/{substitutionId} {

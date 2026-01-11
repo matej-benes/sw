@@ -95,7 +95,12 @@ export function MobileTimetable({
 
     const gradesQuery = useMemoFirebase(() => {
         if (!firestore || !studentId) return null;
-        return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId), limit(30));
+        // This query is now compliant with security rules for students/parents
+        return query(
+          collection(firestore, 'gradings'), 
+          where('ziakId', '==', studentId), 
+          limit(30)
+        );
     }, [firestore, studentId]);
     const { data: grades } = useCollection<Grading>(gradesQuery);
     
