@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, MessageSquare, User as UserIcon } from "lucide-react";
+import { Home, MessageSquare, User as UserIcon, PencilRuler } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUnreadMessages } from "@/hooks/use-unread-messages";
 import { Badge } from "@/components/ui/badge";
 
 const navItems = [
     { href: "/dashboard", icon: Home, label: "Nástěnka" },
+    { href: "/dashboard/hodnoceni", icon: PencilRuler, label: "Klasifikace" },
     { href: "/dashboard/zpravy", icon: MessageSquare, label: "Zprávy" },
     { href: "/dashboard/profil", icon: UserIcon, label: "Profil" },
 ];
@@ -19,7 +20,7 @@ export function MobileBottomNav() {
 
     return (
         <div className="fixed bottom-0 left-0 right-0 z-10 border-t bg-background/95 backdrop-blur-sm">
-            <nav className="grid h-16 grid-cols-3 items-center gap-4 px-4 text-sm font-medium">
+            <nav className="grid h-16 grid-cols-4 items-center gap-4 px-4 text-sm font-medium">
                 {navItems.map((item) => {
                     const isActive = pathname === item.href;
                     return (
