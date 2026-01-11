@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
            let docSnap = await getDoc(userDocRef);
            
            // Special handling for the super admin user
-           if (!docSnap.exists() && firebaseUser.email === 'admin@sw.cz') {
+           if (!docSnap.exists() && firebaseUser.email === 'matej.romana@seznam.cz') {
                 const superAdminData: User = {
                     id: firebaseUser.uid,
                     name: "Super Administrátor",
@@ -141,5 +141,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     </AuthContext.Provider>
   );
 }
-
-    
