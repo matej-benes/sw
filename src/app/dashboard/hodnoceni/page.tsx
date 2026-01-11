@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, writeBatch, limit } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, writeBatch, limit, getDocs } from 'firebase/firestore';
 import type { Grading, User, Trida, Predmet } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -406,22 +406,34 @@ function StudentParentView() {
     const {toast} = useToast();
     const router = useRouter();
     
-    const studentId = hasRole('ziak') ? user?.id : user?.studentId;
-    
-    const gradingsQuery = useMemoFirebase(() => {
-        if (!studentId || !firestore) return null;
-        // This query now perfectly matches the security rule
-        return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
-    }, [studentId, firestore]);
+    const [gradings, setGradings] = useState<Grading[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    const { data: gradings, isLoading, error } = useCollection<Grading>(gradingsQuery);
-    
+    const studentId = hasRole('ziak') ? user?.id : user?.studentId;
+
     useEffect(() => {
-        if(error) {
-            console.error("Firestore Error:", error);
-            toast({variant: 'destructive', title: 'Chyba oprávnění', description: 'Nepodařilo se načíst hodnocení.'})
+        if (!studentId || !firestore) {
+            setIsLoading(false);
+            return;
         }
-    }, [error, toast]);
+
+        const getGradings = async () => {
+            setIsLoading(true);
+            try {
+                const q = query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
+                const querySnapshot = await getDocs(q);
+                const fetchedGradings = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Grading));
+                setGradings(fetchedGradings);
+            } catch (error) {
+                console.error("Firestore Error:", error);
+                toast({variant: 'destructive', title: 'Chyba oprávnění', description: 'Nepodařilo se načíst hodnocení.'})
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        getGradings();
+    }, [studentId, firestore, toast]);
 
 
     const gradesBySubject = useMemo(() => {
@@ -534,5 +546,3 @@ export default function HodnoceniPage() {
         </React.Suspense>
     );
 }
-
-    

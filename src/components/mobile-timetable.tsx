@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 
 
@@ -70,7 +70,7 @@ function TeacherLessonContextMenu({ children, lesson, dayInfo, period }: { child
 //==============================================================================
 // CARD COMPONENTS
 //==============================================================================
-function LessonCard({ lesson, period, timeRange, day, classId, isTeacher, grades = [] }: { lesson: LessonBlock, period: number, timeRange: string, day: Date, classId: string, isTeacher: boolean, grades: Grading[] }) {
+function LessonCard({ lesson, period, timeRange, day, classId, isTeacher }: { lesson: LessonBlock, period: number, timeRange: string, day: Date, classId: string, isTeacher: boolean }) {
     const router = useRouter();
     const { toast } = useToast();
 
@@ -104,19 +104,6 @@ function LessonCard({ lesson, period, timeRange, day, classId, isTeacher, grades
                     {isTeacher && <p className="text-sm text-muted-foreground">{lesson.ucebnaName}</p>}
                 </div>
             </div>
-            {grades.length > 0 && !isTeacher && (
-                <div className="mt-2 pt-2 border-t flex items-center gap-3">
-                    <Award className="h-4 w-4 text-primary" />
-                    <div className="flex flex-wrap gap-2">
-                        {grades.map((grade) => (
-                            <Link key={grade.id} href={`/dashboard/hodnoceni/${grade.id}`} onClick={(e) => e.stopPropagation()} className="flex items-baseline">
-                                <span className="font-bold text-primary text-lg">{grade.znamka}</span>
-                                <span className="text-xs text-muted-foreground ml-0.5">({grade.vaha})</span>
-                            </Link>
-                        ))}
-                    </div>
-                </div>
-            )}
         </div>
     );
     
@@ -192,23 +179,6 @@ export function MobileTimetable({
 }: MobileTimetableProps) {
     const today = new Date();
     const [selectedDate, setSelectedDate] = useState(today);
-    const firestore = useFirestore();
-
-    const { user, hasRole } = useAuth();
-    
-    const currentStudentId = hasRole('ziak') ? user?.id : user?.studentId;
-
-    const gradesQuery = useMemoFirebase(() => {
-        if (!firestore || !currentStudentId) return null;
-        return query(collection(firestore, 'gradings'), where('ziakId', '==', currentStudentId));
-    }, [firestore, currentStudentId]);
-    const { data: grades, isLoading: gradesLoading, error } = useCollection<Grading>(gradesQuery);
-    
-    useEffect(() => {
-        if (error) {
-            console.error("Error fetching grades for mobile timetable:", error);
-        }
-    }, [error]);
 
     const timetableForSelectedDay = useMemo(() => {
         const schedule = schedules.find(s => isSameDay(parseISO(s.datum), selectedDate));
@@ -256,21 +226,12 @@ export function MobileTimetable({
             if (isTeacher && lessonToShow.teacherId !== userId) return null;
             if (!isTeacher && schedule.tridaId !== userClassId) return null;
 
-            const lessonGrades = (grades || []).filter(g => {
-                try {
-                    const gradeDate = parse(g.datum, "dd.MM.yyyy", new Date());
-                    return g.predmetId === lessonToShow?.subjectId && isSameDay(gradeDate, selectedDate);
-                } catch {
-                    return false;
-                }
-            });
-
-            return { type: 'lesson', data: lessonToShow, period: periodIndex, timeRange: time, classId: schedule.tridaId, grades: lessonGrades };
+            return { type: 'lesson', data: lessonToShow, period: periodIndex, timeRange: time, classId: schedule.tridaId };
         }).filter(item => item !== null); // Ensure null items are filtered out
 
         return processedItems;
 
-    }, [selectedDate, schedules, eventsData, substitutionsData, isTeacher, userId, grades, userClassId]);
+    }, [selectedDate, schedules, eventsData, substitutionsData, isTeacher, userId, userClassId]);
     
     return (
         <div className="flex flex-col h-full bg-background text-foreground p-4 space-y-4">
@@ -300,7 +261,7 @@ export function MobileTimetable({
                     timetableForSelectedDay.map((item: any, idx: number) => {
                         switch (item.type) {
                             case 'lesson':
-                                return <LessonCard key={idx} lesson={item.data} period={item.period} timeRange={item.timeRange} day={selectedDate} classId={item.classId} isTeacher={isTeacher} grades={item.grades} />;
+                                return <LessonCard key={idx} lesson={item.data} period={item.period} timeRange={item.timeRange} day={selectedDate} classId={item.classId} isTeacher={isTeacher} />;
                             case 'event':
                                 return <EventCard key={idx} event={item.data} period={item.period} timeRange={item.timeRange} />;
                             case 'cancelled':
@@ -314,5 +275,3 @@ export function MobileTimetable({
         </div>
     );
 }
-
-    
