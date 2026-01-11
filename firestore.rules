@@ -24,6 +24,14 @@ service cloud.firestore {
     function hasAnyRole(roles) {
         return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(roles);
     }
+    
+    function isMemberOfClass(classId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      // Is the user directly in the class? (Student, Teacher)
+      return userDoc.tridaId == classId ||
+             // Is the user's child in the class? (Parent)
+             (userDoc.roles.hasAny(['rodic']) && get(/databases/$(database)/documents/users/$(userDoc.studentId)).data.tridaId == classId);
+    }
 
     match /users/{userId} {
       allow get, list: if isAuthenticated();
@@ -34,13 +42,16 @@ service cloud.firestore {
     
     match /gradings/{gradingId} {
       allow get: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
-      allow list: if hasAnyRole(['ucitel', 'administrator']) || (isAuthenticated() && request.query.where[0][0] == 'ziakId' && request.query.where[0][2] == request.auth.uid);
+      allow list: if hasAnyRole(['ucitel', 'administrator']) || 
+                  (isAuthenticated() && request.query.where[0] == 'ziakId' && request.query.where[2] == request.auth.uid) ||
+                  (isAuthenticated() && hasRole('rodic') && request.query.where[0] == 'ziakId' && request.query.where[2] == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentId);
       allow create: if hasAnyRole(['ucitel', 'administrator']);
-      allow update, delete: if hasAnyRole(['ucitel', 'administrator']) && resource.data.ucitelId == request.auth.uid;
+      allow update, delete: if hasAnyRole(['ucitel', 'administrator']);
     }
     
     match /tridy/{tridaId} {
-      allow read: if isAuthenticated();
+      allow list: if isAuthenticated();
+      allow get: if isAuthenticated() && (hasRole('administrator') || isMemberOfClass(tridaId));
       allow write: if hasRole('administrator');
     }
     
