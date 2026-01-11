@@ -156,8 +156,8 @@ function UserForm({
     }
   }, [isZiak, isRodic, setValue]);
   
-  const students = useMemo(() => allUsers.filter(u => u.memberships.some(m => m.roles.includes('ziak'))), [allUsers]);
-  const parents = useMemo(() => allUsers.filter(u => u.memberships.some(m => m.roles.includes('rodic'))), [allUsers]);
+  const students = useMemo(() => allUsers.filter(u => u.memberships && u.memberships.some(m => m.roles.includes('ziak'))), [allUsers]);
+  const parents = useMemo(() => allUsers.filter(u => u.memberships && u.memberships.some(m => m.roles.includes('rodic'))), [allUsers]);
 
 
   return (
