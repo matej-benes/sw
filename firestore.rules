@@ -46,6 +46,8 @@ service cloud.firestore {
     
     match /gradings/{gradingId} {
       allow get: if isAuthenticated();
+      // Teachers and admins can list all gradings based on their queries.
+      // Students and parents can only list gradings if they are querying for their own ID.
       allow list: if hasAnyRole(['ucitel', 'administrator']) || 
                      (hasAnyRole(['ziak', 'rodic']) && request.auth.uid in request.query.filters[0].value);
 
@@ -133,5 +135,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
