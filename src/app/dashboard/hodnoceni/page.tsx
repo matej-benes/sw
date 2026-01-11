@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { PlusCircle, Pencil, Trash2, Loader2, BarChart2 } from 'lucide-react';
+import { PlusCircle, Pencil, Trash2, Loader2, BarChart2, BookOpen, Star, Type } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -29,6 +29,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useSearchParams } from 'next/navigation';
+import { Separator } from '@/components/ui/separator';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 
 const gradingSchema = z.object({
@@ -59,16 +61,16 @@ function TeacherView() {
 
     const { register, handleSubmit, control, reset, setValue, formState: { errors } } = useForm<GradingFormData>({
         resolver: zodResolver(gradingSchema),
-        defaultValues: { vaha: 1.0 }
+        defaultValues: { vaha: 1.0, znamka: 1 }
     });
     
     // Check for query params to pre-fill the form
     useEffect(() => {
         const tridaIdParam = searchParams.get('tridaId');
         const predmetIdParam = searchParams.get('predmetId');
-        if (tridaIdParam && predmetIdParam) {
+        if (tridaIdParam || predmetIdParam) {
             handleOpenDialog(null); // Open a new dialog
-            setValue('predmetId', predmetIdParam);
+            if (predmetIdParam) setValue('predmetId', predmetIdParam);
             // We don't have ziakId from params, so user still needs to select it
         }
     }, [searchParams, setValue]);
@@ -95,9 +97,13 @@ function TeacherView() {
             setValue('predmetId', grading.predmetId);
             setValue('znamka', grading.znamka);
             setValue('vaha', grading.vaha);
-            setValue('komentar', grading.komentar);
+            setValue('komentar', grading.komentar || '');
         } else {
-            reset({ vaha: 1.0, znamka: 1, predmetId: searchParams.get('predmetId') || '', ziakId: '', komentar: '' });
+            const predmetIdParam = searchParams.get('predmetId');
+            reset({ vaha: 1.0, znamka: 1, predmetId: predmetIdParam || '', ziakId: '', komentar: '' });
+             if (predmetIdParam) {
+                setValue('predmetId', predmetIdParam);
+            }
         }
         setIsDialogOpen(true);
     }, [reset, setValue, searchParams]);
@@ -202,54 +208,71 @@ function TeacherView() {
             </Card>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent>
+                <DialogContent className="sm:max-w-2xl">
                     <DialogHeader>
-                        <DialogTitle>{editingGrading ? 'Upravit hodnocení' : 'Nové hodnocení'}</DialogTitle>
+                        <DialogTitle className="text-2xl">{editingGrading ? 'Upravit hodnocení' : 'Nové hodnocení'}</DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleSubmit(handleSaveGrading)} className="space-y-4">
-                        <div className="grid gap-2">
-                            <Label>Žák</Label>
-                            <Controller name="ziakId" control={control} render={({ field }) => (
-                                <Select onValueChange={field.onChange} value={field.value} disabled={studentsLoading}>
-                                    <SelectTrigger><SelectValue placeholder="Vyberte žáka" /></SelectTrigger>
-                                    <SelectContent>{students?.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                                </Select>
-                            )} />
-                            {errors.ziakId && <p className="text-sm text-destructive">{errors.ziakId.message}</p>}
-                        </div>
-                        <div className="grid gap-2">
-                             <Label>Předmět</Label>
-                            <Controller name="predmetId" control={control} render={({ field }) => (
-                                 <Select onValueChange={field.onChange} value={field.value} disabled={predmetyLoading}>
-                                    <SelectTrigger><SelectValue placeholder="Vyberte předmět" /></SelectTrigger>
-                                    <SelectContent>{predmety?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-                                </Select>
-                            )} />
-                             {errors.predmetId && <p className="text-sm text-destructive">{errors.predmetId.message}</p>}
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                                <Label>Známka</Label>
-                                <Controller name="znamka" control={control} render={({ field }) => (
-                                    <Select onValueChange={(val) => field.onChange(Number(val))} value={String(field.value)}>
-                                        <SelectTrigger><SelectValue placeholder="Známka" /></SelectTrigger>
-                                        <SelectContent>{[1, 2, 3, 4, 5].map(z => <SelectItem key={z} value={String(z)}>{z}</SelectItem>)}</SelectContent>
+                    <form onSubmit={handleSubmit(handleSaveGrading)} className="space-y-6 pt-4">
+                        
+                        <div className="grid md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <Label>Žák</Label>
+                                <Controller name="ziakId" control={control} render={({ field }) => (
+                                    <Select onValueChange={field.onChange} value={field.value} disabled={studentsLoading}>
+                                        <SelectTrigger><SelectValue placeholder="Vyberte žáka" /></SelectTrigger>
+                                        <SelectContent>{students?.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                                     </Select>
                                 )} />
+                                {errors.ziakId && <p className="text-sm text-destructive">{errors.ziakId.message}</p>}
                             </div>
-                            <div className="grid gap-2">
-                                <Label>Váha</Label>
-                                <Controller name="vaha" control={control} render={({ field }) => <Input type="number" step="0.1" {...field} />} />
+                            <div className="space-y-2">
+                                <Label>Předmět</Label>
+                                <Controller name="predmetId" control={control} render={({ field }) => (
+                                    <Select onValueChange={field.onChange} value={field.value} disabled={predmetyLoading}>
+                                        <SelectTrigger><SelectValue placeholder="Vyberte předmět" /></SelectTrigger>
+                                        <SelectContent>{predmety?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                )} />
+                                {errors.predmetId && <p className="text-sm text-destructive">{errors.predmetId.message}</p>}
+                            </div>
+                        </div>
+
+                        <Separator />
+
+                         <div className="grid md:grid-cols-2 gap-6">
+                            <div className="space-y-3">
+                               <Label>Známka</Label>
+                               <Controller name="znamka" control={control} render={({ field }) => (
+                                  <ToggleGroup type="single" value={String(field.value)} onValueChange={(val) => val && field.onChange(Number(val))} className="grid grid-cols-5 gap-2">
+                                    {[1, 2, 3, 4, 5].map(z => (
+                                        <ToggleGroupItem key={z} value={String(z)} className="h-12 w-full text-xl font-bold border data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+                                          {z}
+                                        </ToggleGroupItem>
+                                    ))}
+                                  </ToggleGroup>
+                                )}/>
+                            </div>
+                            <div className="space-y-3">
+                                 <Label htmlFor="vaha">Váha</Label>
+                                 <div className="flex items-center gap-2">
+                                     <Star className="text-muted-foreground" />
+                                     <Controller name="vaha" control={control} render={({ field }) => <Input id="vaha" type="number" step="0.1" {...field} className="text-lg" />} />
+                                 </div>
                                 {errors.vaha && <p className="text-sm text-destructive">{errors.vaha.message}</p>}
                             </div>
+                         </div>
+                        
+                        <div className="space-y-2">
+                            <Label htmlFor="komentar">Komentář / Název hodnocení</Label>
+                            <div className="flex items-center gap-2">
+                                <Type className="text-muted-foreground" />
+                                <Controller name="komentar" control={control} render={({ field }) => <Textarea id="komentar" {...field} placeholder="Např. Test z novověku, aktivita v hodině..." />} />
+                            </div>
                         </div>
-                        <div className="grid gap-2">
-                            <Label>Komentář</Label>
-                            <Controller name="komentar" control={control} render={({ field }) => <Textarea {...field} placeholder="Doplňující komentář..." />} />
-                        </div>
-                        <DialogFooter>
+
+                        <DialogFooter className="pt-4">
                             <DialogClose asChild><Button type="button" variant="outline">Zrušit</Button></DialogClose>
-                            <Button type="submit">Uložit</Button>
+                            <Button type="submit">Uložit hodnocení</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
