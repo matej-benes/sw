@@ -13,52 +13,16 @@ export interface User {
   pin?: string; // 6-digit PIN for registration
 }
 
-export interface Znamka {
-  id?: string;
-  studentId: string;
-  predmet: string;
-  hodnota: number;
-  datum: Timestamp;
-  ucitelId: string;
-  slovniHodnoceni?: string;
-  tema?: string;
-  druhHodnoceni?: string;
-}
-
 export interface Grading {
   id: string;
-  ucitelId: string;
-  tridaId: string;
-  predmetId: string;
-  predmetNazev: string;
   datum: Timestamp;
-  hodina: string;
-  tema?: string;
-  studentIds: string[];
-  znamky: {
-    studentId: string;
-    znamka: string;
-    slovniHodnoceni?: string;
-  }[];
-}
-
-
-export interface Grade {
-  id: string;
-  subject: string;
-  grade: number;
-  date: string;
-  notes?: string;
-}
-
-export interface Student {
-  id: string;
-  name:string;
-  avatarUrl: string;
-  grades: Grade[];
-  parentId: string;
-  teacherId: string;
-  classId: string;
+  ziakId: string;
+  ziakJmeno: string;
+  predmet: string;
+  znamka: number;
+  vaha: number;
+  komentar: string;
+  ucitelId: string;
 }
 
 export interface Trida {
@@ -258,5 +222,7 @@ export interface ZapisDoPrvniTridy {
     datumPodani: string; // YYYY-MM-DD HH:MM
     status: 'Podáno' | 'Přijato' | 'Nepřijato' | 'Odklad';
 }
+
+    
 
     

@@ -15,28 +15,34 @@ service cloud.firestore {
     function hasRole(role) {
         return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny([role]);
     }
+    
+    function isMyStudent(studentId) {
+        let parentData = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+        return parentData.roles.hasAny(['rodic']) && parentData.studentId == studentId;
+    }
 
-    // Uživatelé a jejich data
     match /users/{userId} {
       allow get, list: if isAuthenticated();
       allow create: if hasRole('administrator');
       allow update: if isOwner(userId) || hasRole('administrator');
       allow delete: if hasRole('administrator');
     }
-
-    // Hodnocení - čtení povoleno všem přihlášeným, zápis jen učitelům
+    
     match /gradings/{gradingId} {
-      allow read: if isAuthenticated();
+      allow read: if (isAuthenticated() && (hasRole('ucitel') || hasRole('administrator')))
+                  || (isAuthenticated() && resource.data.ziakId == request.auth.uid)
+                  || (isAuthenticated() && isMyStudent(resource.data.ziakId));
+      allow list: if (isAuthenticated() && (hasRole('ucitel') || hasRole('administrator')))
+                  || (isAuthenticated() && request.query.where.ziakId == request.auth.uid)
+                  || (isAuthenticated() && isMyStudent(request.query.where.ziakId));
       allow write: if hasRole('ucitel');
     }
     
-    // Třídy - čtení povoleno všem, zápis jen adminům
     match /tridy/{tridaId} {
       allow read: if isAuthenticated();
       allow write: if hasRole('administrator');
     }
     
-    // Ostatní kolekce - obecná pravidla
     match /predmety/{predmetId} {
       allow read: if isAuthenticated();
       allow write: if hasRole('administrator');
@@ -107,3 +113,5 @@ service cloud.firestore {
     }
   }
 }
+
+    

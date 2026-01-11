@@ -1,270 +1,399 @@
 'use client';
+
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy, Timestamp } from 'firebase/firestore';
-import type { Grading, User } from '@/lib/types';
-import { useMemo, useEffect, useState, useCallback } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
+import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
+import { collection, query, where, orderBy, Timestamp, doc } from 'firebase/firestore';
+import type { Grading, User, Trida, Predmet } from '@/lib/types';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
-import { MoreHorizontal, Pencil, Trash2, Edit } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import Link from 'next/link';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { PlusCircle, Pencil, Loader2, BarChart2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { ResponsiveContainer, BarChart, XAxis, YAxis, Tooltip, Bar } from 'recharts';
+import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 
-// --- Student/Parent Specific Components & Logic ---
 
-interface StudentGrade {
-    subject: string;
-    grade: string;
-    date: Timestamp;
-    topic?: string;
+// --- Zod Schema for New Grading ---
+const gradingSchema = z.object({
+  ziakId: z.string().min(1, 'Musíte vybrat žáka.'),
+  predmet: z.string().min(1, 'Musíte vybrat předmět.'),
+  znamka: z.coerce.number().min(1, 'Známka musí být mezi 1-5').max(5, 'Známka musí být mezi 1-5'),
+  vaha: z.coerce.number().min(1, 'Váha musí být kladné číslo.'),
+  komentar: z.string().optional(),
+});
+
+type GradingFormData = z.infer<typeof gradingSchema>;
+
+
+// --- Teacher Components ---
+
+function NewGradingDialog({ open, onOpenChange, students, subjects, ucitelId }: { open: boolean; onOpenChange: (open: boolean) => void; students: User[]; subjects: Predmet[]; ucitelId: string; }) {
+  const { toast } = useToast();
+  const firestore = useFirestore();
+  const [isSaving, setIsSaving] = useState(false);
+
+  const { control, handleSubmit, reset, formState: { errors } } = useForm<GradingFormData>({
+    resolver: zodResolver(gradingSchema),
+    defaultValues: { vaha: 1 },
+  });
+
+  const onSubmit = async (data: GradingFormData) => {
+    if (!firestore) return;
+    setIsSaving(true);
+    try {
+      const student = students.find(s => s.id === data.ziakId);
+      if (!student) {
+        toast({ variant: 'destructive', title: 'Chyba', description: 'Vybraný žák nebyl nalezen.' });
+        return;
+      }
+      
+      const newGrading: Omit<Grading, 'id'> = {
+        datum: Timestamp.now(),
+        ziakId: data.ziakId,
+        ziakJmeno: student.name,
+        predmet: data.predmet,
+        znamka: data.znamka,
+        vaha: data.vaha,
+        komentar: data.komentar || '',
+        ucitelId,
+      };
+      
+      await addDocumentNonBlocking(collection(firestore, 'gradings'), newGrading);
+      toast({ title: 'Hodnocení uloženo', description: 'Nové hodnocení bylo úspěšně uloženo.' });
+      reset({ vaha: 1, znamka: undefined, ziakId: '', predmet: '', komentar: '' });
+      onOpenChange(false);
+    } catch (e) {
+      console.error(e);
+      toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se uložit hodnocení.' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Nové hodnocení</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-1">
+            <label>Žák</label>
+            <Controller name="ziakId" control={control} render={({ field }) => (
+              <Select onValueChange={field.onChange} value={field.value}>
+                <SelectTrigger><SelectValue placeholder="Vyberte žáka" /></SelectTrigger>
+                <SelectContent>{students.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+              </Select>
+            )} />
+            {errors.ziakId && <p className="text-sm text-destructive">{errors.ziakId.message}</p>}
+          </div>
+          <div className="space-y-1">
+            <label>Předmět</label>
+            <Controller name="predmet" control={control} render={({ field }) => (
+              <Select onValueChange={field.onChange} value={field.value}>
+                <SelectTrigger><SelectValue placeholder="Vyberte předmět" /></SelectTrigger>
+                <SelectContent>{subjects.map(p => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}</SelectContent>
+              </Select>
+            )} />
+            {errors.predmet && <p className="text-sm text-destructive">{errors.predmet.message}</p>}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label>Známka (1-5)</label>
+              <Controller name="znamka" control={control} render={({ field }) => <Input {...field} type="number" min="1" max="5" />} />
+              {errors.znamka && <p className="text-sm text-destructive">{errors.znamka.message}</p>}
+            </div>
+            <div className="space-y-1">
+              <label>Váha</label>
+              <Controller name="vaha" control={control} render={({ field }) => <Input {...field} type="number" min="1" />} />
+              {errors.vaha && <p className="text-sm text-destructive">{errors.vaha.message}</p>}
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label>Komentář</label>
+            <Controller name="komentar" control={control} render={({ field }) => <Textarea {...field} />} />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild><Button variant="outline">Zrušit</Button></DialogClose>
+            <Button type="submit" disabled={isSaving}>
+              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Uložit
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
-function calculateAverage(grades: StudentGrade[]) {
-    if (grades.length === 0) return '–';
-    const numericGrades = grades.map(g => parseFloat(g.grade)).filter(g => !isNaN(g));
-    if (numericGrades.length === 0) return '–';
-    const sum = numericGrades.reduce((acc, g) => acc + g, 0);
-    return (sum / numericGrades.length).toFixed(2).replace('.', ',');
+function TeacherView({ user, students, subjects, gradings, isLoading }: { user: User, students: User[], subjects: Predmet[], gradings: Grading[], isLoading: boolean }) {
+  const [isNewGradingOpen, setIsNewGradingOpen] = useState(false);
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <div>
+            <CardTitle>Přehled zadaného hodnocení</CardTitle>
+            <CardDescription>Chronologický seznam všech známek, které jste zadali.</CardDescription>
+          </div>
+          <Button onClick={() => setIsNewGradingOpen(true)}>
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Zadat nové hodnocení
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Datum</TableHead>
+                <TableHead>Žák</TableHead>
+                <TableHead>Předmět</TableHead>
+                <TableHead className="text-center">Známka</TableHead>
+                <TableHead className="text-center">Váha</TableHead>
+                <TableHead>Komentář</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading && <TableRow><TableCell colSpan={6} className="h-24 text-center">Načítání hodnocení...</TableCell></TableRow>}
+              {!isLoading && gradings.length > 0 ? (
+                gradings.map((grade) => (
+                  <TableRow key={grade.id}>
+                    <TableCell>{format((grade.datum as Timestamp).toDate(), 'd. M. yyyy HH:mm')}</TableCell>
+                    <TableCell className="font-medium">{grade.ziakJmeno}</TableCell>
+                    <TableCell>{grade.predmet}</TableCell>
+                    <TableCell className="text-center font-bold">{grade.znamka}</TableCell>
+                    <TableCell className="text-center">{grade.vaha}</TableCell>
+                    <TableCell className="text-muted-foreground">{grade.komentar || '-'}</TableCell>
+                  </TableRow>
+                ))
+              ) : !isLoading && <TableRow><TableCell colSpan={6} className="h-24 text-center">Nezadali jste žádné hodnocení.</TableCell></TableRow>}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+      <NewGradingDialog open={isNewGradingOpen} onOpenChange={setIsNewGradingOpen} students={students} subjects={subjects} ucitelId={user.id} />
+    </>
+  );
 }
 
-function StudentParentView({ studentId }: { studentId: string }) {
-    const firestore = useFirestore();
-    const { hasRole, user } = useAuth();
+// --- Student/Parent Components ---
+
+type SubjectSummary = { name: string; grades: Grading[]; average: string; };
+
+function calculateWeightedAverage(grades: Grading[]): string {
+  if (grades.length === 0) return '–';
+  const totalWeight = grades.reduce((acc, g) => acc + g.vaha, 0);
+  if (totalWeight === 0) return '–';
+  const weightedSum = grades.reduce((acc, g) => acc + (g.znamka * g.vaha), 0);
+  return (weightedSum / totalWeight).toFixed(2);
+}
+
+function StudentParentView({ studentId, gradings, isLoading }: { studentId: string; gradings: Grading[], isLoading: boolean }) {
+
+  const subjectSummaries = useMemo((): SubjectSummary[] => {
+    if (!gradings) return [];
+    const grouped = gradings.reduce((acc, grade) => {
+      if (!acc[grade.predmet]) acc[grade.predmet] = [];
+      acc[grade.predmet].push(grade);
+      return acc;
+    }, {} as { [subject: string]: Grading[] });
+
+    return Object.entries(grouped).map(([name, grades]) => ({
+      name,
+      grades: grades.sort((a,b) => (b.datum as Timestamp).toMillis() - (a.datum as Timestamp).toMillis()),
+      average: calculateWeightedAverage(grades),
+    }));
+  }, [gradings]);
+  
+  const chartData = useMemo(() => {
+    if (!gradings || gradings.length === 0) return [];
     
-    const gradingsQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
-        return query(
-            collection(firestore, 'gradings'), 
-            where('studentIds', 'array-contains', studentId),
-            orderBy('datum', 'desc')
-        );
-    }, [firestore, studentId]);
-
-    const { data: gradings, isLoading: gradingsLoading } = useCollection<Grading>(gradingsQuery);
-
-    const studentGrades = useMemo(() => {
-        if (!gradings) return [];
-        
-        const grades: StudentGrade[] = [];
-        gradings.forEach(grading => {
-            const studentMark = grading.znamky.find(z => z.studentId === studentId);
-            if (studentMark) {
-                grades.push({
-                    subject: grading.predmetNazev,
-                    grade: studentMark.znamka,
-                    date: grading.datum,
-                    topic: grading.tema,
-                });
-            }
-        });
-        // Sorting is now handled by the query
-        return grades;
-    }, [gradings, studentId]);
-
-    const groupedGrades = useMemo(() => {
-        return studentGrades.reduce((acc, znamka) => {
-            const subject = znamka.subject;
-            if (!acc[subject]) acc[subject] = [];
-            acc[subject].push(znamka);
-            return acc;
-        }, {} as { [subject: string]: StudentGrade[] });
-    }, [studentGrades]);
-
-    const totalAverage = useMemo(() => calculateAverage(studentGrades), [studentGrades]);
-    
-    return (
-        <Tabs defaultValue="prubezne" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="prubezne">Průběžné hodnocení</TabsTrigger>
-                <TabsTrigger value="predmet">Hodnocení v předmětu</TabsTrigger>
-            </TabsList>
-            <TabsContent value="prubezne">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>{hasRole('rodic') ? 'Průběžné známky dítěte' : 'Moje průběžné známky'}</CardTitle>
-                        <CardDescription>Celkový průměr: <span className="font-bold text-primary">{totalAverage}</span></CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Table>
-                            <TableHeader><TableRow><TableHead>Předmět</TableHead><TableHead className="text-center">Známka</TableHead><TableHead>Datum</TableHead><TableHead>Téma</TableHead></TableRow></TableHeader>
-                            <TableBody>
-                                {gradingsLoading ? <TableRow><TableCell colSpan={4} className="h-24 text-center">Načítání známek...</TableCell></TableRow>
-                                : studentGrades.length > 0 ? studentGrades.map((znamka, index) => (
-                                    <TableRow key={index}>
-                                        <TableCell className="font-medium">{znamka.subject}</TableCell>
-                                        <TableCell className="text-center font-bold text-lg">{znamka.grade}</TableCell>
-                                        <TableCell>{znamka.date.toDate ? format(znamka.date.toDate(), 'd. M. yyyy', { locale: cs }) : 'Neplatné datum'}</TableCell>
-                                        <TableCell className="text-muted-foreground">{znamka.topic || '-'}</TableCell>
-                                    </TableRow>
-                                )) : <TableRow><TableCell colSpan={4} className="h-24 text-center">Zatím nemáte žádné známky.</TableCell></TableRow>}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-            </TabsContent>
-            <TabsContent value="predmet">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Hodnocení podle předmětů</CardTitle>
-                        <CardDescription>Souhrnný přehled známek a průměrů v jednotlivých předmětech.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {gradingsLoading ? <p>Načítání...</p> : Object.keys(groupedGrades).length > 0 ? (
-                            Object.entries(groupedGrades).map(([subject, grades]) => (
-                                <Card key={subject} className="overflow-hidden">
-                                <CardHeader className="flex flex-row items-center justify-between bg-muted/50 p-4">
-                                    <CardTitle className="text-lg">{subject}</CardTitle>
-                                    <Badge>Průměr: {calculateAverage(grades)}</Badge>
-                                </CardHeader>
-                                <CardContent className="p-4"><div className="flex flex-wrap gap-2">{grades.map((g, index) => <Badge key={index} variant="secondary" className="text-base">{g.grade}</Badge>)}</div></CardContent>
-                                </Card>
-                            ))
-                        ) : <p className="text-center text-muted-foreground py-10">Žádná data k zobrazení.</p>}
-                    </CardContent>
-                </Card>
-            </TabsContent>
-        </Tabs>
-    );
-}
-
-// --- Teacher Specific Components & Logic ---
-
-type EditableGrade = {
-    gradingId: string;
-    studentId: string;
-    studentName: string;
-    predmet: string;
-    hodnota: string;
-    datum: Timestamp;
-    tema?: string;
-    slovniHodnoceni?: string;
-}
-
-function TeacherView() {
-    const { user, loading: userLoading } = useAuth();
-    const firestore = useFirestore();
-
-    const teacherGradingsQuery = useMemoFirebase(() => {
-        if (!firestore || !user) return null;
-        return query(collection(firestore, 'gradings'), where('ucitelId', '==', user.id), orderBy('datum', 'desc'));
-    }, [firestore, user]);
-
-    const { data: gradings, isLoading: gradingsLoading } = useCollection<Grading>(teacherGradingsQuery);
-
-    const allStudentIds = useMemo(() => {
-        if (!gradings) return [];
-        const ids = new Set<string>();
-        gradings.forEach(g => g.znamky.forEach(z => ids.add(z.studentId)));
-        return Array.from(ids);
-    }, [gradings]);
-    
-    // Firestore 'in' query supports max 30 elements. Chunking is needed for larger sets.
-    const studentUsersQuery = useMemoFirebase(() => {
-        if (!firestore || allStudentIds.length === 0) return null;
-        const chunks: string[][] = [];
-        for (let i = 0; i < allStudentIds.length; i += 30) {
-            chunks.push(allStudentIds.slice(i, i + 30));
+    const monthlyAverages = gradings.reduce((acc, grade) => {
+        const month = format((grade.datum as Timestamp).toDate(), 'yyyy-MM');
+        if (!acc[month]) {
+            acc[month] = { grades: [] };
         }
-        // For simplicity, we'll only use the first chunk. A real app would need to handle multiple queries.
-        if (chunks.length > 0) {
-            return query(collection(firestore, 'users'), where('__name__', 'in', chunks[0]));
-        }
-        return null;
-    }, [firestore, allStudentIds]);
+        acc[month].grades.push(grade);
+        return acc;
+    }, {} as { [key: string]: { grades: Grading[] } });
 
-    const { data: studentUsers, isLoading: usersLoading } = useCollection<User>(studentUsersQuery);
-    
-    const flatGrades = useMemo(() => {
-        if (!gradings || !studentUsers) return [];
-        const studentMap = new Map(studentUsers.map(u => [u.id, u.name]));
-        const grades: EditableGrade[] = [];
-        gradings.forEach(grading => {
-            grading.znamky.forEach(znamka => {
-                grades.push({
-                    gradingId: grading.id,
-                    studentId: znamka.studentId,
-                    studentName: studentMap.get(znamka.studentId) || 'Neznámý žák',
-                    predmet: grading.predmetNazev,
-                    hodnota: znamka.znamka,
-                    datum: grading.datum,
-                    tema: grading.tema,
-                    slovniHodnoceni: znamka.slovniHodnoceni
-                });
-            });
-        });
-        return grades.sort((a,b) => b.datum.toMillis() - a.datum.toMillis());
-    }, [gradings, studentUsers]);
+    return Object.entries(monthlyAverages)
+        .map(([month, data]) => ({
+            month: format(new Date(month), "MMM", { locale: cs }),
+            prumer: parseFloat(calculateWeightedAverage(data.grades)),
+        }))
+        .sort((a, b) => a.month.localeCompare(b.month));
+  }, [gradings]);
+  
+  const chartConfig = {
+    prumer: {
+      label: "Průměr",
+      color: "hsl(var(--primary))",
+    },
+  } satisfies ChartConfig;
 
-    const isLoading = userLoading || gradingsLoading || usersLoading;
 
-    return (
+  return (
+    <Tabs defaultValue="prubezne" className="w-full">
+      <TabsList className="grid w-full grid-cols-2">
+        <TabsTrigger value="prubezne">Průběžné hodnocení</TabsTrigger>
+        <TabsTrigger value="predmet">Hodnocení v předmětu</TabsTrigger>
+      </TabsList>
+      <TabsContent value="prubezne">
         <Card>
-            <CardHeader className="flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Přehled zadaného hodnocení</CardTitle>
-                  <CardDescription>Chronologický seznam všech známek, které jste zadali.</CardDescription>
-                </div>
-                <Button asChild>
-                    <Link href="/dashboard/hodnoceni/nove">
-                      <Edit className="mr-2 h-4 w-4" />
-                      Zadat nové hodnocení
-                    </Link>
-                </Button>
+          <CardHeader>
+            <CardTitle>Průběžné známky</CardTitle>
+            <CardDescription>Chronologický přehled všech vašich známek.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader><TableRow><TableHead>Předmět</TableHead><TableHead className="text-center">Známka</TableHead><TableHead className="text-center">Váha</TableHead><TableHead>Datum</TableHead><TableHead>Komentář</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {isLoading ? <TableRow><TableCell colSpan={5} className="h-24 text-center">Načítání známek...</TableCell></TableRow>
+                  : gradings.length > 0 ? gradings.map((grade) => (
+                    <TableRow key={grade.id}>
+                      <TableCell className="font-medium">{grade.predmet}</TableCell>
+                      <TableCell className="text-center font-bold text-lg">{grade.znamka}</TableCell>
+                      <TableCell className="text-center">{grade.vaha}</TableCell>
+                      <TableCell>{format((grade.datum as Timestamp).toDate(), 'd. M. yyyy')}</TableCell>
+                      <TableCell className="text-muted-foreground">{grade.komentar || '-'}</TableCell>
+                    </TableRow>
+                  )) : <TableRow><TableCell colSpan={5} className="h-24 text-center">Zatím nemáte žádné známky.</TableCell></TableRow>}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </TabsContent>
+      <TabsContent value="predmet" className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Průměry podle měsíců</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={chartConfig} className="h-[250px] w-full">
+                <BarChart accessibilityLayer data={chartData}>
+                    <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} />
+                    <YAxis domain={[1, 5]} reversed={true} tickFormatter={(value) => value.toFixed(1)} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="prumer" fill="var(--color-prumer)" radius={4} />
+                </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+        {subjectSummaries.map(subject => (
+          <Card key={subject.name}>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-lg">{subject.name}</CardTitle>
+              <Badge>Průměr: {subject.average}</Badge>
             </CardHeader>
             <CardContent>
-                <Table>
-                    <TableHeader><TableRow><TableHead>Žák</TableHead><TableHead>Předmět</TableHead><TableHead className="text-center">Známka</TableHead><TableHead>Datum</TableHead><TableHead>Téma</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                        {isLoading && <TableRow><TableCell colSpan={5} className="h-24 text-center">Načítání hodnocení...</TableCell></TableRow>}
-                        {!isLoading && flatGrades.length > 0 ? (
-                            flatGrades.map((grade, index) => (
-                                <TableRow key={`${grade.gradingId}-${grade.studentId}-${index}`}>
-                                    <TableCell className="font-medium">{grade.studentName}</TableCell>
-                                    <TableCell>{grade.predmet}</TableCell>
-                                    <TableCell className="text-center font-bold">{grade.hodnota}</TableCell>
-                                    <TableCell>{grade.datum.toDate ? format(grade.datum.toDate(), 'd. M. yyyy', { locale: cs }) : 'N/A'}</TableCell>
-                                    <TableCell>{grade.tema || '-'}</TableCell>
-                                </TableRow>
-                            ))
-                        ) : !isLoading && <TableRow><TableCell colSpan={5} className="h-24 text-center">Nezadali jste žádné hodnocení.</TableCell></TableRow>}
-                    </TableBody>
-                </Table>
+              <div className="flex flex-wrap gap-2">
+                {subject.grades.map(g => (
+                  <TooltipProvider key={g.id}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="secondary" className="text-base cursor-default">{g.znamka} <span className="text-xs ml-1 opacity-70">(x{g.vaha})</span></Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{format((g.datum as Timestamp).toDate(), 'd. M. yyyy')}</p>
+                        {g.komentar && <p>{g.komentar}</p>}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ))}
+              </div>
             </CardContent>
-        </Card>
-    );
+          </Card>
+        ))}
+      </TabsContent>
+    </Tabs>
+  );
 }
+
 
 // --- Main Page Component ---
 
 export default function HodnoceniPage() {
-    const { user, hasRole, loading } = useAuth();
-    const [studentId, setStudentId] = useState<string | null>(null);
+  const { user, hasRole, loading: authLoading } = useAuth();
+  const firestore = useFirestore();
 
-    useEffect(() => {
-        if (user) {
-            if (hasRole('ziak')) setStudentId(user.id);
-            else if (hasRole('rodic') && user.studentId) setStudentId(user.studentId);
-        }
-    }, [user, hasRole]);
-    
-    if (loading) {
-        return <div className="flex h-full items-center justify-center">Načítání...</div>;
-    }
-    
-    return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight">Hodnocení</h1>
-                <p className="text-muted-foreground">Přehled vašeho studijního prospěchu a správa hodnocení.</p>
-            </div>
-            
-            {hasRole('ucitel') && <TeacherView />}
-            {(hasRole('ziak') || hasRole('rodic')) && studentId && <StudentParentView studentId={studentId} />}
-        </div>
-    );
+  // Data for teacher view
+  const { data: allUsers, isLoading: usersLoading } = useCollection<User>(useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]));
+  const { data: allSubjects, isLoading: subjectsLoading } = useCollection<Predmet>(useMemoFirebase(() => firestore ? collection(firestore, 'predmety') : null, [firestore]));
+  const teacherGradingsQuery = useMemoFirebase(() => {
+    if (!firestore || !user || !hasRole('ucitel')) return null;
+    return query(collection(firestore, 'gradings'), where('ucitelId', '==', user.id), orderBy('datum', 'desc'));
+  }, [firestore, user, hasRole]);
+  const { data: teacherGradings, isLoading: teacherGradingsLoading } = useCollection<Grading>(teacherGradingsQuery);
+
+  // Data for student/parent view
+  const studentId = useMemo(() => hasRole('ziak') ? user?.id : user?.studentId, [hasRole, user]);
+  const studentGradingsQuery = useMemoFirebase(() => {
+    if (!firestore || !studentId) return null;
+    return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId), orderBy('datum', 'desc'));
+  }, [firestore, studentId]);
+  const { data: studentGradings, isLoading: studentGradingsLoading } = useCollection<Grading>(studentGradingsQuery);
+  
+  const isLoading = authLoading || usersLoading || subjectsLoading || teacherGradingsLoading || studentGradingsLoading;
+  
+  if (isLoading) {
+    return <div className="flex h-full items-center justify-center">Načítání...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Klasifikace</h1>
+        <p className="text-muted-foreground">Přehled vašeho studijního prospěchu a správa hodnocení.</p>
+      </div>
+
+      {hasRole('ucitel') && user && (
+        <TeacherView
+          user={user}
+          students={allUsers?.filter(u => u.roles.includes('ziak')) || []}
+          subjects={allSubjects || []}
+          gradings={teacherGradings || []}
+          isLoading={teacherGradingsLoading || usersLoading || subjectsLoading}
+        />
+      )}
+
+      {(hasRole('ziak') || hasRole('rodic')) && studentId && (
+        <StudentParentView
+          studentId={studentId}
+          gradings={studentGradings || []}
+          isLoading={studentGradingsLoading}
+        />
+      )}
+    </div>
+  );
 }
+
+    

@@ -23,7 +23,7 @@ const mainNavLinks = [
 ];
 
 const studentParentLinks = [
-    { name: 'Hodnocení', href: '/dashboard/hodnoceni', icon: PencilRuler },
+    { name: 'Klasifikace', href: '/dashboard/hodnoceni', icon: PencilRuler },
     { name: 'Domácí úkoly', href: '/dashboard/ukoly', icon: Backpack },
     { name: 'Omluvenky', href: '/dashboard/omluvenky', icon: ClipboardCheck },
 ];
@@ -34,7 +34,7 @@ const adminNavLinks = [
 
 const teacherNavLinks = [
     { name: "Rozvrhy a suplování", href: "/dashboard/rozvrhy-suplovani", icon: Replace },
-    { name: "Hodnocení", href: "/dashboard/hodnoceni", icon: PencilRuler },
+    { name: "Klasifikace", href: "/dashboard/hodnoceni", icon: PencilRuler },
     { name: 'Domácí úkoly', href: '/dashboard/ukoly', icon: Backpack },
     { name: 'Omluvenky', href: '/dashboard/omluvenky', icon: ClipboardCheck },
 ]
@@ -207,3 +207,5 @@ export default function DashboardLayout({
     </div>
   );
 }
+
+    
