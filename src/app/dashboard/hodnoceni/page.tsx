@@ -47,7 +47,7 @@ export default function HodnoceniPage() {
     if (!firestore || !studentId) return null;
     return query(
         collection(firestore, 'gradings'), 
-        where('znamky', 'array-contains', { studentId: studentId })
+        where('znamky.studentId', '==', studentId)
     );
   }, [firestore, studentId]);
 
@@ -206,5 +206,3 @@ export default function HodnoceniPage() {
     </div>
   );
 }
-
-    

@@ -46,11 +46,9 @@ service cloud.firestore {
     
     match /gradings/{gradingId} {
       allow get: if isAuthenticated();
-      // Allow teacher to list grades they created
-      allow list: if hasAnyRole(['ucitel', 'administrator']) && request.query.where.ucitelId == request.auth.uid;
-      // Allow students/parents to list grades where they are included
-      allow list: if (hasAnyRole(['ziak', 'rodic'])) && request.query.where.znamky.studentId == request.auth.uid;
-      
+      allow list: if hasAnyRole(['ucitel', 'administrator']) || 
+                     (hasAnyRole(['ziak', 'rodic']) && request.query.filters[0].value == request.auth.uid);
+
       allow create: if hasAnyRole(['ucitel', 'administrator']);
       allow update, delete: if resource.data.ucitelId == request.auth.uid || isAdmin();
     }
@@ -135,5 +133,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
