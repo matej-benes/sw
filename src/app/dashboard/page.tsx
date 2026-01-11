@@ -201,6 +201,12 @@ export default function DashboardPage() {
     if (hasRole('rodic')) return studentData?.tridaId;
     return undefined;
   }, [hasRole, selectedClassId, user, studentData]);
+  
+  const studentId = useMemo(() => {
+    if (hasRole('ziak')) return user?.id;
+    if (hasRole('rodic')) return user?.studentId;
+    return undefined;
+  }, [hasRole, user]);
 
 
   // Logic to generate schedules from template if they don't exist
@@ -325,6 +331,7 @@ export default function DashboardPage() {
         substitutionsData={substitutionsData || []}
         isTeacher={hasRole('ucitel')}
         userId={user.id}
+        studentId={studentId}
         userClassId={targetClassId}
         days={weekDays}
       />

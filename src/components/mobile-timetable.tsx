@@ -1,11 +1,11 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { cn } from "@/lib/utils";
-import type { LessonBlock, Udalost, Rozvrh, Substitution, User, Predmet } from "@/lib/types";
+import type { LessonBlock, Udalost, Rozvrh, Substitution, User, Predmet, Grading } from "@/lib/types";
 import { format, getDay, isSameDay, parseISO } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
-import { Info, PlusCircle } from 'lucide-react';
+import { Info, PlusCircle, Award } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   DropdownMenu,
@@ -15,6 +15,8 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, where } from 'firebase/firestore';
 
 
 const dayNames = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
@@ -29,6 +31,7 @@ interface MobileTimetableProps {
     substitutionsData: Substitution[];
     isTeacher: boolean;
     userId: string;
+    studentId?: string; // Add studentId for fetching grades
     userClassId?: string;
     days: Date[];
 }
@@ -77,6 +80,7 @@ export function MobileTimetable({
     substitutionsData,
     isTeacher,
     userId,
+    studentId,
     userClassId,
     days,
 }: MobileTimetableProps) {
@@ -84,8 +88,15 @@ export function MobileTimetable({
     const [selectedDate, setSelectedDate] = useState(today);
     const router = useRouter();
     const { toast } = useToast();
+    const firestore = useFirestore();
 
     const timeSlots = schedules[0]?.timeSlots || defaultTimeSlots;
+
+    const gradesQuery = useMemoFirebase(() => {
+        if (!firestore || !studentId) return null;
+        return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
+    }, [firestore, studentId]);
+    const { data: grades } = useCollection<Grading>(gradesQuery);
     
     const selectedDaySchedule = schedules.find(s => isSameDay(parseISO(s.datum), selectedDate));
     
@@ -178,28 +189,48 @@ export function MobileTimetable({
                         const lesson = item.type === 'substituted' ? item.substituted : item.lesson;
                         const originalLesson = item.type === 'substituted' ? item.original : null;
                         const dayInfo = { fullDate: selectedDate };
+
+                        const lessonGrades = grades?.filter(g => 
+                            g.predmet === lesson.subjectName && 
+                            g.datum === format(selectedDate, 'dd.MM.yyyy')
+                        ) || [];
                         
                         const lessonCard = (
                             <div 
                                 key={idx} 
-                                className={cn("flex gap-4 rounded-lg bg-card border p-3", originalLesson && "border-primary/50")}
+                                className={cn("rounded-lg bg-card border p-3", originalLesson && "border-primary/50")}
                                 onClick={() => handleLessonClick(item, selectedDaySchedule.tridaId)}
                             >
-                                <div className="text-center w-12 flex-shrink-0">
-                                    <p className="font-bold text-lg">{item.period + 1}</p>
-                                    <p className="text-xs text-muted-foreground">{timeRange?.split('-')[0]}</p>
-                                </div>
-                                <div className="flex-grow">
-                                    <p className="font-semibold">{lesson.subjectName}</p>
-                                    <p className="text-sm text-muted-foreground">
-                                        {lesson.className}
-                                    </p>
-                                    {originalLesson && (
-                                    <p className="text-xs text-primary/80 line-through">
-                                            Původně: {originalLesson.subjectShortcut} s {originalLesson.teacherName}
+                                <div className="flex gap-4">
+                                    <div className="text-center w-12 flex-shrink-0">
+                                        <p className="font-bold text-lg">{item.period + 1}</p>
+                                        <p className="text-xs text-muted-foreground">{timeRange?.split('-')[0]}</p>
+                                    </div>
+                                    <div className="flex-grow">
+                                        <p className="font-semibold">{lesson.subjectName}</p>
+                                        <p className="text-sm text-muted-foreground">
+                                            {lesson.className}
                                         </p>
-                                    )}
+                                        {originalLesson && (
+                                        <p className="text-xs text-primary/80 line-through">
+                                                Původně: {originalLesson.subjectShortcut} s {originalLesson.teacherName}
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
+                                {lessonGrades.length > 0 && (
+                                    <div className="mt-2 pt-2 border-t flex items-center gap-3">
+                                        <Award className="h-4 w-4 text-primary" />
+                                        <div className="flex flex-wrap gap-2">
+                                            {lessonGrades.map((grade, gIdx) => (
+                                                <div key={gIdx} className="flex items-baseline">
+                                                    <span className="font-bold text-primary text-lg">{grade.znamka}</span>
+                                                    <span className="text-xs text-muted-foreground ml-0.5">({grade.vaha})</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         );
 

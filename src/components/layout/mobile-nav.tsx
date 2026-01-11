@@ -15,6 +15,7 @@ import {
   SheetClose
 } from "@/components/ui/sheet"
 import { Button } from '../ui/button';
+import { useAuth } from '@/hooks/use-auth';
 
 const mainNavItems = [
     { href: '/dashboard', icon: CalendarDays, label: 'Rozvrh' },
@@ -30,16 +31,24 @@ const userMenuItems = [
 const appMenuItems = [
     { href: '/dashboard/ukoly', icon: Backpack, label: 'Domácí úkoly' },
     { href: '/dashboard/omluvenky', icon: ClipboardCheck, label: 'Omluvenky' },
+    { href: '/dashboard/hodnoceni', icon: PencilRuler, label: 'Klasifikace' },
 ]
 
 export function MobileNav() {
     const pathname = usePathname();
     const { unreadCount } = useUnreadMessages();
+    const { hasRole } = useAuth();
+    const isStudentOrParent = hasRole('ziak') || hasRole('rodic');
+
+    const navItems = [
+        ...mainNavItems,
+        ...(isStudentOrParent ? [{ href: '/dashboard/hodnoceni', icon: PencilRuler, label: 'Klasifikace' }] : []),
+    ];
 
     return (
         <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur-sm md:hidden">
-            <nav className="grid h-16 grid-cols-4 items-center justify-around">
-                {mainNavItems.map(item => {
+            <nav className="grid h-16 grid-cols-5 items-center justify-around">
+                {navItems.map(item => {
                     const isActive = pathname === item.href;
                     const isMessages = item.label === 'Zprávy';
                     return (
