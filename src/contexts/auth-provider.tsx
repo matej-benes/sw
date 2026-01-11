@@ -5,9 +5,10 @@ import { useRouter, usePathname } from 'next/navigation';
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useFirestore, useActiveOrganization } from '@/firebase';
 import { getAuth, signInWithEmailAndPassword, signOut as firebaseSignOut, onIdTokenChanged, type User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import { toast } from '@/hooks/use-toast';
+import { parseISO, isPast } from 'date-fns';
 
 type StoredUser = {
   uid: string;
@@ -100,9 +101,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const orgDocRef = doc(firestore, 'organizations', activeOrganizationId);
                 const orgDocSnap = await getDoc(orgDocRef);
                 if (orgDocSnap.exists()) {
-                    const orgData = { id: orgDocSnap.id, ...orgDocSnap.data() } as Organization
+                    const orgData = { id: orgDocSnap.id, ...orgDocSnap.data() } as Organization;
+                    
+                    let isExpired = orgData.status === 'expired';
+                    // Automatically set to expired if trial date has passed
+                    if (orgData.status === 'trial' && orgData.trialEndDate && isPast(parseISO(orgData.trialEndDate))) {
+                        isExpired = true;
+                        if (orgData.status !== 'expired') {
+                           try {
+                             await updateDoc(orgDocRef, { status: 'expired' });
+                             orgData.status = 'expired';
+                             toast({
+                                 title: 'Zkušební verze vypršela',
+                                 description: `Zkušební období pro organizaci "${orgData.name}" skončilo.`
+                             });
+                           } catch (error) {
+                               console.error("Failed to update organization status to expired:", error);
+                           }
+                        }
+                    }
+
                     setActiveOrganization(orgData);
-                    setIsTrialExpired(orgData.status === 'expired');
+                    setIsTrialExpired(isExpired);
                 } else {
                     setActiveOrganization(null);
                     setIsTrialExpired(false);
@@ -117,7 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
     updateActiveOrganization();
-  }, [user, activeOrganizationId, firestore]);
+  }, [user, activeOrganizationId, firestore, toast]);
 
   const signIn = async (email: string, pass: string): Promise<void> => {
     setLoading(true);
