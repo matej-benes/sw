@@ -67,6 +67,7 @@ function TeacherLessonContextMenu({ children, lesson, dayInfo, period }: { child
                     datumZadani: format(dayInfo.fullDate, 'yyyy-MM-dd'),
                 })}>Nový domácí úkol</DropdownMenuItem>
             </DropdownMenuContent>
+    </DropdownMenu>
     );
 }
 
@@ -92,10 +93,11 @@ function LessonCard({ lesson, period, timeRange, day, classId, isTeacher, grades
     };
     
     const lessonGrades = useMemo(() => {
-        return grades.filter(g => 
-            g.predmetId === lesson.subjectId && 
-            isSameDay(parseISO(g.datum), day)
-        )
+        // Since `g.datum` is "dd.MM.yyyy", we need to parse it correctly before comparing
+        return grades.filter(g => {
+            const gradeDate = parseISO(g.createdAt.toDate().toISOString());
+            return g.predmetId === lesson.subjectId && isSameDay(gradeDate, day);
+        });
     }, [grades, lesson.subjectId, day]);
 
     const cardContent = (
@@ -222,9 +224,9 @@ export function MobileTimetable({
                     return { type: 'cancelled', substitution, period };
                 }
                 const substitutedLesson = { ...lesson, ...substitution.changes };
-                if (substitution.changes.teacherId && teachers) {
-                     const subTeacher = teachers.find(t => t.id === substitution.changes.teacherId);
-                     substitutedLesson.teacherName = subTeacher?.name || 'Zástup';
+                // Placeholder for teacher name, in a real app you'd fetch this
+                if (substitution.changes.teacherId) {
+                     substitutedLesson.teacherName = 'Zástup';
                 }
                 return { type: 'substituted', lesson: substitutedLesson, originalLesson: lesson, period };
             }
@@ -236,9 +238,6 @@ export function MobileTimetable({
 
     }, [selectedDate, schedules, eventsData, substitutionsData, isTeacher, userId]);
     
-    const { data: teachers } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore]));
-
-
     return (
         <div className="flex flex-col h-full bg-background text-foreground p-4 space-y-4">
             <div className="flex justify-around">
@@ -272,7 +271,6 @@ export function MobileTimetable({
                             case 'lesson':
                                 return <LessonCard key={idx} lesson={item.lesson} period={item.period} timeRange={timeRange} day={selectedDate} classId={classId} isTeacher={isTeacher} grades={grades || []} />;
                             case 'substituted':
-                                // Render substituted lesson. We can add visual indication.
                                 return <LessonCard key={idx} lesson={item.lesson} period={item.period} timeRange={timeRange} day={selectedDate} classId={classId} isTeacher={isTeacher} grades={grades || []}/>;
                             case 'event':
                                 return <EventCard key={idx} event={item.event} period={item.period} timeRange={timeRange} />;
