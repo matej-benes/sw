@@ -1,7 +1,6 @@
 'use client';
 import { Logo } from "@/components/logo";
 import { UserNav } from "@/components/layout/user-nav";
-import { PwaInstallButton } from "@/components/pwa-install-button";
 import Link from "next/link";
 
 export function MobileHeader() {
@@ -12,7 +11,7 @@ export function MobileHeader() {
             </Link>
 
             <div className="w-full flex-1">
-                <PwaInstallButton />
+                
             </div>
             
             <UserNav />

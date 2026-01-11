@@ -11,7 +11,6 @@ import Link from 'next/link';
 import { useUnreadMessages } from '@/hooks/use-unread-messages';
 import { usePageTitleUpdater } from '@/hooks/usePageTitleUpdater';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
-import { PwaInstallButton } from '@/components/pwa-install-button';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { MobileLayout } from '@/components/layout/mobile-layout';
 
@@ -51,7 +50,7 @@ export default function DashboardLayout({
       <div className="flex flex-col">
         <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
           <div className="w-full flex-1">
-             <PwaInstallButton />
+             
           </div>
           <UserNav />
         </header>

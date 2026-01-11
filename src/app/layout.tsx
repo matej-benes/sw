@@ -10,7 +10,6 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 export const metadata: Metadata = {
   title: 'ŠkolaWeb',
   description: 'Informační systém pro český školní systém',
-  manifest: '/manifest.webmanifest',
   icons: {
     apple: '/icons/icon-192x192.png',
   },
