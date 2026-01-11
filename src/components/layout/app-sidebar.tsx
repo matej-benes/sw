@@ -112,7 +112,7 @@ export function AppSidebar() {
         </div>
         <div className="flex-1 overflow-y-auto">
             <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
-                 {renderNavLinks(mainNavLinks)}
+                 {!superAdmin && renderNavLinks(mainNavLinks)}
                  {isParentOrStudent && !superAdmin && (
                     <>
                         <div className='my-2'></div>
@@ -162,5 +162,3 @@ export function AppSidebar() {
     </div>
   );
 }
-
-    
