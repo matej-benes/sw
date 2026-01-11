@@ -23,6 +23,7 @@ import {
     Home,
     UserCheck,
     Building,
+    CalendarDays,
 } from 'lucide-react';
 
 const mainNavLinks = [
@@ -58,6 +59,11 @@ const spravaSystemuLinks = [
      { name: "Předměty", href: "/dashboard/sprava-systemu/predmety", icon: Book },
      { name: "Učebny", href: "/dashboard/sprava-systemu/ucebny", icon: Home },
      { name: "Zápisy do 1. ročníku", href: "/dashboard/zapisy", icon: UserCheck },
+]
+
+const interestGroupLinks = [
+    { name: "Schůzky", href: "/dashboard/schuzky", icon: CalendarDays },
+    { name: "Rozvrhy a suplování", href: "/dashboard/rozvrhy-suplovani", icon: Replace },
 ]
 
 export function AppSidebar() {
@@ -131,7 +137,7 @@ export function AppSidebar() {
                  {(isTeacher) && !superAdmin && (
                     <>
                         <div className='my-2'></div>
-                        {isSchool ? renderNavLinks(teacherNavLinks) : renderNavLinks(teacherNavLinks.filter(l => l.name === 'Rozvrhy a suplování'))}
+                        {isSchool ? renderNavLinks(teacherNavLinks) : renderNavLinks(interestGroupLinks)}
                         
                         {isSchool && (
                             <Accordion type="single" collapsible className="w-full" defaultValue={pathname.includes('/dashboard/tisk') ? 'tiskove-vystupy' : undefined}>

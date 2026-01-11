@@ -258,3 +258,14 @@ export interface ZapisDoPrvniTridy {
     datumPodani: string; // YYYY-MM-DD HH:MM
     status: 'Podáno' | 'Přijato' | 'Nepřijato' | 'Odklad';
 }
+
+export interface ZaznamSchuzky {
+    id: string;
+    organizationId: string;
+    datum: string; // YYYY-MM-DD
+    cas: string; // HH:MM
+    topic: string;
+    notes?: string;
+    createdBy: string;
+    createdAt: Timestamp;
+}

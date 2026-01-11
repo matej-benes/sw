@@ -230,6 +230,21 @@
         },
         "required": ["id", "organizationId", "jmenoDitete", "datumNarozeniDitete", "jmenoZastupce", "emailZastupce", "datumPodani", "status"]
     },
+    "ZaznamSchuzky": {
+      "title": "ZaznamSchuzky",
+      "type": "object",
+      "description": "Represents a meeting record for an interest group.",
+      "properties": {
+        "id": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "datum": { "type": "string", "format": "date" },
+        "cas": { "type": "string", "format": "time" },
+        "topic": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["id", "organizationId", "datum", "cas", "topic", "createdBy"]
+    },
     "LessonBlock": { "type": "object" },
     "StorableDay": { "type": "object" },
     "Substitution": { "type": "object" },
@@ -254,7 +269,8 @@
       { "path": "/zapisyHodin/{zapisId}", "definition": { "schema": { "$ref": "#/backend/entities/ZapisHodiny" } } },
       { "path": "/omluvenky/{omluvenkaId}", "definition": { "schema": { "$ref": "#/backend/entities/Omluvenka" } } },
       { "path": "/ukoly/{ukolId}", "definition": { "schema": { "$ref": "#/backend/entities/DomaciUkol" } } },
-      { "path": "/zapisy/{zapisId}", "definition": { "schema": { "$ref": "#/backend/entities/ZapisDoPrvniTridy" } } }
+      { "path": "/zapisy/{zapisId}", "definition": { "schema": { "$ref": "#/backend/entities/ZapisDoPrvniTridy" } } },
+      { "path": "/zaznamy-schuzek/{zaznamId}", "definition": { "schema": { "$ref": "#/backend/entities/ZaznamSchuzky" } } }
     ]
   }
 }
