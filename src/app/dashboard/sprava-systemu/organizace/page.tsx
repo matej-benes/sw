@@ -59,7 +59,7 @@ const orgSchema = z.object({
   name: z.string().min(1, 'Název je povinný'),
   status: z.enum(['trial', 'active', 'expired']),
   type: z.enum(['skola', 'zajmova_skupina']),
-  trialEndDate: z.date().optional(),
+  trialEndDate: z.date().optional().nullable(),
   registrationPin: z.string().optional().nullable(),
 });
 
@@ -87,7 +87,7 @@ function OrgForm({
       name: org?.name || '',
       status: org?.status || 'trial',
       type: org?.type || 'skola',
-      trialEndDate: org?.trialEndDate ? new Date(org.trialEndDate) : undefined,
+      trialEndDate: org?.trialEndDate ? new Date(org.trialEndDate) : null,
       registrationPin: org?.registrationPin || null,
     },
   });
@@ -162,7 +162,7 @@ function OrgForm({
                         {field.value ? format(field.value, 'PPP', {locale: cs}) : <span>Vyberte datum</span>}
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={field.value} onSelect={field.onChange} /></PopoverContent>
+                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={field.value || undefined} onSelect={field.onChange} /></PopoverContent>
             </Popover>
             )}
         />
@@ -207,15 +207,23 @@ function AdminOrgManagement() {
     
     if (editingOrg) {
       const orgRef = doc(firestore, 'organizations', editingOrg.id);
-      updateDocumentNonBlocking(orgRef, formData);
+       const dataToSave = { ...formData };
+        if (dataToSave.trialEndDate === undefined) {
+            delete dataToSave.trialEndDate;
+        }
+      updateDocumentNonBlocking(orgRef, dataToSave);
       toast({
         title: 'Organizace uložena',
       });
     } else {
-      addDocumentNonBlocking(collection(firestore, 'organizations'), {
+        const dataToSave = {
           ...formData,
-          ownerId: user.id // Super admin becomes the owner for now
-      });
+          ownerId: user.id
+        };
+        if (dataToSave.trialEndDate === undefined) {
+            delete dataToSave.trialEndDate;
+        }
+      addDocumentNonBlocking(collection(firestore, 'organizations'), dataToSave);
       toast({
         title: 'Organizace přidána',
       });
