@@ -403,37 +403,17 @@ function TeacherView() {
 function StudentParentView() {
     const { user, hasRole } = useAuth();
     const firestore = useFirestore();
-    const {toast} = useToast();
     const router = useRouter();
-    
-    const [gradings, setGradings] = useState<Grading[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
 
     const studentId = hasRole('ziak') ? user?.id : user?.studentId;
 
-    useEffect(() => {
-        if (!studentId || !firestore) {
-            setIsLoading(false);
-            return;
-        }
+    const gradingsQuery = useMemoFirebase(() => {
+        if (!firestore || !studentId) return null;
+        // This query is safe for security rules
+        return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
+    }, [firestore, studentId]);
 
-        const getGradings = async () => {
-            setIsLoading(true);
-            try {
-                const q = query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
-                const querySnapshot = await getDocs(q);
-                const fetchedGradings = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Grading));
-                setGradings(fetchedGradings);
-            } catch (error) {
-                console.error("Firestore Error:", error);
-                toast({variant: 'destructive', title: 'Chyba oprávnění', description: 'Nepodařilo se načíst hodnocení.'})
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        getGradings();
-    }, [studentId, firestore, toast]);
+    const { data: gradings, isLoading } = useCollection<Grading>(gradingsQuery);
 
 
     const gradesBySubject = useMemo(() => {

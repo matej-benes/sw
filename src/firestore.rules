@@ -33,11 +33,11 @@ service cloud.firestore {
     }
     
     match /gradings/{gradingId} {
-      // Student/Parent can only GET their own specific grade.
-      // They CANNOT list all grades to prevent the permission error.
       allow get: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
-      // Teacher/Admin can list grades.
-      allow list: if hasAnyRole(['ucitel', 'administrator']);
+      // Allow list only for teachers/admins OR if the query is specifically filtering by the student's own ID.
+      allow list: if hasAnyRole(['ucitel', 'administrator']) || 
+                  (isAuthenticated() && request.query.where[0][0] == 'ziakId' && request.query.where[0][2] == request.auth.uid) ||
+                  (isAuthenticated() && hasRole('rodic') && request.query.where[0][0] == 'ziakId' && request.query.where[0][2] == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentId);
       allow create: if hasAnyRole(['ucitel', 'administrator']);
       allow update, delete: if hasAnyRole(['ucitel', 'administrator']) && resource.data.ucitelId == request.auth.uid;
     }
