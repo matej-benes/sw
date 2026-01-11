@@ -410,7 +410,9 @@ function StudentParentView() {
     
     const gradingsQuery = useMemoFirebase(() => {
         if (!studentId || !firestore) return null;
-        return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
+        // This query now perfectly matches the security rule
+        const q = query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
+        return q;
     }, [studentId, firestore]);
 
     const { data: gradings, isLoading, error } = useCollection<Grading>(gradingsQuery);
