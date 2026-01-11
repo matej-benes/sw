@@ -17,6 +17,8 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, where } from 'firebase/firestore';
+import { useAuth } from '@/hooks/use-auth';
+
 
 const defaultTimeSlots = [
     "07:55-08:40", "08:55-09:40", "09:55-10:40", "10:45-11:30",
@@ -192,10 +194,14 @@ export function MobileTimetable({
     const [selectedDate, setSelectedDate] = useState(today);
     const firestore = useFirestore();
 
+    const { user, hasRole } = useAuth();
+    
+    const currentStudentId = hasRole('ziak') ? user?.id : user?.studentId;
+
     const gradesQuery = useMemoFirebase(() => {
-        if (!firestore || !studentId) return null;
-        return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
-    }, [firestore, studentId]);
+        if (!firestore || !currentStudentId) return null;
+        return query(collection(firestore, 'gradings'), where('ziakId', '==', currentStudentId));
+    }, [firestore, currentStudentId]);
     const { data: grades, isLoading: gradesLoading } = useCollection<Grading>(gradesQuery);
 
     const timetableForSelectedDay = useMemo(() => {

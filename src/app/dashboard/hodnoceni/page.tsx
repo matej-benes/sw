@@ -168,7 +168,7 @@ function TeacherView() {
                     predmet: predmet.name,
                     ucitelId: user.id,
                 };
-                await updateDocumentNonBlocking(doc(firestore, 'gradings', editingGrading.id), gradingData);
+                await updateDoc(doc(firestore, 'gradings', editingGrading.id), gradingData);
                 toast({ title: 'Hodnocení upraveno', description: 'Změny byly úspěšně uloženy.' });
             } else {
                 const batch = writeBatch(firestore);
@@ -204,7 +204,7 @@ function TeacherView() {
     const handleDeleteGrading = async () => {
         if (!deletingGrading || !firestore) return;
         try {
-            await deleteDocumentNonBlocking(doc(firestore, 'gradings', deletingGrading.id));
+            await deleteDoc(doc(firestore, 'gradings', deletingGrading.id));
             toast({ title: 'Hodnocení smazáno' });
             setDeletingGrading(null);
         } catch (error) {
@@ -401,19 +401,16 @@ function TeacherView() {
 }
 
 function StudentParentView() {
-    const { user } = useAuth();
+    const { user, hasRole } = useAuth();
     const firestore = useFirestore();
     const {toast} = useToast();
     const router = useRouter();
     
-    const studentId = user?.roles.includes('ziak') ? user.id : user?.studentId;
+    const studentId = hasRole('ziak') ? user?.id : user?.studentId;
     
     const gradingsQuery = useMemoFirebase(() => {
         if (!studentId || !firestore) return null;
-        return query(
-          collection(firestore, 'gradings'), 
-          where('ziakId', '==', studentId)
-        );
+        return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
     }, [studentId, firestore]);
 
     const { data: gradings, isLoading, error } = useCollection<Grading>(gradingsQuery);

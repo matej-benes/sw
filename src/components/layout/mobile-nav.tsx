@@ -10,11 +10,6 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose 
 import { Button } from '../ui/button';
 import { useAuth } from '@/hooks/use-auth';
 
-const mainNavItems = [
-    { href: '/dashboard', icon: CalendarDays, label: 'Rozvrh' },
-    { href: '/dashboard/zpravy', icon: MessageSquare, label: 'Zprávy' },
-];
-
 const userMenuItems = [
     { href: '/dashboard/profil', icon: User, label: 'Můj profil' },
     { href: '/dashboard/profil/prepnout', icon: Users, label: 'Přepnout účet' },
@@ -33,19 +28,15 @@ export function MobileNav() {
     const isStudentOrParent = hasRole('ziak') || hasRole('rodic');
     const isTeacher = hasRole('ucitel');
 
-
-    // Base navigation items for everyone
     let navItems = [
         { href: '/dashboard', icon: CalendarDays, label: 'Rozvrh' },
         { href: '/dashboard/zpravy', icon: MessageSquare, label: 'Zprávy' },
     ];
     
-    // Add role-specific items
     if (isStudentOrParent || isTeacher) {
         navItems.push({ href: '/dashboard/hodnoceni', icon: PencilRuler, label: 'Klasifikace' });
     }
 
-    // Add profile and menu triggers
     navItems.push({ href: '#profil', icon: User, label: 'Profil' });
     navItems.push({ href: '#menu', icon: LayoutGrid, label: 'Menu' });
 
