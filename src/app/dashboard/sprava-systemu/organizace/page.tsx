@@ -59,8 +59,7 @@ const orgSchema = z.object({
   name: z.string().min(1, 'Název je povinný'),
   status: z.enum(['trial', 'active', 'expired']),
   type: z.enum(['skola', 'zajmova_skupina']),
-  trialEndDate: z.date().optional().nullable(),
-  trialEndTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, { message: 'Neplatný formát času (HH:MM)' }).optional().nullable(),
+  trialEndDate: z.string().optional().nullable(),
   registrationPin: z.string().optional().nullable(),
 });
 
@@ -88,23 +87,15 @@ function OrgForm({
       name: org?.name || '',
       status: org?.status || 'trial',
       type: org?.type || 'skola',
-      trialEndDate: org?.trialEndDate ? new Date(org.trialEndDate) : null,
-      trialEndTime: org?.trialEndDate ? format(new Date(org.trialEndDate), 'HH:mm') : null,
+      trialEndDate: org?.trialEndDate || null,
       registrationPin: org?.registrationPin || null,
     },
   });
 
   const onSubmit = (data: OrgFormData) => {
-    let combinedDateTime: string | undefined = undefined;
-    if (data.trialEndDate) {
-      const datePart = format(data.trialEndDate, 'yyyy-MM-dd');
-      const timePart = data.trialEndTime || '00:00';
-      combinedDateTime = `${datePart}T${timePart}:00`;
-    }
-
     onSave({
       ...data,
-      trialEndDate: combinedDateTime,
+      trialEndDate: data.trialEndDate || undefined,
     });
     closeDialog();
   };
@@ -159,32 +150,8 @@ function OrgForm({
         />
       </div>
        <div className="space-y-1">
-        <Label>Konec zkušební verze</Label>
-        <div className="grid grid-cols-2 gap-2">
-            <Controller
-                name="trialEndDate"
-                control={control}
-                render={({ field }) => (
-                <Popover>
-                    <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-start text-left font-normal">
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {field.value ? format(field.value, 'PPP', {locale: cs}) : <span>Vyberte datum</span>}
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={field.value || undefined} onSelect={field.onChange} initialFocus /></PopoverContent>
-                </Popover>
-                )}
-            />
-             <Controller
-                name="trialEndTime"
-                control={control}
-                render={({ field }) => (
-                    <Input type="time" {...field} value={field.value || ''} />
-                )}
-            />
-        </div>
-        {errors.trialEndTime && <p className="text-sm text-destructive">{errors.trialEndTime.message}</p>}
+        <Label htmlFor="trialEndDate">Konec zkušební verze (YYYY-MM-DDTHH:mm:ss)</Label>
+        <Input id="trialEndDate" {...register('trialEndDate')} placeholder="např. 2024-12-31T23:59:00" />
       </div>
       <div className="space-y-2">
         <Label htmlFor="pin">Registrační PIN ředitele</Label>
