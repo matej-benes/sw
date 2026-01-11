@@ -411,7 +411,7 @@ function StudentParentView() {
     useEffect(() => {
         if (!studentId || !firestore) return;
         setIsLoading(true);
-        const q = query(collection(firestore, 'gradings'), where('ziakId', '==', studentId), orderBy('createdAt', 'desc'), limit(30));
+        const q = query(collection(firestore, 'gradings'), where('ziakId', '==', studentId), orderBy('createdAt', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Grading));
             setGradings(data);

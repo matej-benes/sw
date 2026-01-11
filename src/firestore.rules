@@ -42,19 +42,12 @@ service cloud.firestore {
       allow create: if isAdmin();
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
-
-      // This subcollection is now deprecated in favor of the top-level /gradings collection
-      // Rules are kept for legacy data but new data should not be written here.
-      match /znamky/{znamkaId} {
-         allow read: if false;
-         allow write: if false;
-      }
     }
     
     match /gradings/{gradingId} {
         allow get: if isAuthenticated() && (isAdmin() || hasAnyRole(['ucitel']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
-        // Teacher/admin can list all. Student/parent can only list their own with a limit.
-        allow list: if isAuthenticated() && (isAdmin() || hasAnyRole(['ucitel']) || (request.query.ziakId == request.auth.uid && request.query.limit <= 30) || (isMyStudent(request.query.ziakId) && request.query.limit <= 30));
+        // Teacher/admin can list all. Student/parent can only list their own.
+        allow list: if isAuthenticated() && (isAdmin() || hasAnyRole(['ucitel']) || request.query.ziakId == request.auth.uid || isMyStudent(request.query.ziakId));
         allow create: if hasAnyRole(['ucitel', 'administrator']);
         allow update, delete: if resource.data.ucitelId == request.auth.uid || isAdmin();
     }
