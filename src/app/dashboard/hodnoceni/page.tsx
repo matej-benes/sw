@@ -427,7 +427,8 @@ function StudentParentView() {
 
 
     const gradesBySubject = useMemo(() => {
-        return (gradings || []).reduce((acc, g) => {
+        if (!gradings) return {};
+        return gradings.reduce((acc, g) => {
             if (!acc[g.predmet]) {
                 acc[g.predmet] = [];
             }
@@ -435,6 +436,7 @@ function StudentParentView() {
             return acc;
         }, {} as Record<string, Grading[]>);
     }, [gradings]);
+    
 
     const subjectAverages = useMemo(() => {
         return Object.entries(gradesBySubject).map(([predmet, znamky]) => {
@@ -463,7 +465,12 @@ function StudentParentView() {
                 <CardContent>
                     {(gradings || []).length === 0 ? <p>Nemáte žádné známky.</p> : (
                         <ul className="space-y-3">
-                            {(gradings || []).sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()).map(g => (
+                            {(gradings || []).sort((a, b) => {
+                                if (a.createdAt && b.createdAt) {
+                                    return b.createdAt.toMillis() - a.createdAt.toMillis();
+                                }
+                                return 0;
+                            }).map(g => (
                                 <li key={g.id} className="flex justify-between items-center p-3 border rounded-lg cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/dashboard/hodnoceni/${g.id}`)}>
                                     <div>
                                         <p className="font-semibold">{g.predmet}</p>
