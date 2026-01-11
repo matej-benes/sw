@@ -11,12 +11,12 @@ import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
-import { MobileNav } from '@/components/layout/mobile-nav';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useUnreadMessages } from '@/hooks/use-unread-messages';
 import { Badge } from '@/components/ui/badge';
 import { usePageTitleUpdater } from '@/hooks/usePageTitleUpdater';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { MobileNavV2 } from '@/components/layout/mobile-nav-v2';
 
 const mainNavLinks = [
     { name: 'Komunikace', href: '/dashboard/zpravy', icon: MessageSquare },
@@ -202,7 +202,7 @@ export default function DashboardLayout({
         <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 bg-background">
             {children}
         </main>
-        {isMobile && <MobileNav />}
+        {isMobile && <MobileNavV2 />}
       </div>
     </div>
   );

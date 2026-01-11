@@ -54,9 +54,9 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { MobileTimetable } from '@/components/mobile-timetable';
 import { useUnreadMessages } from '@/hooks/use-unread-messages';
 import Link from 'next/link';
+import { MobileTimetableV2 } from '@/components/mobile-timetable-v2';
 
 
 export default function DashboardPage() {
@@ -325,7 +325,7 @@ export default function DashboardPage() {
   
   if (isMobile) {
     return (
-      <MobileTimetable 
+      <MobileTimetableV2 
         schedules={filteredSchedules}
         eventsData={eventsData || []}
         substitutionsData={substitutionsData || []}
