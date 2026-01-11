@@ -42,16 +42,17 @@ service cloud.firestore {
       allow create: if isAdmin();
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
-
-      // Gradings are now stored in a subcollection of the user who created them (the teacher)
-      match /gradings/{gradingId} {
-        allow read, write: if isOwner(userId) || isAdmin();
-      }
-
-      // This subcollection is now deprecated.
-      match /znamky/{znamkaId} {
-         allow read, write: if false;
-      }
+    }
+    
+    match /gradings/{gradingId} {
+      allow get: if isAuthenticated();
+      // Allow teacher to list grades they created
+      allow list: if hasAnyRole(['ucitel', 'administrator']) && request.query.where.ucitelId == request.auth.uid;
+      // Allow students/parents to list grades where they are included
+      allow list: if (hasAnyRole(['ziak', 'rodic'])) && request.query.where.znamky.studentId == request.auth.uid;
+      
+      allow create: if hasAnyRole(['ucitel', 'administrator']);
+      allow update, delete: if resource.data.ucitelId == request.auth.uid || isAdmin();
     }
     
     match /tridy/{tridaId} {
@@ -134,3 +135,5 @@ service cloud.firestore {
     }
   }
 }
+
+    

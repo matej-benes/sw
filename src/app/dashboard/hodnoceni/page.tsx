@@ -3,20 +3,29 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/hooks/use-auth';
-import type { Znamka } from '@/lib/types';
+import type { Znamka, Grading } from '@/lib/types';
 import { useEffect, useState, useMemo } from 'react';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, doc, orderBy } from 'firebase/firestore';
+import { collection, query, where, doc, orderBy, Timestamp } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 
-function calculateAverage(grades: Znamka[]) {
+interface StudentGrade {
+    subject: string;
+    grade: string;
+    date: Timestamp;
+    topic?: string;
+}
+
+function calculateAverage(grades: StudentGrade[]) {
     if (grades.length === 0) return '–';
-    const sum = grades.reduce((acc, g) => acc + g.hodnota, 0);
-    return (sum / grades.length).toFixed(2).replace('.', ',');
+    const numericGrades = grades.map(g => parseFloat(g.grade)).filter(g => !isNaN(g));
+    if (numericGrades.length === 0) return '–';
+    const sum = numericGrades.reduce((acc, g) => acc + g, 0);
+    return (sum / numericGrades.length).toFixed(2).replace('.', ',');
 }
 
 export default function HodnoceniPage() {
@@ -34,31 +43,54 @@ export default function HodnoceniPage() {
     }
   }, [user, hasRole]);
 
-  const znamkyQuery = useMemoFirebase(() => {
+  const gradingsQuery = useMemoFirebase(() => {
     if (!firestore || !studentId) return null;
-    return query(collection(firestore, 'users', studentId, 'znamky'), orderBy('datum', 'desc'));
+    return query(
+        collection(firestore, 'gradings'), 
+        where('znamky', 'array-contains', { studentId: studentId })
+    );
   }, [firestore, studentId]);
 
-  const { data: znamky, isLoading: znamkyLoading } = useCollection<Znamka>(znamkyQuery);
+  const { data: gradings, isLoading: gradingsLoading } = useCollection<Grading>(gradingsQuery);
+
+  const studentGrades = useMemo(() => {
+    if (!gradings || !studentId) return [];
+    
+    const grades: StudentGrade[] = [];
+    gradings.forEach(grading => {
+        const studentMark = grading.znamky.find(z => z.studentId === studentId);
+        if (studentMark) {
+            grades.push({
+                subject: grading.predmetNazev,
+                grade: studentMark.znamka,
+                date: grading.datum,
+                topic: grading.tema,
+            });
+        }
+    });
+    return grades.sort((a,b) => b.date.toMillis() - a.date.toMillis());
+
+  }, [gradings, studentId]);
+
 
   const groupedGrades = useMemo(() => {
-    if (!znamky) return {};
-    return znamky.reduce((acc, znamka) => {
-      const subject = znamka.predmet;
+    if (!studentGrades) return {};
+    return studentGrades.reduce((acc, znamka) => {
+      const subject = znamka.subject;
       if (!acc[subject]) {
         acc[subject] = [];
       }
       acc[subject].push(znamka);
       return acc;
-    }, {} as { [subject: string]: Znamka[] });
-  }, [znamky]);
+    }, {} as { [subject: string]: StudentGrade[] });
+  }, [studentGrades]);
 
-  const isLoading = loading || (!!studentId && znamkyLoading);
+  const isLoading = loading || (!!studentId && gradingsLoading);
   
   const totalAverage = useMemo(() => {
-    if (!znamky || znamky.length === 0) return 'N/A';
-    return calculateAverage(znamky);
-  }, [znamky]);
+    if (!studentGrades || studentGrades.length === 0) return 'N/A';
+    return calculateAverage(studentGrades);
+  }, [studentGrades]);
 
   const isStudentOrParent = hasRole('ziak') || hasRole('rodic');
   const isTeacher = hasRole('ucitel');
@@ -106,13 +138,13 @@ export default function HodnoceniPage() {
                             <TableBody>
                              {isLoading ? (
                                 <TableRow><TableCell colSpan={4} className="h-24 text-center">Načítání známek...</TableCell></TableRow>
-                             ) : znamky && znamky.length > 0 ? (
-                                znamky.map((znamka, index) => (
+                             ) : studentGrades && studentGrades.length > 0 ? (
+                                studentGrades.map((znamka, index) => (
                                 <TableRow key={index}>
-                                    <TableCell className="font-medium">{znamka.predmet}</TableCell>
-                                    <TableCell className="text-center font-bold text-lg">{znamka.hodnota}</TableCell>
-                                    <TableCell>{znamka.datum.toDate ? format(znamka.datum.toDate(), 'd. M. yyyy', { locale: cs }) : 'Neplatné datum'}</TableCell>
-                                    <TableCell className="text-muted-foreground">{znamka.tema || '-'}</TableCell>
+                                    <TableCell className="font-medium">{znamka.subject}</TableCell>
+                                    <TableCell className="text-center font-bold text-lg">{znamka.grade}</TableCell>
+                                    <TableCell>{znamka.date.toDate ? format(znamka.date.toDate(), 'd. M. yyyy', { locale: cs }) : 'Neplatné datum'}</TableCell>
+                                    <TableCell className="text-muted-foreground">{znamka.topic || '-'}</TableCell>
                                 </TableRow>
                                 ))
                             ) : (
@@ -144,7 +176,7 @@ export default function HodnoceniPage() {
                                     <CardContent className="p-4">
                                         <div className="flex flex-wrap gap-2">
                                             {grades.map((g, index) => (
-                                                <Badge key={index} variant="secondary" className="text-base">{g.hodnota}</Badge>
+                                                <Badge key={index} variant="secondary" className="text-base">{g.grade}</Badge>
                                             ))}
                                         </div>
                                     </CardContent>
@@ -174,3 +206,5 @@ export default function HodnoceniPage() {
     </div>
   );
 }
+
+    
