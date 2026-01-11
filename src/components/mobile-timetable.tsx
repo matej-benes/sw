@@ -2,10 +2,10 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { cn } from "@/lib/utils";
 import type { LessonBlock, Udalost, Rozvrh, Substitution, Grading } from "@/lib/types";
-import { format, getDay, isSameDay, parseISO } from 'date-fns';
+import { format, getDay, isSameDay, parse, parseISO } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
-import { Info, Award } from 'lucide-react';
+import { Info, Award, XCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -23,17 +23,11 @@ const defaultTimeSlots = [
     "11:35-12:20", "12:30-13:15", "13:20-14:05", "14:15-15:00",
 ];
 
-interface MobileTimetableProps {
-    schedules: Rozvrh[];
-    eventsData: Udalost[];
-    substitutionsData: Substitution[];
-    isTeacher: boolean;
-    userId: string;
-    studentId?: string;
-    userClassId?: string;
-    days: Date[];
-}
+const dayNames = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'];
 
+//==============================================================================
+// 1. CONTEXT MENU (for Teachers)
+//==============================================================================
 function TeacherLessonContextMenu({ children, lesson, dayInfo, period }: { children: React.ReactNode, lesson: LessonBlock, dayInfo: { fullDate: Date }, period: number }) {
     const router = useRouter();
 
@@ -71,7 +65,10 @@ function TeacherLessonContextMenu({ children, lesson, dayInfo, period }: { child
     );
 }
 
-function LessonCard({ lesson, period, timeRange, day, classId, isTeacher, grades = [] }: { lesson: LessonBlock, period: number, timeRange: string, day: Date, classId: string, isTeacher: boolean, grades: Grading[] }) {
+//==============================================================================
+// 2. CARD COMPONENTS (Lesson, Event, Cancelled)
+//==============================================================================
+function LessonCard({ lesson, period, timeRange, day, classId, isTeacher, grades }: { lesson: LessonBlock, period: number, timeRange: string, day: Date, classId: string, isTeacher: boolean, grades: Grading[] }) {
     const router = useRouter();
     const { toast } = useToast();
 
@@ -91,17 +88,9 @@ function LessonCard({ lesson, period, timeRange, day, classId, isTeacher, grades
         ].join('/');
         router.push(`/dashboard/hodina/${slug}`);
     };
-    
-    const lessonGrades = useMemo(() => {
-        // Since `g.datum` is "dd.MM.yyyy", we need to parse it correctly before comparing
-        return grades.filter(g => {
-            const gradeDate = parseISO(g.createdAt.toDate().toISOString());
-            return g.predmetId === lesson.subjectId && isSameDay(gradeDate, day);
-        });
-    }, [grades, lesson.subjectId, day]);
 
     const cardContent = (
-        <div className={cn("rounded-lg bg-card border p-3")} onClick={handleLessonClick}>
+        <div className="rounded-lg bg-card border p-3" onClick={handleLessonClick}>
             <div className="flex gap-4">
                 <div className="text-center w-12 flex-shrink-0">
                     <p className="font-bold text-lg">{period + 1}</p>
@@ -110,13 +99,14 @@ function LessonCard({ lesson, period, timeRange, day, classId, isTeacher, grades
                 <div className="flex-grow">
                     <p className="font-semibold">{lesson.subjectName}</p>
                     <p className="text-sm text-muted-foreground">{isTeacher ? lesson.className : lesson.teacherName}</p>
+                    {isTeacher && <p className="text-sm text-muted-foreground">{lesson.ucebnaName}</p>}
                 </div>
             </div>
-            {lessonGrades.length > 0 && !isTeacher && (
+            {grades.length > 0 && !isTeacher && (
                 <div className="mt-2 pt-2 border-t flex items-center gap-3">
                     <Award className="h-4 w-4 text-primary" />
                     <div className="flex flex-wrap gap-2">
-                        {lessonGrades.map((grade) => (
+                        {grades.map((grade) => (
                             <Link key={grade.id} href={`/dashboard/hodnoceni/${grade.id}`} onClick={(e) => e.stopPropagation()} className="flex items-baseline">
                                 <span className="font-bold text-primary text-lg">{grade.znamka}</span>
                                 <span className="text-xs text-muted-foreground ml-0.5">({grade.vaha})</span>
@@ -161,14 +151,31 @@ function CancelledLessonCard({ substitution, period, timeRange }: { substitution
                 <p className="font-bold text-lg">{period + 1}</p>
                 <p className="text-xs text-muted-foreground">{timeRange?.split('-')[0]}</p>
             </div>
-            <div className="flex-grow">
-                <p className="font-semibold text-destructive line-through">
-                    {substitution.originalLesson.lessonBlock.subjectName}
-                </p>
-                <p className="text-sm text-muted-foreground">Hodina odpadá</p>
+            <div className="flex-grow flex items-center gap-2">
+                 <XCircle className="h-5 w-5 text-destructive" />
+                <div>
+                    <p className="font-semibold text-destructive line-through">
+                        {substitution.originalLesson.lessonBlock.subjectName}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Hodina odpadá</p>
+                </div>
             </div>
         </div>
     );
+}
+
+//==============================================================================
+// 3. MAIN COMPONENT
+//==============================================================================
+interface MobileTimetableProps {
+    schedules: Rozvrh[];
+    eventsData: Udalost[];
+    substitutionsData: Substitution[];
+    isTeacher: boolean;
+    userId: string;
+    studentId?: string;
+    userClassId?: string;
+    days: Date[];
 }
 
 export function MobileTimetable({
@@ -185,6 +192,7 @@ export function MobileTimetable({
     const [selectedDate, setSelectedDate] = useState(today);
     const firestore = useFirestore();
 
+    // Fetch grades only if the user is a student or parent.
     const gradesQuery = useMemoFirebase(() => {
         if (!firestore || isTeacher || !studentId) return null;
         return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
@@ -192,51 +200,68 @@ export function MobileTimetable({
 
     const { data: grades, isLoading: gradesLoading } = useCollection<Grading>(gradesQuery);
 
-    const timetableData = useMemo(() => {
-        const selectedDaySchedule = schedules.find(s => isSameDay(parseISO(s.datum), selectedDate));
-        if (!selectedDaySchedule) return { timeSlots: defaultTimeSlots, lessons: [] };
+    const timetableForSelectedDay = useMemo(() => {
+        const schedule = schedules.find(s => isSameDay(parseISO(s.datum), selectedDate));
+        if (!schedule) return null;
 
-        const timeSlots = selectedDaySchedule.timeSlots || defaultTimeSlots;
-        const dayIndex = (getDay(selectedDate) + 6) % 7;
-        const dayName = format(selectedDate, 'EEEE', { locale: cs });
+        const timeSlots = schedule.timeSlots || defaultTimeSlots;
+        const dayIndex = (getDay(selectedDate) + 6) % 7; 
+        const dayName = dayNames[dayIndex];
 
-        const lessons = selectedDaySchedule.hodiny.map((lesson, period) => {
-            if (!lesson) return null;
-            if (isTeacher && lesson.teacherId !== userId) return null;
+        const processedItems = timeSlots.map((time, periodIndex) => {
+            const lesson = schedule.hodiny[periodIndex];
 
+            // 1. Check for a replacing event
             const event = eventsData.find(e =>
                 isSameDay(parseISO(e.datum), selectedDate) &&
                 e.nahrazujeHodiny &&
-                e.tridyIds.includes(selectedDaySchedule.tridaId) &&
-                e.cas === timeSlots[period]?.split('-')[0]
+                e.tridyIds.includes(schedule.tridaId) &&
+                e.cas === time?.split('-')[0]
             );
-            if (event) return { type: 'event', event, period };
+            if (event) {
+                return { type: 'event', data: event, period: periodIndex, timeRange: time };
+            }
 
+            // 2. Check for substitutions
             const substitution = substitutionsData.find(sub =>
                 isSameDay(parseISO(sub.date), selectedDate) &&
                 sub.originalLesson.day === dayName &&
-                sub.originalLesson.period === period &&
-                sub.originalLesson.classId === selectedDaySchedule.tridaId
+                sub.originalLesson.period === periodIndex &&
+                sub.originalLesson.classId === schedule.tridaId
             );
 
-            if (substitution) {
-                if (substitution.changes.type.includes('zruseno')) {
-                    return { type: 'cancelled', substitution, period };
-                }
+            if (substitution?.changes.type.includes('zruseno')) {
+                return { type: 'cancelled', data: substitution, period: periodIndex, timeRange: time };
+            }
+            
+            // 3. Determine the lesson to display (original, substituted, or none)
+            let lessonToShow: LessonBlock | null = lesson;
+            if (substitution && lesson) {
                 const substitutedLesson = { ...lesson, ...substitution.changes };
-                // Placeholder for teacher name, in a real app you'd fetch this
                 if (substitution.changes.teacherId) {
                      substitutedLesson.teacherName = 'Zástup';
                 }
-                return { type: 'substituted', lesson: substitutedLesson, originalLesson: lesson, period };
+                lessonToShow = substitutedLesson;
             }
 
-            return { type: 'lesson', lesson, period };
+            if (!lessonToShow) return null; // No lesson for this slot
+            
+            // Filter by teacher/student
+            if (isTeacher && lessonToShow.teacherId !== userId) return null;
+            if (!isTeacher && schedule.tridaId !== userClassId) return null;
+
+            // Find grades for this specific lesson on this day
+            const lessonGrades = (grades || []).filter(g => {
+                const gradeDate = parse(g.datum, "dd.MM.yyyy", new Date());
+                return g.predmetId === lessonToShow?.subjectId && isSameDay(gradeDate, selectedDate);
+            });
+
+            return { type: 'lesson', data: lessonToShow, period: periodIndex, timeRange: time, classId: schedule.tridaId, grades: lessonGrades };
         }).filter(Boolean);
 
-        return { timeSlots, lessons };
+        return processedItems;
 
-    }, [selectedDate, schedules, eventsData, substitutionsData, isTeacher, userId]);
+    }, [selectedDate, schedules, eventsData, substitutionsData, isTeacher, userId, grades, userClassId]);
     
     return (
         <div className="flex flex-col h-full bg-background text-foreground p-4 space-y-4">
@@ -258,24 +283,19 @@ export function MobileTimetable({
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-3">
-                {timetableData.lessons.length === 0 ? (
+                {!timetableForSelectedDay || timetableForSelectedDay.length === 0 ? (
                     <div className="text-center text-muted-foreground pt-16">
                         Žádné hodiny pro tento den.
                     </div>
                 ) : (
-                    timetableData.lessons.map((item: any, idx: number) => {
-                        const timeRange = timetableData.timeSlots[item.period];
-                        const classId = schedules.find(s => isSameDay(parseISO(s.datum), selectedDate))?.tridaId || '';
-                        
+                    timetableForSelectedDay.map((item: any, idx: number) => {
                         switch (item.type) {
                             case 'lesson':
-                                return <LessonCard key={idx} lesson={item.lesson} period={item.period} timeRange={timeRange} day={selectedDate} classId={classId} isTeacher={isTeacher} grades={grades || []} />;
-                            case 'substituted':
-                                return <LessonCard key={idx} lesson={item.lesson} period={item.period} timeRange={timeRange} day={selectedDate} classId={classId} isTeacher={isTeacher} grades={grades || []}/>;
+                                return <LessonCard key={idx} lesson={item.data} period={item.period} timeRange={item.timeRange} day={selectedDate} classId={item.classId} isTeacher={isTeacher} grades={item.grades} />;
                             case 'event':
-                                return <EventCard key={idx} event={item.event} period={item.period} timeRange={timeRange} />;
+                                return <EventCard key={idx} event={item.data} period={item.period} timeRange={item.timeRange} />;
                             case 'cancelled':
-                                return <CancelledLessonCard key={idx} substitution={item.substitution} period={item.period} timeRange={timeRange} />;
+                                return <CancelledLessonCard key={idx} substitution={item.data} period={item.period} timeRange={item.timeRange} />;
                             default:
                                 return null;
                         }
