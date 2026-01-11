@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, writeBatch, limit, getDocs } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, writeBatch, limit, getDocs, Timestamp } from 'firebase/firestore';
 import type { Grading, User, Trida, Predmet } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -16,7 +16,7 @@ import { PlusCircle, Pencil, Trash2, Loader2, BarChart2, BookOpen, Star, Type, A
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -32,6 +32,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Separator } from '@/components/ui/separator';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 
 
 const gradingSchema = z.object({
@@ -416,22 +417,18 @@ function StudentParentView() {
             return;
         }
 
-        const fetchGradings = async () => {
-            setIsLoading(true);
-            try {
-                const q = query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
-                const querySnapshot = await getDocs(q);
-                const fetchedGradings = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Grading));
-                setGradings(fetchedGradings);
-            } catch (error) {
-                console.error("Firestore Error:", error);
-                // Optionally show a toast or error message to the user
-            } finally {
-                setIsLoading(false);
-            }
-        };
+        setIsLoading(true);
+        const q = query(collection(firestore, 'gradings'), where('ziakId', '==', studentId), orderBy('createdAt', 'desc'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const fetchedGradings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Grading));
+            setGradings(fetchedGradings);
+            setIsLoading(false);
+        }, (error) => {
+            console.error("Firestore Error:", error);
+            setIsLoading(false);
+        });
 
-        fetchGradings();
+        return () => unsubscribe();
     }, [firestore, studentId]);
 
     const gradesBySubject = useMemo(() => {
@@ -461,7 +458,7 @@ function StudentParentView() {
     }, [gradesBySubject]);
 
     if (isLoading) {
-        return <div className="p-6 text-center">Načítání známek...</div>;
+        return <div className="p-6 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto" /></div>;
     }
 
     if (!user) {
@@ -469,58 +466,101 @@ function StudentParentView() {
     }
 
     return (
-        <div className="p-4 md:p-6 space-y-6">
+        <div className="p-4 md:p-6 space-y-8">
              <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-3xl font-bold">Klasifikace</h1>
-                    <p className="text-muted-foreground">Přehled vašich známek podle předmětů.</p>
+                    <p className="text-muted-foreground">Přehled vašich známek podle předmětů a průběžné hodnocení.</p>
                 </div>
             </div>
-
-            {Object.keys(gradesBySubject).length === 0 && !isLoading && (
-                 <Card>
-                    <CardContent className="p-6 text-center text-muted-foreground">
-                        Nebylo nalezeno žádné hodnocení.
-                    </CardContent>
-                </Card>
-            )}
-
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {Object.keys(gradesBySubject).map(subject => (
-                    <Card key={subject} className="flex flex-col">
-                        <CardHeader>
-                            <CardTitle className="flex justify-between items-center">
-                                <span>{subject}</span>
-                                <Badge className="text-lg">{subjectAverages[subject]}</Badge>
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="flex-grow">
-                             <div className="flex flex-wrap gap-2">
-                                {gradesBySubject[subject].map(g => (
-                                    <div key={g.id} className="relative cursor-pointer" onClick={() => router.push(`/dashboard/hodnoceni/${g.id}`)}>
-                                        <div className="flex items-center justify-center h-12 w-12 rounded-full border-2 border-primary bg-primary/10 transition-transform hover:scale-110">
-                                            <span className="text-xl font-bold text-primary">{g.znamka}</span>
+            
+            <Card>
+                <CardHeader>
+                    <CardTitle>Průměry podle předmětů</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {Object.keys(gradesBySubject).length === 0 && !isLoading ? (
+                        <p className="text-muted-foreground">Nebylo nalezeno žádné hodnocení.</p>
+                    ) : (
+                        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                            {Object.keys(gradesBySubject).sort().map(subject => (
+                                <Card key={subject} className="flex flex-col">
+                                    <CardHeader>
+                                        <CardTitle className="flex justify-between items-center">
+                                            <span>{subject}</span>
+                                            <Badge className="text-lg">{subjectAverages[subject]}</Badge>
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="flex-grow">
+                                        <div className="flex flex-wrap gap-2">
+                                            {gradesBySubject[subject].map(g => (
+                                                <div key={g.id} className="relative cursor-pointer group" onClick={() => router.push(`/dashboard/hodnoceni/${g.id}`)}>
+                                                    <div className="flex items-center justify-center h-12 w-12 rounded-full border-2 border-primary bg-primary/10 transition-transform group-hover:scale-110">
+                                                        <span className="text-xl font-bold text-primary">{g.znamka}</span>
+                                                    </div>
+                                                    {g.komentar && (
+                                                        <div className="absolute -top-1 -right-1">
+                                                            <Award className="h-5 w-5 text-amber-500 fill-amber-300" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
                                         </div>
-                                         {g.komentar && (
-                                            <div className="absolute -top-1 -right-1">
-                                                <Award className="h-5 w-5 text-amber-500 fill-amber-300" />
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
-                ))}
-            </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Průběžné hodnocení</CardTitle>
+                    <CardDescription>Chronologický přehled všech vašich známek.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Datum</TableHead>
+                                <TableHead>Předmět</TableHead>
+                                <TableHead>Známka (váha)</TableHead>
+                                <TableHead>Komentář</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {gradings.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={4} className="h-24 text-center">Nebyly nalezeny žádné známky.</TableCell>
+                                </TableRow>
+                            ) : (
+                                gradings.map(g => (
+                                    <TableRow key={g.id} onClick={() => router.push(`/dashboard/hodnoceni/${g.id}`)} className="cursor-pointer">
+                                        <TableCell>{g.datum}</TableCell>
+                                        <TableCell>{g.predmet}</TableCell>
+                                        <TableCell>
+                                            <span className="font-bold text-lg mr-2">{g.znamka}</span>
+                                            <Badge variant="outline">Váha: {g.vaha.toFixed(1)}</Badge>
+                                        </TableCell>
+                                        <TableCell className="max-w-xs truncate">{g.komentar}</TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
+
         </div>
     );
 }
 
+
 function HodnoceniPageContent() {
   const { user, loading, hasRole } = useAuth();
   
-  if (loading) return <div className="flex h-full w-full items-center justify-center">Načítání...</div>;
+  if (loading) return <div className="flex h-full w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   if (!user) return <div className="flex h-full w-full items-center justify-center">Přístup odepřen.</div>;
 
   if (hasRole('ucitel') || hasRole('administrator')) {
