@@ -1,6 +1,6 @@
 import { Timestamp } from "firebase/firestore";
 
-export type Role = 'ucitel' | 'rodic' | 'ziak' | 'administrator' | 'vedouci pracovnik' | 'asistent pedagoga' | 'superAdmin';
+export type Role = 'ucitel' | 'rodic' | 'ziak' | 'administrator' | 'vedouci pracovnik' | 'asistent pedagoga';
 export type OrganizationType = 'skola' | 'zajmova_skupina';
 
 export interface Organization {
@@ -26,7 +26,7 @@ export interface User {
   avatarUrl?: string;
   // Per-organization data that might need to be specific
   studentId?: string; 
-  pin?: string;
+  pin?: string | null;
   isSuperAdmin?: boolean;
 }
 
@@ -258,5 +258,3 @@ export interface ZapisDoPrvniTridy {
     datumPodani: string; // YYYY-MM-DD HH:MM
     status: 'Podáno' | 'Přijato' | 'Nepřijato' | 'Odklad';
 }
-
-    

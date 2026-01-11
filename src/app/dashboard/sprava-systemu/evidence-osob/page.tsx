@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import type { Role, Trida } from '@/lib/types';
+import type { Role, Trida, UserMembership } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
@@ -68,6 +68,7 @@ import { useAuth } from '@/hooks/use-auth';
 import type { User } from '@/lib/types';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MultiSelect } from '@/components/ui/multi-select';
 
 
 const roleTranslations: { [key in Role]: string } = {
@@ -84,7 +85,7 @@ const userSchema = z.object({
   name: z.string().min(1, 'Jméno je povinné'),
   email: z.string().email('Neplatný formát emailu'),
   roles: z.array(z.string()).min(1, 'Uživatel musí mít alespoň jednu roli'),
-  pin: z.string().optional(),
+  pin: z.string().optional().nullable(),
   tridaId: z.string().optional().nullable(),
   studentId: z.string().optional().nullable(),
 });
@@ -102,9 +103,15 @@ function UserForm({
   onSave: (data: Partial<User>) => void;
   closeDialog: () => void;
 }) {
+  const { activeOrganization } = useAuth();
   const firestore = useFirestore();
-  const tridyCollection = useMemoFirebase(() => (firestore ? collection(firestore, 'tridy') : null), [firestore]);
-  const { data: classes } = useCollection<Trida>(tridyCollection);
+  
+  const tridyQuery = useMemoFirebase(() => {
+    if (!firestore || !activeOrganization) return null;
+    return query(collection(firestore, 'tridy'), where('organizationId', '==', activeOrganization.id));
+  }, [firestore, activeOrganization]);
+
+  const { data: classes } = useCollection<Trida>(tridyQuery);
 
   const {
     register,
@@ -118,9 +125,9 @@ function UserForm({
     defaultValues: {
       name: user?.name || '',
       email: user?.email || '',
-      roles: user?.roles || [],
+      roles: user?.memberships?.find(m => m.organizationId === activeOrganization?.id)?.roles || [],
       pin: user?.pin || '',
-      tridaId: user?.tridaId || null,
+      tridaId: (user as any)?.tridaId || null,
       studentId: user?.studentId || null,
     },
   });
@@ -145,16 +152,12 @@ function UserForm({
       setValue('tridaId', null);
     }
      if (!isRodic) {
-      // If user is not a parent, studentId might be a parent for a student, so don't clear it.
-      // This logic is tricky. Let's handle it based on context.
-      if (!isZiak) {
-         setValue('studentId', null);
-      }
+        setValue('studentId', null);
     }
   }, [isZiak, isRodic, setValue]);
   
-  const students = useMemo(() => allUsers.filter(u => u.roles.includes('ziak')), [allUsers]);
-  const parents = useMemo(() => allUsers.filter(u => u.roles.includes('rodic')), [allUsers]);
+  const students = useMemo(() => allUsers.filter(u => u.memberships.some(m => m.roles.includes('ziak'))), [allUsers]);
+  const parents = useMemo(() => allUsers.filter(u => u.memberships.some(m => m.roles.includes('rodic'))), [allUsers]);
 
 
   return (
@@ -175,29 +178,16 @@ function UserForm({
       </div>
       <div className="space-y-2">
         <Label>Role</Label>
-        <Controller
+         <Controller
           name="roles"
           control={control}
           render={({ field }) => (
-            <div className="grid grid-cols-2 gap-2">
-              {allRoles.map((role) => (
-                <div key={role} className="flex items-center gap-2">
-                  <Checkbox
-                    id={role}
-                    checked={field.value.includes(role)}
-                    onCheckedChange={(checked) => {
-                      const newValue = checked
-                        ? [...field.value, role]
-                        : field.value.filter((r) => r !== role);
-                      field.onChange(newValue);
-                    }}
-                  />
-                  <Label htmlFor={role} className="font-normal">
-                    {roleTranslations[role]}
-                  </Label>
-                </div>
-              ))}
-            </div>
+            <MultiSelect
+              options={allRoles.map(r => ({ value: r, label: roleTranslations[r] }))}
+              onValueChange={field.onChange}
+              defaultValue={field.value}
+              placeholder="Vyberte role..."
+            />
           )}
         />
         {errors.roles && (
@@ -217,21 +207,6 @@ function UserForm({
                             <SelectTrigger><SelectValue placeholder="Vyberte třídu" /></SelectTrigger>
                             <SelectContent>
                                 {classes?.map((c) => (<SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>))}
-                            </SelectContent>
-                        </Select>
-                    )}
-                />
-            </div>
-            <div className="space-y-1">
-                <Label htmlFor="studentId">Rodič</Label>
-                <Controller
-                    name="studentId" 
-                    control={control}
-                    render={({ field }) => (
-                        <Select onValueChange={field.onChange} value={field.value || ''}>
-                            <SelectTrigger><SelectValue placeholder="Vyberte rodiče" /></SelectTrigger>
-                            <SelectContent>
-                                {parents.map((p) => (<SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>))}
                             </SelectContent>
                         </Select>
                     )}
@@ -283,14 +258,16 @@ function UserForm({
   );
 }
 
-function UserRow({ user, onEdit, onDelete }: { user: User, onEdit: (user: User) => void, onDelete: (user: User) => void }) {
+function UserRow({ user, onEdit, onDelete, activeOrganizationId }: { user: User, onEdit: (user: User) => void, onDelete: (user: User) => void, activeOrganizationId: string | null }) {
+    const membership = user.memberships?.find(m => m.organizationId === activeOrganizationId);
+    
     return (
         <TableRow>
             <TableCell className="font-medium">{user.name}</TableCell>
             <TableCell>{user.email}</TableCell>
             <TableCell>
                 <div className="flex flex-wrap gap-1">
-                {(user.roles || []).map((role) => (
+                {(membership?.roles || []).map((role) => (
                     <Badge key={role} variant="secondary">
                     {roleTranslations[role as Role] || role}
                     </Badge>
@@ -325,104 +302,68 @@ function UserRow({ user, onEdit, onDelete }: { user: User, onEdit: (user: User) 
 
 function AdminUserManagement() {
     const firestore = useFirestore();
-    const { hasRole } = useAuth();
+    const { activeOrganizationId } = useAuth();
     
     const usersCollection = useMemoFirebase(
       () => (firestore) ? collection(firestore, 'users') : null,
       [firestore]
     );
 
-    const { data: users, isLoading: usersLoading } = useCollection<User>(usersCollection);
+    const { data: allUsers, isLoading: usersLoading } = useCollection<User>(usersCollection);
+
+    const usersInOrg = useMemo(() => {
+        if (!allUsers || !activeOrganizationId) return [];
+        return allUsers.filter(u => u.memberships?.some(m => m.organizationId === activeOrganizationId));
+    }, [allUsers, activeOrganizationId]);
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [deletingUser, setDeletingUser] = useState<User | null>(null);
     const { toast } = useToast();
 
-    const handleSaveUser = async (formData: Partial<User>) => {
-      if (!firestore) return;
+    const handleSaveUser = async (formData: Partial<UserFormData>) => {
+      if (!firestore || !activeOrganizationId) return;
       
-      const dataToSave = {
-          ...formData,
-          tridaId: formData.tridaId || null,
-          studentId: formData.studentId || null,
+      const newMembership: UserMembership = {
+          organizationId: activeOrganizationId,
+          roles: (formData.roles as Role[]) || []
       };
 
       try {
-        const batch = writeBatch(firestore);
-
         if (editingUser) { // --- UPDATE EXISTING USER ---
             const userRef = doc(firestore, 'users', editingUser.id);
-            const originalUserDoc = await getDoc(userRef);
-            const originalUserData = originalUserDoc.data() as User | undefined;
-
-            batch.update(userRef, dataToSave);
+            const existingMemberships = editingUser.memberships || [];
+            const otherMemberships = existingMemberships.filter(m => m.organizationId !== activeOrganizationId);
             
-            // --- LOGIC FOR RELATIONSHIPS ---
-            const newIsZiak = dataToSave.roles?.includes('ziak');
-            const newIsRodic = dataToSave.roles?.includes('rodic');
-            const newStudentId = dataToSave.studentId; // This can be student ID (for parent) or parent ID (for student)
+            const dataToUpdate: Partial<User> = {
+                name: formData.name,
+                email: formData.email,
+                studentId: formData.studentId || undefined,
+                tridaId: formData.tridaId || undefined, // This is not a standard User property, handle with care.
+                memberships: [...otherMemberships, newMembership]
+            };
             
-            // If user is a student, and we are assigning a parent to them
-            if (newIsZiak && newStudentId) {
-                const parentRef = doc(firestore, 'users', newStudentId);
-                batch.update(parentRef, { studentId: editingUser.id }); // Parent's studentId is the student's ID
-            }
-            
-            // If user is a parent, and we are assigning a student to them
-            if (newIsRodic && newStudentId) {
-                const studentRef = doc(firestore, 'users', newStudentId);
-                batch.update(studentRef, { studentId: editingUser.id }); // Student's studentId is the parent's ID
-            }
-            // --- END LOGIC FOR RELATIONSHIPS ---
+            await updateDocumentNonBlocking(userRef, dataToUpdate);
 
-
-            // If class changed for a student
-            if (dataToSave.roles?.includes('ziak')) {
-                const originalTridaId = originalUserData?.tridaId;
-                const newTridaId = dataToSave.tridaId;
-                if (originalTridaId !== newTridaId) {
-                    if (originalTridaId) batch.update(doc(firestore, 'tridy', originalTridaId), { ziaciIds: arrayRemove(editingUser.id) });
-                    if (newTridaId) batch.update(doc(firestore, 'tridy', newTridaId), { ziaciIds: arrayUnion(editingUser.id) });
-                }
-            }
         } else { // --- CREATE NEW USER ---
+            // Creating a placeholder user. The real user is created during PIN registration.
             const newUserDocRef = doc(collection(firestore, 'users'));
-            const newUserForDb = {
-                ...dataToSave,
+            const newUserForDb: Partial<User> = {
                 id: newUserDocRef.id,
+                name: formData.name,
+                email: formData.email,
+                pin: formData.pin,
+                studentId: formData.studentId || undefined,
+                tridaId: formData.tridaId || undefined, // This is not a standard User property, handle with care.
+                memberships: [newMembership],
                 avatarUrl: `https://picsum.photos/seed/${newUserDocRef.id}/100/100`,
             };
-            batch.set(newUserDocRef, newUserForDb);
-
-            if (newUserForDb.roles?.includes('ziak') && newUserForDb.tridaId) {
-                batch.update(doc(firestore, 'tridy', newUserForDb.tridaId), { ziaciIds: arrayUnion(newUserForDb.id) });
-            }
-            
-            // --- LOGIC FOR RELATIONSHIPS ---
-            const newIsZiak = newUserForDb.roles?.includes('ziak');
-            const newIsRodic = newUserForDb.roles?.includes('rodic');
-            const newStudentId = newUserForDb.studentId; // This can be student ID (for parent) or parent ID (for student)
-            
-            // If user is a student, and we are assigning a parent to them
-            if (newIsZiak && newStudentId) {
-                const parentRef = doc(firestore, 'users', newStudentId);
-                batch.update(parentRef, { studentId: newUserForDb.id });
-            }
-            
-            // If user is a parent, and we are assigning a student to them
-            if (newIsRodic && newStudentId) {
-                const studentRef = doc(firestore, 'users', newStudentId);
-                batch.update(studentRef, { studentId: newUserForDb.id });
-            }
-            // --- END LOGIC FOR RELATIONSHIPS ---
+            await setDoc(newUserDocRef, newUserForDb);
         }
         
-        await batch.commit();
-
         toast({
             title: editingUser ? 'Uživatel aktualizován' : 'Uživatel přidán',
-            description: `Uživatel ${dataToSave.name} byl úspěšně zpracován.`,
+            description: `Uživatel ${formData.name} byl úspěšně zpracován.`,
         });
 
       } catch(e) {
@@ -439,12 +380,6 @@ function AdminUserManagement() {
 
         try {
             const batch = writeBatch(firestore);
-
-            // If deleting a student, remove them from their class
-            if (deletingUser.roles.includes('ziak') && deletingUser.tridaId) {
-                const tridaRef = doc(firestore, 'tridy', deletingUser.tridaId);
-                batch.update(tridaRef, { ziaciIds: arrayRemove(deletingUser.id) });
-            }
             
             const userRef = doc(firestore, 'users', deletingUser.id);
             batch.delete(userRef);
@@ -479,7 +414,7 @@ function AdminUserManagement() {
             <div>
               <CardTitle>Seznam uživatelů</CardTitle>
               <CardDescription>
-                Celkem {users?.length ?? 0} uživatelů v databázi.
+                Celkem {usersInOrg?.length ?? 0} uživatelů v této organizaci.
               </CardDescription>
             </div>
             <Button onClick={() => openDialog(null)}>
@@ -507,8 +442,8 @@ function AdminUserManagement() {
                     </TableCell>
                   </TableRow>
                 )}
-                {!usersLoading && users?.map((user) => (
-                    <UserRow key={user.id} user={user} onEdit={openDialog} onDelete={setDeletingUser} />
+                {!usersLoading && usersInOrg?.map((user) => (
+                    <UserRow key={user.id} user={user} onEdit={openDialog} onDelete={setDeletingUser} activeOrganizationId={activeOrganizationId} />
                 ))}
               </TableBody>
             </Table>
@@ -523,7 +458,7 @@ function AdminUserManagement() {
           {isDialogOpen && (
              <UserForm
                 user={editingUser}
-                allUsers={users || []}
+                allUsers={allUsers || []}
                 onSave={handleSaveUser}
                 closeDialog={() => setIsDialogOpen(false)}
             />

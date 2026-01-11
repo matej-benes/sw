@@ -14,7 +14,7 @@ import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, getDocs, doc, getDoc, writeBatch, setDoc, updateDoc, arrayRemove, arrayUnion } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, writeBatch, setDoc, updateDoc } from 'firebase/firestore';
 import type { User, Trida, Organization } from '@/lib/types';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 
@@ -117,12 +117,12 @@ function LoginForm() {
 function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
     const [step, setStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
-    const [registrationData, setRegistrationData] = useState<{ 
-        userToRegister?: User, 
-        userWithPin?: User, 
-        tridaName: string | null,
-        organization?: Organization,
-        registrationType: 'user' | 'director'
+    const [registrationData, setRegistrationData] = useState<{
+        prefilledUser: User;
+        organization: Organization | null;
+        trida: Trida | null;
+        student: User | null;
+        registrationType: 'user' | 'director';
     } | null>(null);
     const { toast } = useToast();
     const firestore = useFirestore();
@@ -147,19 +147,20 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
         }
 
         try {
-            // First, check for organization PIN
+            // Check for organization PIN (director registration)
             const orgsRef = collection(firestore, 'organizations');
             const orgQuery = query(orgsRef, where("registrationPin", "==", values.pin));
             const orgSnapshot = await getDocs(orgQuery);
 
             if (!orgSnapshot.empty) {
-                // This is an organization director registration
                 const orgDoc = orgSnapshot.docs[0];
                 const organization = { id: orgDoc.id, ...orgDoc.data() } as Organization;
-                
+
                 setRegistrationData({
+                    prefilledUser: { name: "Ředitel/ka", email: '', memberships: [], id: '', roles: ['administrator'] }, // Temporary user
                     organization,
-                    tridaName: null,
+                    trida: null,
+                    student: null,
                     registrationType: 'director'
                 });
                 setStep(2);
@@ -167,7 +168,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 return;
             }
 
-            // If not an org PIN, check for user PIN
+            // Check for user PIN
             const usersRef = collection(firestore, 'users');
             const userQuery = query(usersRef, where("pin", "==", values.pin));
             const userSnapshot = await getDocs(userQuery);
@@ -177,46 +178,42 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 setIsLoading(false);
                 return;
             }
-            
-            // This is a standard user (parent/teacher) registration
-            const userDoc = userSnapshot.docs[0];
-            const userWithPin = { id: userDoc.id, ...userDoc.data() } as User;
-            let userToRegister: User;
 
-            if (userWithPin.roles.includes('rodic')) {
-                 toast({
-                    variant: 'destructive',
-                    title: 'Nesprávný typ PINu',
-                    description: 'Pro registraci rodičovského účtu zadejte PIN, který patří Vašemu dítěti.'
-                });
-                setIsLoading(false);
-                return;
-            }
-            
-            if (userWithPin.roles.includes('ziak')) {
-                 const parentQuery = query(usersRef, where("studentId", "==", userWithPin.id), where("roles", "array-contains", "rodic"));
-                 const parentSnapshot = await getDocs(parentQuery);
-                 if (!parentSnapshot.empty) {
-                     const parentDoc = parentSnapshot.docs[0];
-                     userToRegister = { id: parentDoc.id, ...parentDoc.data() } as User;
-                 } else {
-                     throw new Error("Pro tohoto žáka nebyl nalezen žádný předvytvořený rodičovský účet. Kontaktujte prosím administrátora školy.");
+            const prefilledUser = { id: userSnapshot.docs[0].id, ...userSnapshot.docs[0].data() } as User;
+            let organization: Organization | null = null;
+            let trida: Trida | null = null;
+            let student: User | null = null;
+
+            if (prefilledUser.memberships && prefilledUser.memberships.length > 0) {
+                 const orgId = prefilledUser.memberships[0].organizationId;
+                 const orgDoc = await getDoc(doc(firestore, 'organizations', orgId));
+                 if(orgDoc.exists()) {
+                     organization = {id: orgDoc.id, ...orgDoc.data()} as Organization;
                  }
-            } else {
-                userToRegister = userWithPin;
+            }
+
+            if ((prefilledUser as any).tridaId) {
+                const tridaDoc = await getDoc(doc(firestore, 'tridy', (prefilledUser as any).tridaId));
+                if(tridaDoc.exists()) {
+                    trida = {id: tridaDoc.id, ...tridaDoc.data()} as Trida;
+                }
             }
             
-            let tridaName: string | null = "N/A";
-            const classIdForDisplay = userWithPin.tridaId || userToRegister.tridaId;
-
-            if (classIdForDisplay) {
-                const tridaRef = doc(firestore, 'tridy', classIdForDisplay);
-                const tridaDoc = await getDoc(tridaRef);
-                tridaName = tridaDoc.exists() ? tridaDoc.data().nazev : null;
+            if (prefilledUser.studentId) {
+                 const studentDoc = await getDoc(doc(firestore, 'users', prefilledUser.studentId));
+                 if(studentDoc.exists()){
+                     student = {id: studentDoc.id, ...studentDoc.data()} as User;
+                 }
             }
 
-            setRegistrationData({ userToRegister, userWithPin, tridaName, registrationType: 'user' });
-            registrationForm.setValue('email', userToRegister.email || '');
+            setRegistrationData({
+                prefilledUser,
+                organization,
+                trida,
+                student,
+                registrationType: 'user'
+            });
+            registrationForm.setValue('email', prefilledUser.email || '');
             setStep(2);
 
         } catch (error) {
@@ -227,7 +224,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
         }
     };
 
-     const handleRegistrationSubmit = async (values: z.infer<typeof registrationSchema>) => {
+    const handleRegistrationSubmit = async (values: z.infer<typeof registrationSchema>) => {
         setIsLoading(true);
         if (!firestore || !registrationData) {
             toast({ variant: 'destructive', title: 'Chyba', description: 'Došlo k neočekávané chybě.' });
@@ -240,16 +237,13 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             const newFirebaseUser = userCredential.user;
             const batch = writeBatch(firestore);
 
-            if (registrationData.registrationType === 'director') {
-                const { organization } = registrationData;
-                if(!organization) throw new Error("Chybí data organizace.");
-
-                const directorData: User = {
+            if (registrationData.registrationType === 'director' && registrationData.organization) {
+                const directorData: Partial<User> = {
                     id: newFirebaseUser.uid,
-                    name: "Ředitel/Správce Organizace", // Temporary name
+                    name: "Ředitel/Správce Organizace", // Temporary name, user should update it
                     email: values.email,
                     memberships: [{
-                        organizationId: organization.id,
+                        organizationId: registrationData.organization.id,
                         roles: ['administrator']
                     }],
                     avatarUrl: `https://picsum.photos/seed/${newFirebaseUser.uid}/100/100`,
@@ -258,34 +252,31 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 const newUserDocRef = doc(firestore, 'users', newFirebaseUser.uid);
                 batch.set(newUserDocRef, directorData);
 
-                // Clear the PIN from the organization document
-                const orgRef = doc(firestore, 'organizations', organization.id);
-                batch.update(orgRef, { registrationPin: null });
+                const orgRef = doc(firestore, 'organizations', registrationData.organization.id);
+                batch.update(orgRef, { registrationPin: null, ownerId: newFirebaseUser.uid });
 
             } else if (registrationData.registrationType === 'user') {
-                const { userToRegister, userWithPin } = registrationData;
-                if(!userToRegister || !userWithPin) throw new Error("Chybí data uživatele.");
-                
-                const isRegisteringParent = userToRegister.roles.includes('rodic');
-                const newUserDocRef = doc(firestore, 'users', newFirebaseUser.uid);
+                const { prefilledUser } = registrationData;
 
+                const newUserDocRef = doc(firestore, 'users', newFirebaseUser.uid);
                 const finalUserData: Partial<User> = {
+                    ...prefilledUser,
                     id: newFirebaseUser.uid,
-                    name: userToRegister.name,
                     email: values.email,
-                    roles: userToRegister.roles,
-                    avatarUrl: userToRegister.avatarUrl || `https://picsum.photos/seed/${newFirebaseUser.uid}/100/100`,
-                    tridaId: isRegisteringParent ? userWithPin.tridaId : userToRegister.tridaId,
-                    studentId: isRegisteringParent ? userWithPin.id : userToRegister.studentId,
+                    pin: null, // Clear PIN after use
                 };
+                
+                // Firestore doesn't like `undefined` values.
+                Object.keys(finalUserData).forEach(key => {
+                    if (finalUserData[key as keyof typeof finalUserData] === undefined) {
+                        delete finalUserData[key as keyof typeof finalUserData];
+                    }
+                });
+
                 batch.set(newUserDocRef, finalUserData);
 
-                if (isRegisteringParent) {
-                    const studentRef = doc(firestore, 'users', userWithPin.id);
-                    batch.update(studentRef, { studentId: newFirebaseUser.uid });
-                }
-            
-                const placeholderUserRef = doc(firestore, 'users', userToRegister.id);
+                // Delete the placeholder user document that contained the PIN
+                const placeholderUserRef = doc(firestore, 'users', prefilledUser.id);
                 batch.delete(placeholderUserRef);
             }
 
@@ -306,7 +297,6 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             setIsLoading(false);
         }
     };
-
 
     return (
         <Card className="w-full max-w-sm">
@@ -347,24 +337,13 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                         <CardDescription>Vytvořte si svůj účet pro přístup do systému.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                       {registrationData.registrationType === 'director' && registrationData.organization && (
-                            <div className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm">
-                                <p>Dokončujete registraci pro organizaci:</p>
-                                <p className="font-bold text-lg">{registrationData.organization.name}</p>
-                                <p className="mt-2">Váš účet bude mít roli **Administrátor** pro tuto organizaci.</p>
-                            </div>
-                        )}
-
-                        {registrationData.registrationType === 'user' && registrationData.userToRegister && (
-                            <div className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm">
-                                <p><strong>Jméno:</strong> {registrationData.userToRegister.name}</p>
-                                <p><strong>Role:</strong> {registrationData.userToRegister.roles.map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(', ')}</p>
-                                {registrationData.userToRegister.roles.includes('rodic') && registrationData.userWithPin && (
-                                    <p><strong>Dítě:</strong> {registrationData.userWithPin.name}</p>
-                                )}
-                                <p><strong>Třída:</strong> {registrationData.tridaName || 'N/A'}</p>
-                            </div>
-                        )}
+                        <div className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm space-y-1">
+                            <p><strong>Jméno:</strong> {registrationData.prefilledUser.name}</p>
+                            {registrationData.organization && <p><strong>Organizace:</strong> {registrationData.organization.name}</p>}
+                            <p><strong>Role:</strong> {(registrationData.prefilledUser.roles as Role[]).map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(', ')}</p>
+                             {registrationData.student && <p><strong>Vaše dítě:</strong> {registrationData.student.name}</p>}
+                             {registrationData.trida && <p><strong>Třída:</strong> {registrationData.trida.nazev}</p>}
+                        </div>
                         <Form {...registrationForm}>
                             <form onSubmit={registrationForm.handleSubmit(handleRegistrationSubmit)} className="space-y-4">
                                 <FormField
