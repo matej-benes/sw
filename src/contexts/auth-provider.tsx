@@ -24,6 +24,7 @@ interface AuthContextType {
   activeMembership: UserMembership | null;
   activeOrganization: Organization | null;
   activeOrganizationType: OrganizationType | null;
+  isTrialExpired: boolean;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -38,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { activeOrganizationId, setActiveOrganizationId } = useActiveOrganization();
   const [activeMembership, setActiveMembership] = useState<UserMembership | null>(null);
   const [activeOrganization, setActiveOrganization] = useState<Organization | null>(null);
+  const [isTrialExpired, setIsTrialExpired] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
@@ -98,9 +100,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const orgDocRef = doc(firestore, 'organizations', activeOrganizationId);
                 const orgDocSnap = await getDoc(orgDocRef);
                 if (orgDocSnap.exists()) {
-                    setActiveOrganization({ id: orgDocSnap.id, ...orgDocSnap.data() } as Organization);
+                    const orgData = { id: orgDocSnap.id, ...orgDocSnap.data() } as Organization
+                    setActiveOrganization(orgData);
+                    setIsTrialExpired(orgData.status === 'expired');
                 } else {
                     setActiveOrganization(null);
+                    setIsTrialExpired(false);
                 }
             }
             
@@ -108,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
             setActiveMembership(null);
             setActiveOrganization(null);
+            setIsTrialExpired(false);
         }
     };
     updateActiveOrganization();
@@ -130,6 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setActiveOrganizationId(null);
     setActiveMembership(null);
     setActiveOrganization(null);
+    setIsTrialExpired(false);
     localStorage.removeItem('activeOrganizationId');
     router.push('/');
   };
@@ -152,7 +159,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isSuperAdmin, 
     activeMembership, 
     activeOrganization,
-    activeOrganizationType: activeOrganization?.type || null
+    activeOrganizationType: activeOrganization?.type || null,
+    isTrialExpired,
   };
 
    if (loading && !pathname.startsWith('/dashboard/profil')) {
