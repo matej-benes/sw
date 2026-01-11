@@ -47,8 +47,10 @@ service cloud.firestore {
     match /organizations/{organizationId} {
       // ANYONE can read organization data to verify registration PINs.
       allow read: if true; 
-      // Only Super Admins can create, update, or delete organizations.
-      allow create, update, delete: if isSuperAdmin();
+      // Only Super Admins can create or delete organizations.
+      allow create, delete: if isSuperAdmin();
+      // An update is allowed by a Super Admin OR by a user who is becoming the new owner (during registration).
+      allow update: if isSuperAdmin() || (isAuthenticated() && request.resource.data.ownerId == request.auth.uid);
     }
 
     match /users/{userId} {
