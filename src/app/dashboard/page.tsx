@@ -53,16 +53,13 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { useUnreadMessages } from '@/hooks/use-unread-messages';
 import Link from 'next/link';
-import { MobileTimetableV2 } from '@/components/mobile-timetable-v2';
 
 
 export default function DashboardPage() {
   const firestore = useFirestore();
   const { user, hasRole, loading: isUserLoading } = useAuth();
-  const isMobile = useIsMobile();
   const { unreadCount } = useUnreadMessages();
   
   // Data fetching
@@ -160,7 +157,7 @@ export default function DashboardPage() {
   // Memoized derived data
   const weekDays = useMemo(() => {
     const start = startOfWeek(currentDate, { weekStartsOn: 1 });
-    if (isFullWeekView || isMobile) {
+    if (isFullWeekView) {
         return Array.from({ length: 7 }, (_, i) => addDays(start, i));
     }
     // Compact view logic
@@ -173,7 +170,7 @@ export default function DashboardPage() {
     }
     // Default: today and tomorrow
     return [today, addDays(today, 1)];
-  }, [currentDate, isFullWeekView, isMobile]);
+  }, [currentDate, isFullWeekView]);
 
   const weekLabel = useMemo(() => {
     const start = startOfWeek(currentDate, { weekStartsOn: 1 });
@@ -323,20 +320,6 @@ export default function DashboardPage() {
      return <div className="flex h-full w-full items-center justify-center">Uživatel nenalezen.</div>;
   }
   
-  if (isMobile) {
-    return (
-      <MobileTimetableV2 
-        schedules={filteredSchedules}
-        eventsData={eventsData || []}
-        substitutionsData={substitutionsData || []}
-        isTeacher={hasRole('ucitel')}
-        userId={user.id}
-        studentId={studentId}
-        userClassId={targetClassId}
-        days={weekDays}
-      />
-    );
-  }
 
   return (
     <>

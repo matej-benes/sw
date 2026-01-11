@@ -11,12 +11,10 @@ import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { useUnreadMessages } from '@/hooks/use-unread-messages';
 import { Badge } from '@/components/ui/badge';
 import { usePageTitleUpdater } from '@/hooks/usePageTitleUpdater';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
-import { MobileNavV2 } from '@/components/layout/mobile-nav-v2';
 
 const mainNavLinks = [
     { name: 'Komunikace', href: '/dashboard/zpravy', icon: MessageSquare },
@@ -65,7 +63,6 @@ export default function DashboardLayout({
   const isAdministrator = hasRole('administrator');
   const isTeacher = hasRole('ucitel');
   const isParentOrStudent = hasRole('rodic') || hasRole('ziak');
-  const isMobile = useIsMobile();
   usePageTitleUpdater();
 
 
@@ -97,7 +94,6 @@ export default function DashboardLayout({
                     isActive && "text-primary bg-muted",
                     isSubMenu && "text-sm"
                 )}
-                onClick={() => isMobile && setIsMobileMenuOpen(false)}
             >
                 <div className="flex items-center gap-3">
                     {LinkIcon && <LinkIcon className="h-4 w-4" />}
@@ -202,7 +198,6 @@ export default function DashboardLayout({
         <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 bg-background">
             {children}
         </main>
-        {isMobile && <MobileNavV2 />}
       </div>
     </div>
   );

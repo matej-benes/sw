@@ -12,7 +12,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Mail, ClipboardCheck, ArrowRight } from 'lucide-react';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { Separator } from '../ui/separator';
 
 const SESSION_STORAGE_KEY = 'whatsNewDialogShown';
@@ -30,7 +29,6 @@ export function WhatsNewDialog({
 }: WhatsNewDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
-  const isMobile = useIsMobile();
 
   const hasUnreadMessages = unreadMessagesCount > 0;
   const hasPendingExcuses = isClassTeacher && pendingExcusesCount > 0;
@@ -38,11 +36,11 @@ export function WhatsNewDialog({
 
   useEffect(() => {
     const hasBeenShown = sessionStorage.getItem(SESSION_STORAGE_KEY);
-    if (shouldShow && !hasBeenShown && !isMobile) {
+    if (shouldShow && !hasBeenShown) {
       setIsOpen(true);
       sessionStorage.setItem(SESSION_STORAGE_KEY, 'true');
     }
-  }, [shouldShow, isMobile]);
+  }, [shouldShow]);
 
   const handleGoToMessages = () => {
     router.push('/dashboard/zpravy');
