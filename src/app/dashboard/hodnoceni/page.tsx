@@ -83,6 +83,35 @@ function TeacherView() {
         defaultValues: { studentIds: [], vaha: 1.0, znamka: 1 }
     });
     
+    // We need all students for the parent selector in edit mode
+    const { data: allStudents } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, 'users'), where('roles', 'array-contains', 'ziak')) : null, [firestore]));
+
+    const handleOpenDialog = useCallback((grading: Grading | null) => {
+        setEditingGrading(grading);
+        
+        if (grading) { // Edit mode
+            setValue('studentIds', [grading.ziakId]);
+            setValue('predmetId', predmety?.find(p => p.name === grading.predmet)?.id || '');
+            setValue('znamka', grading.znamka);
+            setValue('vaha', grading.vaha);
+            setValue('komentar', grading.komentar || '');
+            const studentClass = allStudents?.find(s => s.id === grading.ziakId)?.tridaId;
+            setSelectedClassId(studentClass || null);
+        } else { // New mode
+            reset({ 
+                studentIds: [], 
+                vaha: 1.0, 
+                znamka: 1, 
+                predmetId: predmetIdFromParams || '', 
+                komentar: '' 
+            });
+            if (tridaIdFromParams) {
+                setSelectedClassId(tridaIdFromParams);
+            }
+        }
+        setIsDialogOpen(true);
+    }, [reset, setValue, tridaIdFromParams, predmetIdFromParams, predmety, allStudents]);
+
     // Set default class or class from params
     useEffect(() => {
         if (tridaIdFromParams) {
@@ -114,33 +143,6 @@ function TeacherView() {
         });
         return () => unsubscribe();
     }, [user, firestore, toast]);
-
-    const handleOpenDialog = useCallback((grading: Grading | null) => {
-        setEditingGrading(grading);
-        
-        if (grading) { // Edit mode
-            setValue('studentIds', [grading.ziakId]);
-            setValue('predmetId', predmety?.find(p => p.name === grading.predmet)?.id || '');
-            setValue('znamka', grading.znamka);
-            setValue('vaha', grading.vaha);
-            setValue('komentar', grading.komentar || '');
-            const studentClass = students?.find(s => s.id === grading.ziakId)?.tridaId;
-            setSelectedClassId(studentClass || null);
-        } else { // New mode
-            reset({ 
-                studentIds: [], 
-                vaha: 1.0, 
-                znamka: 1, 
-                predmetId: predmetIdFromParams || '', 
-                komentar: '' 
-            });
-            if (tridaIdFromParams) {
-                setSelectedClassId(tridaIdFromParams);
-            }
-        }
-        setIsDialogOpen(true);
-    }, [reset, setValue, tridaIdFromParams, predmetIdFromParams, predmety, students]);
-
 
     const handleSaveGrading = async (data: GradingFormData) => {
         if (!user || !firestore || !allStudents) return;
@@ -208,9 +210,6 @@ function TeacherView() {
         }
     }
     
-    // We need all students for the parent selector in edit mode
-    const { data: allStudents } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, 'users'), where('roles', 'array-contains', 'ziak')) : null, [firestore]));
-
     return (
         <div className="p-4 md:p-6 space-y-6">
             <div className="flex justify-between items-center">
