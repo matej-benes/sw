@@ -1,6 +1,6 @@
 import { Timestamp } from "firebase/firestore";
 
-export type Role = 'ucitel' | 'rodic' | 'ziak' | 'administrator' | 'vedouci pracovnik' | 'asistent pedagoga';
+export type Role = 'ucitel' | 'rodic' | 'ziak' | 'administrator' | 'vedouci pracovnik' | 'asistent pedagoga' | 'vedouci skupiny' | 'hlavni vedouci skupiny' | 'clen';
 export type OrganizationType = 'skola' | 'zajmova_skupina';
 
 export interface Organization {

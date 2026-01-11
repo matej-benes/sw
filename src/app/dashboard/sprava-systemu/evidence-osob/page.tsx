@@ -78,8 +78,13 @@ const roleTranslations: { [key in Role]: string } = {
   administrator: 'Administrátor',
   'vedouci pracovnik': 'Vedoucí pracovník',
   'asistent pedagoga': 'Asistent pedagoga',
+  'vedouci skupiny': 'Vedoucí skupiny',
+  'hlavni vedouci skupiny': 'Hlavní vedoucí skupiny',
+  'clen': 'Člen',
 };
-const allRoles = Object.keys(roleTranslations) as Role[];
+const allSchoolRoles: Role[] = ['ucitel', 'rodic', 'ziak', 'administrator', 'vedouci pracovnik', 'asistent pedagoga'];
+const allInterestGroupRoles: Role[] = ['hlavni vedouci skupiny', 'vedouci skupiny', 'clen', 'administrator'];
+
 
 const userSchema = z.object({
   name: z.string().min(1, 'Jméno je povinné'),
@@ -103,7 +108,7 @@ function UserForm({
   onSave: (data: Partial<User>) => void;
   closeDialog: () => void;
 }) {
-  const { activeOrganization } = useAuth();
+  const { activeOrganization, activeOrganizationType } = useAuth();
   const firestore = useFirestore();
   
   const tridyQuery = useMemoFirebase(() => {
@@ -146,6 +151,8 @@ function UserForm({
   const roles = watch('roles');
   const isZiak = roles.includes('ziak');
   const isRodic = roles.includes('rodic');
+  
+  const availableRoles = activeOrganizationType === 'skola' ? allSchoolRoles : allInterestGroupRoles;
 
   useEffect(() => {
     if (!isZiak) {
@@ -183,7 +190,7 @@ function UserForm({
           control={control}
           render={({ field }) => (
             <MultiSelect
-              options={allRoles.map(r => ({ value: r, label: roleTranslations[r] }))}
+              options={availableRoles.map(r => ({ value: r, label: roleTranslations[r] }))}
               onValueChange={field.onChange}
               defaultValue={field.value}
               placeholder="Vyberte role..."
