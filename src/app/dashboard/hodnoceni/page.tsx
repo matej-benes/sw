@@ -14,14 +14,16 @@ export default function HodnoceniPage() {
   const [loadingData, setLoadingData] = useState(true);
 
   const gradingsQuery = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
+    if (!firestore || !user?.id) return null;
     
     if (user.roles?.includes('ucitel')) {
       // For teachers, get all gradings they created
       return query(collection(firestore, 'gradings'), where('ucitelId', '==', user.id), orderBy('datum', 'desc'));
     } else {
       // For students/parents, get gradings where they are the student
-      return query(collection(firestore, 'gradings'), where('ziakId', '==', user.id), orderBy('datum', 'desc'));
+      const studentId = user.roles?.includes('ziak') ? user.id : user.studentId;
+      if (!studentId) return null;
+      return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId), orderBy('datum', 'desc'));
     }
   }, [firestore, user]);
 
@@ -93,7 +95,6 @@ export default function HodnoceniPage() {
     <div className="p-6 max-w-6xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Žákovská knížka</h1>
       <div className="text-center py-12 text-muted-foreground">
-        <p>Průběžné hodnocení + předměty (brzy)</p>
          <div className="bg-card shadow rounded-lg overflow-hidden border mt-6">
            <table className="w-full text-sm">
             <thead className="bg-muted/50">
