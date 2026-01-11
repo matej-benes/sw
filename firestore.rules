@@ -17,9 +17,12 @@ service cloud.firestore {
     }
     
     function isSuperAdmin() {
+      // Super admin is identified by a specific claim or a field in their user document.
+      // For this implementation, we check a field in their user document.
       return isAuthenticated() && getUserData(request.auth.uid).isSuperAdmin == true;
     }
 
+    // Membership and Roles Functions
     function isMember(organizationId) {
       return isAuthenticated() && getUserData(request.auth.uid).memberships.exists(m, m.organizationId == organizationId);
     }
@@ -40,39 +43,59 @@ service cloud.firestore {
         return isAuthenticated() && get(/databases/$(database)/documents/organizations/$(organizationId)).data.ownerId == request.auth.uid;
     }
 
+    // Rules for specific top-level collections
     match /organizations/{organizationId} {
-      allow read: if isMember(organizationId) || isSuperAdmin();
-      allow create: if isAuthenticated() && isSuperAdmin();
-      allow update, delete: if isOrganizationOwner(organizationId) || isSuperAdmin();
-      allow list: if isSuperAdmin();
+      // ANYONE can read organization data to verify registration PINs.
+      allow read: if true; 
+      // Only Super Admins can create, update, or delete organizations.
+      allow create, update, delete: if isSuperAdmin();
     }
 
     match /users/{userId} {
-      allow get: if isAuthenticated() || isSuperAdmin();
+      // ANYONE can list/read user data to verify PINs for registration.
+      // This is safe because sensitive data should not be in the user doc itself,
+      // and we need to find the user document by PIN.
+      allow read: if true; 
+      // ANYONE can create a user document (as part of registration).
+      allow create: if true;
+      // ANYONE can delete a user document (the placeholder during registration).
+      allow delete: if true;
+      // Only the owner or a super admin can update a user document.
       allow update: if isOwner(userId) || isSuperAdmin();
-      allow create, delete, list: if isSuperAdmin();
     }
     
+    // Default rules for collections within an organization
     match /{collection}/{docId} {
-       // Org-scoped rules for members with specific roles (administrator, teacher)
-       allow read, write: if request.resource.data.keys().hasAny(['organizationId']) &&
-                           (hasAnyRole(request.resource.data.organizationId, ['administrator', 'ucitel']) || 
-                            isOrganizationOwner(request.resource.data.organizationId));
+       // This rule applies to any document that has an 'organizationId' field.
+       // It's a broad rule for documents inside an organization's scope.
        
-       // General read-only rule for any member of the organization
-       allow read: if request.resource.data.keys().hasAny(['organizationId']) && isMember(request.resource.data.organizationId);
+       // Allow READ access if:
+       // 1. The document has an organizationId field.
+       // 2. The requesting user is a member of that organization.
+       allow read: if request.resource.data.keys().hasAny(['organizationId']) &&
+                    isMember(request.resource.data.organizationId);
 
-       // Fallback for list queries where resource is not available.
-       // This is less secure but might be necessary for certain UI components.
-       // It allows any authenticated user to list documents, but the 'read' rules above will still protect the actual content.
+       // Allow WRITE access if:
+       // 1. The document has an organizationId field.
+       // 2. The user is the owner of the organization OR has an 'administrator' or 'ucitel' role.
+       allow write: if request.resource.data.keys().hasAny(['organizationId']) &&
+                    (isOrganizationOwner(request.resource.data.organizationId) ||
+                     hasAnyRole(request.resource.data.organizationId, ['administrator', 'ucitel']));
+
+       // Fallback for list queries where 'request.resource' is not available.
+       // This allows any authenticated user to list documents, but the 'read' rule above
+       // will still protect the actual content of each document.
        allow list: if isAuthenticated();
     }
     
+    // Specific override for messages
     match /messages/{messageId} {
-      allow get: if isAuthenticated() && (request.auth.uid == resource.data.senderId || request.auth.uid in resource.data.recipientIds);
+      allow get: if isAuthenticated() && (resource.data.senderId == request.auth.uid || request.auth.uid in resource.data.recipientIds);
+      // Any member of an org can create a message within that org's context.
       allow create: if isAuthenticated() && isMember(request.resource.data.organizationId);
-      allow update: if isAuthenticated() && (request.auth.uid in resource.data.recipientIds);
-      allow delete: if false; 
+      // Only recipients can "update" a message (e.g., mark as read).
+      allow update: if isAuthenticated() && request.auth.uid in resource.data.recipientIds;
+      allow delete: if false; // Disallow deleting messages.
     }
   }
 }

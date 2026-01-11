@@ -118,10 +118,10 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
     const [step, setStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
     const [registrationData, setRegistrationData] = useState<{
-        prefilledUser: User;
-        organization: Organization | null;
-        trida: Trida | null;
-        student: User | null;
+        prefilledUser?: User;
+        organization?: Organization;
+        trida?: Trida | null;
+        student?: User | null;
         registrationType: 'user' | 'director';
     } | null>(null);
     const { toast } = useToast();
@@ -157,10 +157,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 const organization = { id: orgDoc.id, ...orgDoc.data() } as Organization;
 
                 setRegistrationData({
-                    prefilledUser: { name: "Ředitel/ka", email: '', memberships: [], id: '', roles: ['administrator'] }, // Temporary user
                     organization,
-                    trida: null,
-                    student: null,
                     registrationType: 'director'
                 });
                 setStep(2);
@@ -180,7 +177,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             }
 
             const prefilledUser = { id: userSnapshot.docs[0].id, ...userSnapshot.docs[0].data() } as User;
-            let organization: Organization | null = null;
+            let organization: Organization | undefined;
             let trida: Trida | null = null;
             let student: User | null = null;
 
@@ -238,7 +235,7 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             const batch = writeBatch(firestore);
 
             if (registrationData.registrationType === 'director' && registrationData.organization) {
-                const directorData: Partial<User> = {
+                const directorData: User = {
                     id: newFirebaseUser.uid,
                     name: "Ředitel/Správce Organizace", // Temporary name, user should update it
                     email: values.email,
@@ -255,21 +252,23 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 const orgRef = doc(firestore, 'organizations', registrationData.organization.id);
                 batch.update(orgRef, { registrationPin: null, ownerId: newFirebaseUser.uid });
 
-            } else if (registrationData.registrationType === 'user') {
+            } else if (registrationData.registrationType === 'user' && registrationData.prefilledUser) {
                 const { prefilledUser } = registrationData;
 
                 const newUserDocRef = doc(firestore, 'users', newFirebaseUser.uid);
-                const finalUserData: Partial<User> = {
+                
+                // Copy all properties from prefilledUser and override with new data
+                const finalUserData: User = {
                     ...prefilledUser,
-                    id: newFirebaseUser.uid,
-                    email: values.email,
+                    id: newFirebaseUser.uid, // Override ID with the new one from Auth
+                    email: values.email, // Set the final email
                     pin: null, // Clear PIN after use
                 };
                 
                 // Firestore doesn't like `undefined` values.
                 Object.keys(finalUserData).forEach(key => {
-                    if (finalUserData[key as keyof typeof finalUserData] === undefined) {
-                        delete finalUserData[key as keyof typeof finalUserData];
+                    if (finalUserData[key as keyof User] === undefined) {
+                        delete finalUserData[key as keyof User];
                     }
                 });
 
@@ -278,6 +277,8 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 // Delete the placeholder user document that contained the PIN
                 const placeholderUserRef = doc(firestore, 'users', prefilledUser.id);
                 batch.delete(placeholderUserRef);
+            } else {
+                 throw new Error("Invalid registration data state.");
             }
 
             await batch.commit();
@@ -338,11 +339,20 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                     </CardHeader>
                     <CardContent>
                         <div className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm space-y-1">
-                            <p><strong>Jméno:</strong> {registrationData.prefilledUser.name}</p>
-                            {registrationData.organization && <p><strong>Organizace:</strong> {registrationData.organization.name}</p>}
-                            <p><strong>Role:</strong> {(registrationData.prefilledUser.roles as Role[]).map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(', ')}</p>
-                             {registrationData.student && <p><strong>Vaše dítě:</strong> {registrationData.student.name}</p>}
-                             {registrationData.trida && <p><strong>Třída:</strong> {registrationData.trida.nazev}</p>}
+                             {registrationData.registrationType === 'director' ? (
+                                <>
+                                    <p>Registrujete se jako ředitel/správce pro:</p>
+                                    <p><strong>Organizace:</strong> {registrationData.organization?.name}</p>
+                                </>
+                             ) : (
+                                <>
+                                    <p><strong>Jméno:</strong> {registrationData.prefilledUser?.name}</p>
+                                    {registrationData.organization && <p><strong>Organizace:</strong> {registrationData.organization.name}</p>}
+                                    <p><strong>Role:</strong> {(registrationData.prefilledUser?.roles || []).map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(', ')}</p>
+                                    {registrationData.student && <p><strong>Vaše dítě:</strong> {registrationData.student.name}</p>}
+                                    {registrationData.trida && <p><strong>Třída:</strong> {registrationData.trida.nazev}</p>}
+                                </>
+                             )}
                         </div>
                         <Form {...registrationForm}>
                             <form onSubmit={registrationForm.handleSubmit(handleRegistrationSubmit)} className="space-y-4">
