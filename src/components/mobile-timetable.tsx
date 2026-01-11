@@ -97,7 +97,8 @@ export function MobileTimetable({
         if (!firestore || !studentId) return null;
         return query(
           collection(firestore, 'gradings'), 
-          where('ziakId', '==', studentId)
+          where('ziakId', '==', studentId),
+          limit(30)
         );
     }, [firestore, studentId]);
     const { data: grades } = useCollection<Grading>(gradesQuery);

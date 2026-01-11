@@ -407,23 +407,28 @@ function StudentParentView() {
     const [isLoading, setIsLoading] = useState(true);
     
     const studentId = user?.roles.includes('ziak') ? user.id : user?.studentId;
-
-    useEffect(() => {
-        if (!studentId || !firestore) return;
-        setIsLoading(true);
-        const q = query(collection(firestore, 'gradings'), where('ziakId', '==', studentId), orderBy('createdAt', 'desc'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Grading));
-            setGradings(data);
-            setIsLoading(false);
-        }, (error) => {
-            console.error("Firestore Error:", error);
-            setIsLoading(false);
-            toast({variant: 'destructive', title: 'Chyba oprávnění', description: 'Nepodařilo se načíst hodnocení.'})
-        });
-        return () => unsubscribe();
-    }, [studentId, firestore]);
     
+    const gradingsQuery = useMemoFirebase(() => {
+        if (!studentId || !firestore) return null;
+        return query(
+          collection(firestore, 'gradings'), 
+          where('ziakId', '==', studentId),
+          limit(30)
+        );
+    }, [studentId, firestore]);
+
+    const { data: gradingsData, error, isLoading: gradingsLoading } = useCollection<Grading>(gradingsQuery);
+    
+    useEffect(() => {
+        setGradings(gradingsData || []);
+        setIsLoading(gradingsLoading);
+        if(error) {
+            console.error("Firestore Error:", error);
+            toast({variant: 'destructive', title: 'Chyba oprávnění', description: 'Nepodařilo se načíst hodnocení.'})
+        }
+    }, [gradingsData, error, gradingsLoading]);
+
+
     const {toast} = useToast();
 
     const gradesBySubject = useMemo(() => {
