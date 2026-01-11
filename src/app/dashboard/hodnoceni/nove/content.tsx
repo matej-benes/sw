@@ -147,6 +147,7 @@ function NewGradingContent() {
             datum: Timestamp.fromDate(data.datum),
             hodina: data.hodina,
             tema: data.tema,
+            studentIds: includedStudents.map(s => s.studentId),
             znamky: includedStudents.map(s => ({
                 studentId: s.studentId,
                 znamka: s.znamka!,
@@ -154,7 +155,7 @@ function NewGradingContent() {
             }))
         };
 
-        const gradingsCollectionRef = collection(firestore, `users/${teacherUser.id}/gradings`);
+        const gradingsCollectionRef = collection(firestore, `gradings`);
         await addDocumentNonBlocking(gradingsCollectionRef, newGrading);
         
         toast({
@@ -345,3 +346,5 @@ function NewGradingContent() {
 }
 
 export default NewGradingContent;
+
+    

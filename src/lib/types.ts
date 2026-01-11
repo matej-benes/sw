@@ -34,6 +34,7 @@ export interface Grading {
   datum: Timestamp;
   hodina: string;
   tema?: string;
+  studentIds: string[];
   znamky: {
     studentId: string;
     znamka: string;
@@ -257,3 +258,5 @@ export interface ZapisDoPrvniTridy {
     datumPodani: string; // YYYY-MM-DD HH:MM
     status: 'Podáno' | 'Přijato' | 'Nepřijato' | 'Odklad';
 }
+
+    

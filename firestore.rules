@@ -47,7 +47,7 @@ service cloud.firestore {
     match /gradings/{gradingId} {
       allow get: if isAuthenticated();
       allow list: if hasAnyRole(['ucitel', 'administrator']) || 
-                     (hasAnyRole(['ziak', 'rodic']) && request.query.filters[0].value == request.auth.uid);
+                     (hasAnyRole(['ziak', 'rodic']) && request.auth.uid in request.query.filters[0].value);
 
       allow create: if hasAnyRole(['ucitel', 'administrator']);
       allow update, delete: if resource.data.ucitelId == request.auth.uid || isAdmin();
@@ -133,3 +133,5 @@ service cloud.firestore {
     }
   }
 }
+
+    
