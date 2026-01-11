@@ -56,13 +56,19 @@ function TeacherView() {
     const [editingGrading, setEditingGrading] = useState<Grading | null>(null);
     const [deletingGrading, setDeletingGrading] = useState<Grading | null>(null);
 
+    // Params from URL for pre-filling
+    const tridaIdFromParams = searchParams.get('tridaId');
+    const predmetIdFromParams = searchParams.get('predmetId');
+
     const teacherClassesQuery = useMemoFirebase(() => {
         if (!user || !firestore) return null;
         return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
     }, [firestore, user]);
 
     const { data: teacherClasses, isLoading: classesLoading } = useCollection<Trida>(teacherClassesQuery);
-    const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+    
+    // The class ID to be used for displaying students. Prioritize URL param.
+    const [selectedClassId, setSelectedClassId] = useState<string | null>(tridaIdFromParams);
 
     const studentsQuery = useMemoFirebase(() => {
         if (!firestore || !selectedClassId) return null;
@@ -79,23 +85,19 @@ function TeacherView() {
     
     // Set default class or class from params
     useEffect(() => {
-        const tridaIdParam = searchParams.get('tridaId');
-        if (tridaIdParam) {
-            setSelectedClassId(tridaIdParam);
+        if (tridaIdFromParams) {
+            setSelectedClassId(tridaIdFromParams);
         } else if (teacherClasses && teacherClasses.length > 0 && !selectedClassId) {
             setSelectedClassId(teacherClasses[0].id);
         }
-    }, [teacherClasses, selectedClassId, searchParams]);
+    }, [teacherClasses, selectedClassId, tridaIdFromParams]);
 
     // Open dialog if params are present
     useEffect(() => {
-        const tridaIdParam = searchParams.get('tridaId');
-        const predmetIdParam = searchParams.get('predmetId');
-        if (tridaIdParam || predmetIdParam) {
+        if (tridaIdFromParams || predmetIdFromParams) {
             handleOpenDialog(null);
-            if (predmetIdParam) setValue('predmetId', predmetIdParam);
         }
-    }, [searchParams, setValue]);
+    }, [tridaIdFromParams, predmetIdFromParams, handleOpenDialog]);
 
     useEffect(() => {
         if (!user || !firestore) return;
@@ -115,9 +117,8 @@ function TeacherView() {
 
     const handleOpenDialog = useCallback((grading: Grading | null) => {
         setEditingGrading(grading);
-        const predmetIdParam = searchParams.get('predmetId');
         
-        if (grading) {
+        if (grading) { // Edit mode
             setValue('studentIds', [grading.ziakId]);
             setValue('predmetId', predmety?.find(p => p.name === grading.predmet)?.id || '');
             setValue('znamka', grading.znamka);
@@ -125,11 +126,20 @@ function TeacherView() {
             setValue('komentar', grading.komentar || '');
             const studentClass = students?.find(s => s.id === grading.ziakId)?.tridaId;
             setSelectedClassId(studentClass || null);
-        } else {
-            reset({ studentIds: [], vaha: 1.0, znamka: 1, predmetId: predmetIdParam || '', komentar: '' });
+        } else { // New mode
+            reset({ 
+                studentIds: [], 
+                vaha: 1.0, 
+                znamka: 1, 
+                predmetId: predmetIdFromParams || '', 
+                komentar: '' 
+            });
+            if (tridaIdFromParams) {
+                setSelectedClassId(tridaIdFromParams);
+            }
         }
         setIsDialogOpen(true);
-    }, [reset, setValue, searchParams, predmety, students]);
+    }, [reset, setValue, tridaIdFromParams, predmetIdFromParams, predmety, students]);
 
 
     const handleSaveGrading = async (data: GradingFormData) => {
@@ -265,10 +275,14 @@ function TeacherView() {
                             <div className="lg:col-span-2">
                                 <div className="grid gap-2">
                                      <Label>Třída</Label>
-                                     <Select onValueChange={(val) => {
-                                        setSelectedClassId(val);
-                                        setValue('studentIds', []); // Reset student selection on class change
-                                     }} value={selectedClassId || ''}>
+                                     <Select 
+                                        onValueChange={(val) => {
+                                            setSelectedClassId(val);
+                                            setValue('studentIds', []); // Reset student selection on class change
+                                        }} 
+                                        value={selectedClassId || ''}
+                                        disabled={!!tridaIdFromParams || editingGrading !== null}
+                                     >
                                          <SelectTrigger>
                                              <SelectValue placeholder="Vyberte třídu" />
                                          </SelectTrigger>
@@ -283,7 +297,7 @@ function TeacherView() {
                                              <TableHeader>
                                                  <TableRow>
                                                     <TableHead className="w-12"><Checkbox 
-                                                        checked={field.value.length === students?.length && students.length > 0}
+                                                        checked={students ? field.value.length === students.length && students.length > 0 : false}
                                                         onCheckedChange={(checked) => {
                                                             if(checked) {
                                                                 field.onChange(students?.map(s => s.id) || []);
@@ -291,6 +305,7 @@ function TeacherView() {
                                                                 field.onChange([]);
                                                             }
                                                         }}
+                                                        disabled={editingGrading !== null}
                                                     /></TableHead>
                                                      <TableHead>Příjmení a jméno</TableHead>
                                                  </TableRow>
@@ -299,16 +314,18 @@ function TeacherView() {
                                                  {studentsLoading ? (
                                                     <TableRow><TableCell colSpan={2} className="text-center h-24">Načítání žáků...</TableCell></TableRow>
                                                  ) : students?.map(student => (
-                                                     <TableRow key={student.id}>
+                                                     <TableRow key={student.id} data-state={field.value.includes(student.id) ? 'selected' : ''}>
                                                          <TableCell><Checkbox 
                                                             checked={field.value.includes(student.id)}
                                                             onCheckedChange={(checked) => {
+                                                                if (editingGrading) return; // Disable changing student in edit mode
                                                                 if(checked) {
                                                                     field.onChange([...field.value, student.id]);
                                                                 } else {
                                                                     field.onChange(field.value.filter(id => id !== student.id));
                                                                 }
                                                             }}
+                                                            disabled={editingGrading !== null}
                                                          /></TableCell>
                                                          <TableCell>{student.name}</TableCell>
                                                      </TableRow>
@@ -323,7 +340,11 @@ function TeacherView() {
                                 <div className="space-y-2">
                                     <Label>Předmět</Label>
                                     <Controller name="predmetId" control={control} render={({ field }) => (
-                                        <Select onValueChange={field.onChange} value={field.value} disabled={predmetyLoading}>
+                                        <Select 
+                                            onValueChange={field.onChange} 
+                                            value={field.value} 
+                                            disabled={predmetyLoading || !!predmetIdFromParams || editingGrading !== null}
+                                        >
                                             <SelectTrigger><SelectValue placeholder="Vyberte předmět" /></SelectTrigger>
                                             <SelectContent>{predmety?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
                                         </Select>
