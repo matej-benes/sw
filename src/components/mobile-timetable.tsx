@@ -93,15 +93,14 @@ export function MobileTimetable({
 
     const timeSlots = schedules[0]?.timeSlots || defaultTimeSlots;
 
-    const gradesQuery = useMemoFirebase(() => {
-        if (!firestore || !studentId) return null;
-        return query(
-          collection(firestore, 'gradings'), 
-          where('ziakId', '==', studentId),
-          limit(30)
-        );
-    }, [firestore, studentId]);
-    const { data: grades } = useCollection<Grading>(gradesQuery);
+    // const gradesQuery = useMemoFirebase(() => {
+    //     if (!firestore || !studentId) return null;
+    //     return query(
+    //       collection(firestore, 'gradings'), 
+    //       where('ziakId', '==', studentId)
+    //     );
+    // }, [firestore, studentId]);
+    // const { data: grades } = useCollection<Grading>(gradesQuery);
     
     const selectedDaySchedule = schedules.find(s => isSameDay(parseISO(s.datum), selectedDate));
     
@@ -195,10 +194,10 @@ export function MobileTimetable({
                         const originalLesson = item.type === 'substituted' ? item.original : null;
                         const dayInfo = { fullDate: selectedDate };
 
-                        const lessonGrades = grades?.filter(g => 
-                            g.predmetId === lesson.subjectId && 
-                            g.datum === format(selectedDate, 'dd.MM.yyyy')
-                        ) || [];
+                        // const lessonGrades = grades?.filter(g => 
+                        //     g.predmetId === lesson.subjectId && 
+                        //     g.datum === format(selectedDate, 'dd.MM.yyyy')
+                        // ) || [];
                         
                         const lessonCard = (
                             <div 
@@ -223,7 +222,7 @@ export function MobileTimetable({
                                         )}
                                     </div>
                                 </div>
-                                {lessonGrades.length > 0 && (
+                                {/* {lessonGrades.length > 0 && (
                                     <div className="mt-2 pt-2 border-t flex items-center gap-3">
                                         <Award className="h-4 w-4 text-primary" />
                                         <div className="flex flex-wrap gap-2">
@@ -235,7 +234,7 @@ export function MobileTimetable({
                                             ))}
                                         </div>
                                     </div>
-                                )}
+                                )} */}
                             </div>
                         );
 
