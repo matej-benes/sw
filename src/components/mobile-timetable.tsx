@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { cn } from "@/lib/utils";
 import type { LessonBlock, Udalost, Rozvrh, Substitution, Grading } from "@/lib/types";
 import { format, getDay, isSameDay, parse, parseISO } from 'date-fns';
@@ -7,7 +7,6 @@ import { cs } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { Info, Award, XCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,9 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { useAuth } from '@/hooks/use-auth';
-
+import { collection, query, where } from 'firebase/firestore';
 
 const defaultTimeSlots = [
     "07:55-08:40", "08:55-09:40", "09:55-10:40", "10:45-11:30",
@@ -67,12 +64,20 @@ function TeacherLessonContextMenu({ children, lesson, dayInfo, period }: { child
     );
 }
 
+
 //==============================================================================
 // CARD COMPONENTS
 //==============================================================================
-function LessonCard({ lesson, period, timeRange, day, classId, isTeacher }: { lesson: LessonBlock, period: number, timeRange: string, day: Date, classId: string, isTeacher: boolean }) {
+function LessonCard({ lesson, period, timeRange, day, classId, isTeacher, grades = [] }: { lesson: LessonBlock, period: number, timeRange: string, day: Date, classId: string, isTeacher: boolean, grades: Grading[] }) {
     const router = useRouter();
     const { toast } = useToast();
+
+    const gradesForThisLesson = useMemo(() => {
+        return grades.filter(grade => 
+            grade.predmetId === lesson.subjectId &&
+            isSameDay(parse(grade.datum, 'dd.MM.yyyy', new Date()), day)
+        );
+    }, [grades, lesson, day]);
 
     const handleLessonClick = () => {
         if (isTeacher) {
@@ -103,6 +108,15 @@ function LessonCard({ lesson, period, timeRange, day, classId, isTeacher }: { le
                     <p className="text-sm text-muted-foreground">{isTeacher ? lesson.className : lesson.teacherName}</p>
                     {isTeacher && <p className="text-sm text-muted-foreground">{lesson.ucebnaName}</p>}
                 </div>
+                 {gradesForThisLesson.length > 0 && (
+                    <div className="flex-shrink-0 flex flex-col items-center justify-center gap-1">
+                        {gradesForThisLesson.map(grade => (
+                            <div key={grade.id} className="flex items-center justify-center h-8 w-8 rounded-full bg-primary/10 border-2 border-primary">
+                                <span className="font-bold text-primary">{grade.znamka}</span>
+                            </div>
+                        ))}
+                    </div>
+                 )}
             </div>
         </div>
     );
@@ -117,6 +131,7 @@ function LessonCard({ lesson, period, timeRange, day, classId, isTeacher }: { le
 
     return cardContent;
 }
+
 
 function EventCard({ event, period, timeRange }: { event: Udalost, period: number, timeRange: string }) {
     return (
@@ -179,6 +194,14 @@ export function MobileTimetable({
 }: MobileTimetableProps) {
     const today = new Date();
     const [selectedDate, setSelectedDate] = useState(today);
+    const firestore = useFirestore();
+
+    const gradesQuery = useMemoFirebase(() => {
+        if (isTeacher || !firestore || !studentId) return null;
+        return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
+    }, [firestore, isTeacher, studentId]);
+
+    const { data: gradesData } = useCollection<Grading>(gradesQuery);
 
     const timetableForSelectedDay = useMemo(() => {
         const schedule = schedules.find(s => isSameDay(parseISO(s.datum), selectedDate));
@@ -261,7 +284,7 @@ export function MobileTimetable({
                     timetableForSelectedDay.map((item: any, idx: number) => {
                         switch (item.type) {
                             case 'lesson':
-                                return <LessonCard key={idx} lesson={item.data} period={item.period} timeRange={item.timeRange} day={selectedDate} classId={item.classId} isTeacher={isTeacher} />;
+                                return <LessonCard key={idx} lesson={item.data} period={item.period} timeRange={item.timeRange} day={selectedDate} classId={item.classId} isTeacher={isTeacher} grades={gradesData || []} />;
                             case 'event':
                                 return <EventCard key={idx} event={item.data} period={item.period} timeRange={item.timeRange} />;
                             case 'cancelled':

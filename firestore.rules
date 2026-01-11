@@ -34,9 +34,7 @@ service cloud.firestore {
     
     match /gradings/{gradingId} {
       allow get: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
-      allow list: if hasAnyRole(['ucitel', 'administrator'])
-                  || (hasRole('ziak') && request.query.ziakId == request.auth.uid)
-                  || (hasRole('rodic') && request.query.ziakId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentId);
+      allow list: if hasAnyRole(['ucitel', 'administrator']) || (isAuthenticated() && request.query.where[0][0] == 'ziakId' && request.query.where[0][2] == request.auth.uid);
       allow create: if hasAnyRole(['ucitel', 'administrator']);
       allow update, delete: if hasAnyRole(['ucitel', 'administrator']) && resource.data.ucitelId == request.auth.uid;
     }
