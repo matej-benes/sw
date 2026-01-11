@@ -1,447 +1,146 @@
 'use client';
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Check, Zap, Users, School, BookOpen } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Logo } from "@/components/logo";
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { useAuth } from '@/hooks/use-auth';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { Logo } from '@/components/logo';
-import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
-import { useFirestore } from '@/firebase';
-import { collection, query, where, getDocs, doc, getDoc, writeBatch, setDoc, updateDoc, arrayRemove, arrayUnion } from 'firebase/firestore';
-import type { User, Trida, Organization } from '@/lib/types';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+export default function AboutPage() {
+    const router = useRouter();
 
+    const features = [
+        { icon: Zap, title: "Moderní rozhraní", description: "Intuitivní a rychlé ovládání pro všechny uživatele." },
+        { icon: Users, title: "Správa uživatelů", description: "Snadná evidence a správa rolí žáků, učitelů i rodičů." },
+        { icon: School, title: "Multi-organizační podpora", description: "Spravujte více škol nebo zájmových skupin pod jedním systémem." },
+        { icon: BookOpen, title: "Kompletní agenda", description: "Rozvrhy, klasifikace, docházka a komunikace na jednom místě." },
+    ];
 
-const loginSchema = z.object({
-  email: z.string().email({ message: 'Prosím zadejte platný email.' }),
-  password: z.string().min(1, { message: 'Prosím zadejte heslo.' }),
-});
-
-const pinSchema = z.object({
-  pin: z.string().length(6, { message: 'PIN musí mít 6 znaků.' }),
-});
-
-const registrationSchema = z.object({
-    email: z.string().email({ message: 'Prosím zadejte platný email.' }),
-    password: z.string().min(6, { message: 'Heslo musí mít alespoň 6 znaků.' }),
-});
-
-function LoginForm() {
-  const { user, signIn, loading: authLoading } = useAuth();
-  const router = useRouter();
-  const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
-
-  const form = useForm<z.infer<typeof loginSchema>>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: '',
-      password: '',
-    },
-  });
-
-   useEffect(() => {
-    if (user) {
-      router.push('/dashboard');
-    }
-  }, [user, router]);
-
-  async function onSubmit(values: z.infer<typeof loginSchema>) {
-    setIsLoading(true);
-    try {
-      await signIn(values.email, values.password);
-      router.push('/dashboard');
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Chyba přihlášení',
-        description: (error as Error).message,
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  return (
-    <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Přihlášení</CardTitle>
-          <CardDescription>Zadejte své údaje pro vstup do systému.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input placeholder="vas@email.cz" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Heslo</FormLabel>
-                    <FormControl>
-                      <Input type="password" placeholder="••••••••" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Button type="submit" className="w-full" disabled={isLoading || authLoading}>
-                {isLoading || authLoading ? <Loader2 className="animate-spin" /> : 'Přihlásit se'}
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
-  )
-}
-
-function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
-    const [step, setStep] = useState(1);
-    const [isLoading, setIsLoading] = useState(false);
-    const [registrationData, setRegistrationData] = useState<{ 
-        userToRegister?: User, 
-        userWithPin?: User, 
-        tridaName: string | null,
-        organization?: Organization,
-        registrationType: 'user' | 'director'
-    } | null>(null);
-    const { toast } = useToast();
-    const firestore = useFirestore();
-    const auth = getAuth();
-
-    const pinForm = useForm<z.infer<typeof pinSchema>>({
-        resolver: zodResolver(pinSchema),
-        defaultValues: { pin: '' },
-    });
-
-    const registrationForm = useForm<z.infer<typeof registrationSchema>>({
-        resolver: zodResolver(registrationSchema),
-        defaultValues: { email: '', password: '' },
-    });
-
-    const handlePinSubmit = async (values: z.infer<typeof pinSchema>) => {
-        setIsLoading(true);
-        if (!firestore) {
-            toast({ variant: 'destructive', title: 'Chyba', description: 'Databáze není dostupná.' });
-            setIsLoading(false);
-            return;
-        }
-
-        try {
-            // First, check for organization PIN
-            const orgsRef = collection(firestore, 'organizations');
-            const orgQuery = query(orgsRef, where("registrationPin", "==", values.pin));
-            const orgSnapshot = await getDocs(orgQuery);
-
-            if (!orgSnapshot.empty) {
-                // This is an organization director registration
-                const orgDoc = orgSnapshot.docs[0];
-                const organization = { id: orgDoc.id, ...orgDoc.data() } as Organization;
-                
-                setRegistrationData({
-                    organization,
-                    tridaName: null,
-                    registrationType: 'director'
-                });
-                setStep(2);
-                setIsLoading(false);
-                return;
-            }
-
-            // If not an org PIN, check for user PIN
-            const usersRef = collection(firestore, 'users');
-            const userQuery = query(usersRef, where("pin", "==", values.pin));
-            const userSnapshot = await getDocs(userQuery);
-
-            if (userSnapshot.empty) {
-                toast({ variant: 'destructive', title: 'Chyba', description: 'Neplatný PIN kód.' });
-                setIsLoading(false);
-                return;
-            }
-            
-            // This is a standard user (parent/teacher) registration
-            const userDoc = userSnapshot.docs[0];
-            const userWithPin = { id: userDoc.id, ...userDoc.data() } as User;
-            let userToRegister: User;
-
-            if (userWithPin.roles.includes('rodic')) {
-                 toast({
-                    variant: 'destructive',
-                    title: 'Nesprávný typ PINu',
-                    description: 'Pro registraci rodičovského účtu zadejte PIN, který patří Vašemu dítěti.'
-                });
-                setIsLoading(false);
-                return;
-            }
-            
-            if (userWithPin.roles.includes('ziak')) {
-                 const parentQuery = query(usersRef, where("studentId", "==", userWithPin.id), where("roles", "array-contains", "rodic"));
-                 const parentSnapshot = await getDocs(parentQuery);
-                 if (!parentSnapshot.empty) {
-                     const parentDoc = parentSnapshot.docs[0];
-                     userToRegister = { id: parentDoc.id, ...parentDoc.data() } as User;
-                 } else {
-                     throw new Error("Pro tohoto žáka nebyl nalezen žádný předvytvořený rodičovský účet. Kontaktujte prosím administrátora školy.");
-                 }
-            } else {
-                userToRegister = userWithPin;
-            }
-            
-            let tridaName: string | null = "N/A";
-            const classIdForDisplay = userWithPin.tridaId || userToRegister.tridaId;
-
-            if (classIdForDisplay) {
-                const tridaRef = doc(firestore, 'tridy', classIdForDisplay);
-                const tridaDoc = await getDoc(tridaRef);
-                tridaName = tridaDoc.exists() ? tridaDoc.data().nazev : null;
-            }
-
-            setRegistrationData({ userToRegister, userWithPin, tridaName, registrationType: 'user' });
-            registrationForm.setValue('email', userToRegister.email || '');
-            setStep(2);
-
-        } catch (error) {
-            console.error("PIN verification error:", error);
-            toast({ variant: 'destructive', title: 'Chyba', description: (error as Error).message || 'Při ověřování PINu došlo k chybě.' });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-     const handleRegistrationSubmit = async (values: z.infer<typeof registrationSchema>) => {
-        setIsLoading(true);
-        if (!firestore || !registrationData) {
-            toast({ variant: 'destructive', title: 'Chyba', description: 'Došlo k neočekávané chybě.' });
-            setIsLoading(false);
-            return;
-        }
-
-        try {
-            const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
-            const newFirebaseUser = userCredential.user;
-            const batch = writeBatch(firestore);
-
-            if (registrationData.registrationType === 'director') {
-                const { organization } = registrationData;
-                if(!organization) throw new Error("Chybí data organizace.");
-
-                const directorData: User = {
-                    id: newFirebaseUser.uid,
-                    name: "Ředitel/Správce Organizace", // Temporary name
-                    email: values.email,
-                    memberships: [{
-                        organizationId: organization.id,
-                        roles: ['administrator']
-                    }],
-                    avatarUrl: `https://picsum.photos/seed/${newFirebaseUser.uid}/100/100`,
-                };
-                
-                const newUserDocRef = doc(firestore, 'users', newFirebaseUser.uid);
-                batch.set(newUserDocRef, directorData);
-
-                // Clear the PIN from the organization document
-                const orgRef = doc(firestore, 'organizations', organization.id);
-                batch.update(orgRef, { registrationPin: null });
-
-            } else if (registrationData.registrationType === 'user') {
-                const { userToRegister, userWithPin } = registrationData;
-                if(!userToRegister || !userWithPin) throw new Error("Chybí data uživatele.");
-                
-                const isRegisteringParent = userToRegister.roles.includes('rodic');
-                const newUserDocRef = doc(firestore, 'users', newFirebaseUser.uid);
-
-                const finalUserData: Partial<User> = {
-                    id: newFirebaseUser.uid,
-                    name: userToRegister.name,
-                    email: values.email,
-                    roles: userToRegister.roles,
-                    avatarUrl: userToRegister.avatarUrl || `https://picsum.photos/seed/${newFirebaseUser.uid}/100/100`,
-                    tridaId: isRegisteringParent ? userWithPin.tridaId : userToRegister.tridaId,
-                    studentId: isRegisteringParent ? userWithPin.id : userToRegister.studentId,
-                };
-                batch.set(newUserDocRef, finalUserData);
-
-                if (isRegisteringParent) {
-                    const studentRef = doc(firestore, 'users', userWithPin.id);
-                    batch.update(studentRef, { studentId: newFirebaseUser.uid });
-                }
-            
-                const placeholderUserRef = doc(firestore, 'users', userToRegister.id);
-                batch.delete(placeholderUserRef);
-            }
-
-            await batch.commit();
-
-            toast({ title: 'Registrace úspěšná', description: 'Váš účet byl vytvořen, nyní se můžete přihlásit.' });
-            onLoginClick();
-        } catch (error: any) {
-            console.error("Registration error:", error);
-            let description = 'Při registraci došlo k chybě.';
-            if (error.code === 'auth/email-already-in-use') {
-                description = 'Tento e-mail je již používán jiným účtem.';
-            } else if (error.code === 'auth/weak-password') {
-                description = 'Heslo je příliš slabé. Musí mít alespoň 6 znaků.'
-            }
-            toast({ variant: 'destructive', title: 'Chyba registrace', description });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
+    const pricingTiers = [
+        {
+            name: "Zkušební verze",
+            price: "Zdarma",
+            period: "/ 30 dní",
+            description: "Vyzkoušejte si všechny funkce bez závazků.",
+            features: ["Plná funkčnost", "Podpora pro 1 organizaci", "Limit 50 uživatelů"],
+            buttonText: "Začít zdarma",
+            variant: "outline"
+        },
+        {
+            name: "Základní balíček",
+            price: "Kontaktujte nás",
+            period: "",
+            description: "Ideální pro menší školy a zájmové skupiny.",
+            features: ["Vše ze zkušební verze", "Neomezený počet uživatelů", "Prioritní podpora"],
+            buttonText: "Kontaktovat",
+            variant: "default"
+        },
+        {
+            name: "Profi balíček",
+            price: "Kontaktujte nás",
+            period: "",
+            description: "Pro velké organizace s potřebou individuálních úprav.",
+            features: ["Vše ze základního balíčku", "Individuální úpravy na míru", "API přístup"],
+            buttonText: "Kontaktovat",
+             variant: "outline"
+        },
+    ];
 
     return (
-        <Card className="w-full max-w-sm">
-            {step === 1 && (
-                <>
-                    <CardHeader>
-                        <CardTitle>Krok 1: Ověření PINu</CardTitle>
-                        <CardDescription>Zadejte PIN kód, který jste obdrželi od školy.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Form {...pinForm}>
-                            <form onSubmit={pinForm.handleSubmit(handlePinSubmit)} className="space-y-4">
-                                <FormField
-                                    control={pinForm.control}
-                                    name="pin"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>PIN</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="123456" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <Button type="submit" className="w-full" disabled={isLoading}>
-                                    {isLoading ? <Loader2 className="animate-spin" /> : 'Ověřit PIN'}
-                                </Button>
-                            </form>
-                        </Form>
-                    </CardContent>
-                </>
-            )}
-            {step === 2 && registrationData && (
-                 <>
-                    <CardHeader>
-                        <CardTitle>Krok 2: Registrace</CardTitle>
-                        <CardDescription>Vytvořte si svůj účet pro přístup do systému.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                       {registrationData.registrationType === 'director' && registrationData.organization && (
-                            <div className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm">
-                                <p>Dokončujete registraci pro organizaci:</p>
-                                <p className="font-bold text-lg">{registrationData.organization.name}</p>
-                                <p className="mt-2">Váš účet bude mít roli **Administrátor** pro tuto organizaci.</p>
-                            </div>
-                        )}
+        <div className="bg-background text-foreground">
+            {/* Header */}
+            <header className="fixed top-0 left-0 right-0 z-50 flex h-16 items-center justify-between bg-background/80 px-6 backdrop-blur-sm">
+                 <div className="flex items-center gap-2 font-semibold text-primary">
+                    <Logo className="h-8 w-8" />
+                    <span className="text-lg font-bold uppercase tracking-wider text-foreground">Škola Online</span>
+                </div>
+                <div className="flex items-center gap-4">
+                    <Button variant="ghost" onClick={() => router.push('/login')}>Přihlásit se</Button>
+                    <Button onClick={() => router.push('/login')}>Registrovat se</Button>
+                </div>
+            </header>
 
-                        {registrationData.registrationType === 'user' && registrationData.userToRegister && (
-                            <div className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm">
-                                <p><strong>Jméno:</strong> {registrationData.userToRegister.name}</p>
-                                <p><strong>Role:</strong> {registrationData.userToRegister.roles.map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(', ')}</p>
-                                {registrationData.userToRegister.roles.includes('rodic') && registrationData.userWithPin && (
-                                    <p><strong>Dítě:</strong> {registrationData.userWithPin.name}</p>
-                                )}
-                                <p><strong>Třída:</strong> {registrationData.tridaName || 'N/A'}</p>
-                            </div>
-                        )}
-                        <Form {...registrationForm}>
-                            <form onSubmit={registrationForm.handleSubmit(handleRegistrationSubmit)} className="space-y-4">
-                                <FormField
-                                    control={registrationForm.control}
-                                    name="email"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Email</FormLabel>
-                                            <FormControl>
-                                                <Input type="email" placeholder="vas@email.cz" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={registrationForm.control}
-                                    name="password"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Heslo</FormLabel>
-                                            <FormControl>
-                                                <Input type="password" placeholder="••••••••" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <Button type="submit" className="w-full" disabled={isLoading}>
-                                    {isLoading ? <Loader2 className="animate-spin" /> : 'Dokončit registraci'}
-                                </Button>
-                            </form>
-                        </Form>
-                    </CardContent>
-                </>
-            )}
-        </Card>
+            <main className="pt-16">
+                {/* Hero Section */}
+                <section className="py-20 text-center">
+                    <div className="container mx-auto px-6">
+                        <h1 className="text-5xl font-bold tracking-tight text-primary">Vítejte ve Škole Online</h1>
+                        <p className="mt-4 text-xl text-muted-foreground">Moderní, rychlý a intuitivní informační systém pro vaši školu nebo organizaci.</p>
+                        <div className="mt-8 flex justify-center gap-4">
+                            <Button size="lg" onClick={() => router.push('/login')}>Vyzkoušet zdarma</Button>
+                            <Button size="lg" variant="outline">Více informací</Button>
+                        </div>
+                    </div>
+                </section>
+
+                {/* Features Section */}
+                <section id="features" className="bg-muted/40 py-20">
+                    <div className="container mx-auto px-6">
+                        <div className="text-center mb-12">
+                             <h2 className="text-4xl font-bold">Klíčové funkce systému</h2>
+                             <p className="mt-2 text-lg text-muted-foreground">Vše, co potřebujete pro efektivní řízení.</p>
+                        </div>
+                        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
+                            {features.map((feature, index) => (
+                                <Card key={index} className="text-center">
+                                    <CardHeader>
+                                        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 mb-4">
+                                            <feature.icon className="h-8 w-8 text-primary" />
+                                        </div>
+                                        <CardTitle>{feature.title}</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <p className="text-muted-foreground">{feature.description}</p>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+
+                {/* Pricing Section */}
+                <section id="pricing" className="py-20">
+                    <div className="container mx-auto px-6">
+                        <div className="text-center mb-12">
+                             <h2 className="text-4xl font-bold">Jednoduchý a transparentní ceník</h2>
+                             <p className="mt-2 text-lg text-muted-foreground">Vyberte si plán, který nejlépe vyhovuje vašim potřebám.</p>
+                        </div>
+                        <div className="grid gap-8 md:grid-cols-1 lg:grid-cols-3">
+                            {pricingTiers.map((tier) => (
+                                <Card key={tier.name} className={tier.variant === 'default' ? 'border-primary ring-2 ring-primary' : ''}>
+                                    <CardHeader>
+                                        <CardTitle className="text-2xl">{tier.name}</CardTitle>
+                                        <CardDescription>{tier.description}</CardDescription>
+                                        <div className="pt-4">
+                                            <span className="text-4xl font-bold">{tier.price}</span>
+                                            <span className="text-muted-foreground">{tier.period}</span>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <ul className="space-y-3">
+                                            {tier.features.map((feature, index) => (
+                                                <li key={index} className="flex items-center gap-2">
+                                                    <Check className="h-5 w-5 text-green-500" />
+                                                    <span className="text-muted-foreground">{feature}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </CardContent>
+                                    <CardFooter>
+                                        <Button className="w-full" variant={tier.variant as any}>{tier.buttonText}</Button>
+                                    </CardFooter>
+                                </Card>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+            </main>
+
+            {/* Footer */}
+            <footer className="border-t bg-muted/40 py-8">
+                <div className="container mx-auto px-6 text-center text-muted-foreground">
+                    <p>&copy; {new Date().getFullYear()} Škola Online. Všechna práva vyhrazena.</p>
+                </div>
+            </footer>
+        </div>
     );
-}
-
-export default function LoginPage() {
-  const [isRegistering, setIsRegistering] = useState(false);
-  const router = useRouter();
-  const { user, loading } = useAuth();
-  
-  useEffect(() => {
-    if (user && !loading) {
-      router.push('/dashboard');
-    }
-  }, [user, loading, router]);
-
-
-  if(loading || user) {
-     return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <div className="h-16 w-16 animate-spin rounded-full border-4 border-dashed border-primary"></div>
-      </div>
-    );
-  }
-
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-4">
-      <div className="flex flex-col items-center justify-center text-center mb-8">
-        <Logo className="h-16 w-16 mb-4 text-primary" />
-        <h1 className="text-4xl font-bold text-primary">ŠkolaWeb</h1>
-        <p className="text-muted-foreground">Vítejte v informačním systému</p>
-      </div>
-      
-      {isRegistering ? <RegistrationForm onLoginClick={() => setIsRegistering(false)} /> : <LoginForm />}
-
-      <Button 
-        variant="link" 
-        className="mt-6 text-muted-foreground text-center h-auto leading-normal"
-        onClick={() => setIsRegistering(!isRegistering)}
-        >
-        {isRegistering ? 'Už mám účet, chci se přihlásit' : 'Jsem v systému poprvé, mám od školy pin a chci se zaregistrovat.'}
-      </Button>
-    </main>
-  );
 }
