@@ -29,14 +29,14 @@ const eventSchema = z.object({
   typ: z.string().min(1, 'Druh události je povinný'),
   datum: z.date({ required_error: 'Datum je povinné' }),
   cas: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Neplatný formát času (HH:MM)'),
-  tridyIds: z.array(z.string()).min(1, 'Vyberte alespoň jednu třídu'),
-  uciteleIds: z.array(z.string()).min(1, 'Vyberte alespoň jednoho učitele'),
+  tridyIds: z.array(z.string()).min(1, 'Vyberte alespoň jednu třídu/skupinu'),
+  uciteleIds: z.array(z.string()).min(1, 'Vyberte alespoň jednoho učitele/vedoucího'),
   nahrazujeHodiny: z.boolean().default(false),
 });
 
 type EventFormData = z.infer<typeof eventSchema>;
 
-const eventTypes = ['Školní akce', 'Porada', 'Exkurze', 'Prázdniny', 'Ředitelské volno'];
+const eventTypes = ['Školní akce', 'Porada', 'Exkurze', 'Prázdniny', 'Ředitelské volno', 'Schůzka skupiny'];
 
 export default function ObecnaUdalostPage() {
   const firestore = useFirestore();
@@ -92,14 +92,14 @@ export default function ObecnaUdalostPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Obecná událost</h1>
-        <p className="text-muted-foreground">Vytvořte novou událost pro třídy a učitele.</p>
+        <h1 className="text-3xl font-bold tracking-tight">Plánování událostí a schůzek</h1>
+        <p className="text-muted-foreground">Vytvořte novou událost pro třídy, skupiny a učitele.</p>
       </div>
       <form onSubmit={handleSubmit(handleSaveEvent)} className="space-y-6">
         <Card>
           <CardHeader>
-              <CardTitle>Vytvořit novou událost</CardTitle>
-              <CardDescription>Zadejte podrobnosti o nové události.</CardDescription>
+              <CardTitle>Vytvořit novou událost / schůzku</CardTitle>
+              <CardDescription>Zadejte podrobnosti o nové akci.</CardDescription>
           </CardHeader>
           <CardContent className="p-6 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
@@ -109,7 +109,7 @@ export default function ObecnaUdalostPage() {
                 <Controller
                   name="nazev"
                   control={control}
-                  render={({ field }) => <Input {...field} placeholder="Např. Vánoční besídka" />}
+                  render={({ field }) => <Input {...field} placeholder="Např. Vánoční besídka, Schůzka kroužku" />}
                 />
                 {errors.nazev && <p className="text-sm text-destructive">{errors.nazev.message}</p>}
               </div>
@@ -167,7 +167,7 @@ export default function ObecnaUdalostPage() {
               </div>
 
               <div className="grid gap-1.5 md:col-span-2">
-                <label className="text-sm font-medium">Třídy</label>
+                <label className="text-sm font-medium">Třídy / Skupiny</label>
                  <Controller
                       name="tridyIds"
                       control={control}
@@ -176,7 +176,7 @@ export default function ObecnaUdalostPage() {
                               options={classOptions}
                               onValueChange={field.onChange}
                               defaultValue={field.value}
-                              placeholder="Vyberte třídy..."
+                              placeholder="Vyberte třídy nebo skupiny..."
                           />
                       )}
                   />
@@ -184,7 +184,7 @@ export default function ObecnaUdalostPage() {
               </div>
 
               <div className="grid gap-1.5 md:col-span-2">
-                <label className="text-sm font-medium">Učitelé</label>
+                <label className="text-sm font-medium">Učitelé / Vedoucí</label>
                  <Controller
                       name="uciteleIds"
                       control={control}
@@ -193,7 +193,7 @@ export default function ObecnaUdalostPage() {
                               options={teacherOptions}
                               onValueChange={field.onChange}
                               defaultValue={field.value}
-                              placeholder="Vyberte učitele..."
+                              placeholder="Vyberte účastníky z řad zaměstnanců..."
                           />
                       )}
                   />
@@ -210,7 +210,7 @@ export default function ObecnaUdalostPage() {
                                   checked={field.value}
                                   onCheckedChange={field.onChange}
                               />
-                              <Label htmlFor="replaces-lessons">Událost nahrazuje vyučování v daném čase</Label>
+                              <Label htmlFor="replaces-lessons">Událost nahrazuje vyučování v daném čase (zobrazí se v rozvrhu místo hodiny)</Label>
                           </div>
                       )}
                   />

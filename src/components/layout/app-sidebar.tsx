@@ -56,13 +56,13 @@ const spravaSystemuLinks = [
      { name: "Organizace", href: "/dashboard/sprava-systemu/organizace", icon: Building },
      { name: "Evidence osob", href: "/dashboard/sprava-systemu/evidence-osob", icon: Users },
      { name: "Třídy", href: "/dashboard/sprava-systemu/tridy", icon: School },
-     { name: "Předměty", href: "/dashboard/sprava-systemu/predmety", icon: Book },
-     { name: "Učebny", href: "/dashboard/sprava-systemu/ucebny", icon: Home },
-     { name: "Zápisy do 1. ročníku", href: "/dashboard/zapisy", icon: UserCheck },
+     { name: "Předměty", href: "/dashboard/sprava-systemu/predmety", icon: Book, type: 'skola' },
+     { name: "Učebny", href: "/dashboard/sprava-systemu/ucebny", icon: Home, type: 'skola' },
+     { name: "Zápisy do 1. ročníku", href: "/dashboard/zapisy", icon: UserCheck, type: 'skola' },
 ]
 
-const interestGroupLinks = [
-    { name: "Schůzky", href: "/dashboard/schuzky", icon: CalendarDays },
+const interestGroupAdminLinks = [
+    { name: "Schůzky", href: "/dashboard/udalosti", icon: CalendarDays },
     { name: "Rozvrhy a suplování", href: "/dashboard/rozvrhy-suplovani", icon: Replace },
 ]
 
@@ -78,7 +78,7 @@ export function AppSidebar() {
 
   const isSchool = activeOrganizationType === 'skola';
 
-  const renderNavLinks = (links: {name: string, href: string, icon?: any}[], isSubMenu = false) => (
+  const renderNavLinks = (links: {name: string, href: string, icon?: any, type?: string}[], isSubMenu = false) => (
     links.map(link => {
         // Hide "Organizace" link if not super admin
         if (link.name === "Organizace" && !superAdmin) {
@@ -87,6 +87,11 @@ export function AppSidebar() {
         
         // Hide other system management links if super admin
         if (superAdmin && ["Evidence osob", "Třídy", "Předměty", "Učebny", "Zápisy do 1. ročníku"].includes(link.name)) {
+            return null;
+        }
+
+        // Hide links based on organization type
+        if (link.type && link.type !== activeOrganizationType) {
             return null;
         }
 
@@ -137,7 +142,7 @@ export function AppSidebar() {
                  {(isTeacher) && !superAdmin && (
                     <>
                         <div className='my-2'></div>
-                        {isSchool ? renderNavLinks(teacherNavLinks) : renderNavLinks(interestGroupLinks)}
+                        {isSchool ? renderNavLinks(teacherNavLinks) : renderNavLinks([])}
                         
                         {isSchool && (
                             <Accordion type="single" collapsible className="w-full" defaultValue={pathname.includes('/dashboard/tisk') ? 'tiskove-vystupy' : undefined}>
@@ -159,7 +164,7 @@ export function AppSidebar() {
                 {(isAdministrator || superAdmin) && (
                     <>
                         <div className='my-2'></div>
-                        {isAdministrator && !superAdmin && renderNavLinks(adminNavLinks)}
+                        {isAdministrator && !superAdmin && (isSchool ? renderNavLinks(adminNavLinks) : renderNavLinks(interestGroupAdminLinks))}
                          <Accordion type="single" collapsible className="w-full" defaultValue={pathname.includes('/dashboard/sprava-systemu') ? 'sprava-systemu' : undefined}>
                             <AccordionItem value="sprava-systemu" className="border-b-0">
                                 <AccordionTrigger className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary hover:no-underline [&[data-state=open]>svg]:rotate-180">
