@@ -97,7 +97,7 @@ function LessonContextMenu({ children, lesson, dayInfo, period, classId }: { chi
                     hodina: (period).toString(),
                     predmetId: lesson.subjectId,
                 })}>Zapsat do třídní knihy</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleNavigation('/dashboard/hodnoceni/nove', {
+                <DropdownMenuItem onClick={() => handleNavigation('/dashboard/hodnoceni', {
                      tridaId: lesson.classId,
                     predmetId: lesson.subjectId,
                     datum: format(dayInfo.fullDate, 'yyyy-MM-dd'),

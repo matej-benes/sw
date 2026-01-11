@@ -55,12 +55,12 @@ function TeacherLessonContextMenu({ children, lesson, dayInfo, period, classId }
                     hodina: (period + 1).toString(),
                     predmetId: lesson.subjectId,
                 })}>Zapsat do třídní knihy</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleNavigation('/dashboard/hodnoceni/nove', {
+                <DropdownMenuItem onClick={() => handleNavigation('/dashboard/hodnoceni', {
                      tridaId: lesson.classId,
                     predmetId: lesson.subjectId,
                     datum: format(dayInfo.fullDate, 'yyyy-MM-dd'),
                     hodina: (period + 1).toString()
-                })}>Zadat hodnocení</DropdownMenuItem>
+                })}>Nové hodnocení</DropdownMenuItem>
                  <DropdownMenuItem onClick={() => handleNavigation('/dashboard/ukoly', {
                     tridaId: lesson.classId,
                     predmetId: lesson.subjectId,

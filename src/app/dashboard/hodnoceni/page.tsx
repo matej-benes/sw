@@ -1,7 +1,7 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import type { Grading, User, Trida, Predmet } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -28,10 +28,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { useSearchParams } from 'next/navigation';
+
 
 const gradingSchema = z.object({
   ziakId: z.string().min(1, 'Žák je povinný.'),
-  predmet: z.string().min(1, 'Předmět je povinný.'),
+  predmetId: z.string().min(1, 'Předmět je povinný.'),
   znamka: z.coerce.number().min(1).max(5),
   vaha: z.coerce.number().min(0.1).max(10),
   komentar: z.string().optional(),
@@ -43,6 +45,8 @@ function TeacherView() {
     const { user } = useAuth();
     const firestore = useFirestore();
     const { toast } = useToast();
+    const searchParams = useSearchParams();
+
     const [gradings, setGradings] = useState<Grading[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -50,14 +54,27 @@ function TeacherView() {
     const [deletingGrading, setDeletingGrading] = useState<Grading | null>(null);
 
     const { data: students, isLoading: studentsLoading } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, 'users'), where('roles', 'array-contains', 'ziak')) : null, [firestore]));
+    const { data: predmety, isLoading: predmetyLoading } = useCollection<Predmet>(useMemoFirebase(() => firestore ? collection(firestore, 'predmety') : null, [firestore]));
+
 
     const { register, handleSubmit, control, reset, setValue, formState: { errors } } = useForm<GradingFormData>({
         resolver: zodResolver(gradingSchema),
         defaultValues: { vaha: 1.0 }
     });
+    
+    // Check for query params to pre-fill the form
+    useEffect(() => {
+        const tridaIdParam = searchParams.get('tridaId');
+        const predmetIdParam = searchParams.get('predmetId');
+        if (tridaIdParam && predmetIdParam) {
+            handleOpenDialog(null); // Open a new dialog
+            setValue('predmetId', predmetIdParam);
+            // We don't have ziakId from params, so user still needs to select it
+        }
+    }, [searchParams, setValue]);
 
     useEffect(() => {
-        if (!user) return;
+        if (!user || !firestore) return;
         setIsLoading(true);
         const q = query(collection(firestore, 'gradings'), where('ucitelId', '==', user.id), orderBy('createdAt', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -71,25 +88,26 @@ function TeacherView() {
         return () => unsubscribe();
     }, [user, firestore]);
 
-    const handleOpenDialog = (grading: Grading | null) => {
+    const handleOpenDialog = useCallback((grading: Grading | null) => {
         setEditingGrading(grading);
         if (grading) {
             setValue('ziakId', grading.ziakId);
-            setValue('predmet', grading.predmet);
+            setValue('predmetId', grading.predmetId);
             setValue('znamka', grading.znamka);
             setValue('vaha', grading.vaha);
             setValue('komentar', grading.komentar);
         } else {
-            reset({ vaha: 1.0, znamka: 1, predmet: '', ziakId: '', komentar: '' });
+            reset({ vaha: 1.0, znamka: 1, predmetId: searchParams.get('predmetId') || '', ziakId: '', komentar: '' });
         }
         setIsDialogOpen(true);
-    }
+    }, [reset, setValue, searchParams]);
 
     const handleSaveGrading = async (data: GradingFormData) => {
         if (!user || !firestore) return;
         const student = students?.find(s => s.id === data.ziakId);
-        if (!student) {
-            toast({ variant: 'destructive', title: 'Chyba', description: 'Vybraný žák nebyl nalezen.' });
+        const predmet = predmety?.find(p => p.id === data.predmetId);
+        if (!student || !predmet) {
+            toast({ variant: 'destructive', title: 'Chyba', description: 'Vybraný žák nebo předmět nebyl nalezen.' });
             return;
         }
 
@@ -98,16 +116,17 @@ function TeacherView() {
             datum: format(new Date(), 'dd.MM.yyyy'),
             cas: format(new Date(), 'HH:mm'),
             ziakJmeno: student.name,
+            predmet: predmet.name, // Store subject name for display
             ucitelId: user.id,
             createdAt: serverTimestamp(),
         };
 
         try {
             if (editingGrading) {
-                await updateDoc(doc(firestore, 'gradings', editingGrading.id), gradingData);
+                await updateDocumentNonBlocking(doc(firestore, 'gradings', editingGrading.id), gradingData);
                 toast({ title: 'Hodnocení upraveno', description: 'Změny byly úspěšně uloženy.' });
             } else {
-                await addDoc(collection(firestore, 'gradings'), gradingData);
+                await addDocumentNonBlocking(collection(firestore, 'gradings'), gradingData);
                 toast({ title: 'Hodnocení přidáno', description: 'Nové hodnocení bylo úspěšně uloženo.' });
             }
             setIsDialogOpen(false);
@@ -120,7 +139,7 @@ function TeacherView() {
     const handleDeleteGrading = async () => {
         if (!deletingGrading || !firestore) return;
         try {
-            await deleteDoc(doc(firestore, 'gradings', deletingGrading.id));
+            await deleteDocumentNonBlocking(doc(firestore, 'gradings', deletingGrading.id));
             toast({ title: 'Hodnocení smazáno' });
             setDeletingGrading(null);
         } catch (error) {
@@ -200,8 +219,13 @@ function TeacherView() {
                         </div>
                         <div className="grid gap-2">
                              <Label>Předmět</Label>
-                            <Controller name="predmet" control={control} render={({ field }) => <Input {...field} placeholder="Např. Matematika" />} />
-                             {errors.predmet && <p className="text-sm text-destructive">{errors.predmet.message}</p>}
+                            <Controller name="predmetId" control={control} render={({ field }) => (
+                                 <Select onValueChange={field.onChange} value={field.value} disabled={predmetyLoading}>
+                                    <SelectTrigger><SelectValue placeholder="Vyberte předmět" /></SelectTrigger>
+                                    <SelectContent>{predmety?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+                                </Select>
+                            )} />
+                             {errors.predmetId && <p className="text-sm text-destructive">{errors.predmetId.message}</p>}
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
@@ -339,7 +363,7 @@ function StudentParentView() {
     );
 }
 
-export default function HodnoceniPage() {
+function HodnoceniPageContent() {
   const { user, loading, hasRole } = useAuth();
   
   if (loading) return <div className="flex h-full w-full items-center justify-center">Načítání...</div>;
@@ -354,4 +378,12 @@ export default function HodnoceniPage() {
   }
 
   return <div>Nemáte roli pro zobrazení této stránky.</div>;
+}
+
+export default function HodnoceniPage() {
+    return (
+        <React.Suspense fallback={<div>Načítání...</div>}>
+            <HodnoceniPageContent />
+        </React.Suspense>
+    );
 }
