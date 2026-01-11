@@ -63,7 +63,6 @@ const spravaSystemuLinks = [
 
 const interestGroupAdminLinks = [
     { name: "Schůzky", href: "/dashboard/udalosti", icon: CalendarDays },
-    { name: "Rozvrhy a suplování", href: "/dashboard/rozvrhy-suplovani", icon: Replace },
 ]
 
 export function AppSidebar() {
@@ -142,7 +141,7 @@ export function AppSidebar() {
                  {(isTeacher) && !superAdmin && (
                     <>
                         <div className='my-2'></div>
-                        {isSchool ? renderNavLinks(teacherNavLinks) : renderNavLinks([])}
+                        {isSchool ? renderNavLinks(teacherNavLinks) : null}
                         
                         {isSchool && (
                             <Accordion type="single" collapsible className="w-full" defaultValue={pathname.includes('/dashboard/tisk') ? 'tiskove-vystupy' : undefined}>
