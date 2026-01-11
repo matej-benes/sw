@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import type { Grading, User, Trida, Predmet } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -31,10 +31,11 @@ import {
 import { useSearchParams } from 'next/navigation';
 import { Separator } from '@/components/ui/separator';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Checkbox } from '@/components/ui/checkbox';
 
 
 const gradingSchema = z.object({
-  ziakId: z.string().min(1, 'Žák je povinný.'),
+  studentIds: z.array(z.string()).min(1, 'Je třeba vybrat alespoň jednoho žáka.'),
   predmetId: z.string().min(1, 'Předmět je povinný.'),
   znamka: z.coerce.number().min(1).max(5),
   vaha: z.coerce.number().min(0.1).max(10),
@@ -55,23 +56,44 @@ function TeacherView() {
     const [editingGrading, setEditingGrading] = useState<Grading | null>(null);
     const [deletingGrading, setDeletingGrading] = useState<Grading | null>(null);
 
-    const { data: students, isLoading: studentsLoading } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, 'users'), where('roles', 'array-contains', 'ziak')) : null, [firestore]));
+    const teacherClassesQuery = useMemoFirebase(() => {
+        if (!user || !firestore) return null;
+        return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
+    }, [firestore, user]);
+
+    const { data: teacherClasses, isLoading: classesLoading } = useCollection<Trida>(teacherClassesQuery);
+    const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+
+    const studentsQuery = useMemoFirebase(() => {
+        if (!firestore || !selectedClassId) return null;
+        return query(collection(firestore, 'users'), where('tridaId', '==', selectedClassId), where('roles', 'array-contains', 'ziak'))
+    }, [firestore, selectedClassId]);
+    const { data: students, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
+
     const { data: predmety, isLoading: predmetyLoading } = useCollection<Predmet>(useMemoFirebase(() => firestore ? collection(firestore, 'predmety') : null, [firestore]));
 
-
-    const { register, handleSubmit, control, reset, setValue, formState: { errors } } = useForm<GradingFormData>({
+    const { register, handleSubmit, control, reset, setValue, watch, formState: { errors } } = useForm<GradingFormData>({
         resolver: zodResolver(gradingSchema),
-        defaultValues: { vaha: 1.0, znamka: 1 }
+        defaultValues: { studentIds: [], vaha: 1.0, znamka: 1 }
     });
     
-    // Check for query params to pre-fill the form
+    // Set default class or class from params
+    useEffect(() => {
+        const tridaIdParam = searchParams.get('tridaId');
+        if (tridaIdParam) {
+            setSelectedClassId(tridaIdParam);
+        } else if (teacherClasses && teacherClasses.length > 0 && !selectedClassId) {
+            setSelectedClassId(teacherClasses[0].id);
+        }
+    }, [teacherClasses, selectedClassId, searchParams]);
+
+    // Open dialog if params are present
     useEffect(() => {
         const tridaIdParam = searchParams.get('tridaId');
         const predmetIdParam = searchParams.get('predmetId');
         if (tridaIdParam || predmetIdParam) {
-            handleOpenDialog(null); // Open a new dialog
+            handleOpenDialog(null);
             if (predmetIdParam) setValue('predmetId', predmetIdParam);
-            // We don't have ziakId from params, so user still needs to select it
         }
     }, [searchParams, setValue]);
 
@@ -85,55 +107,78 @@ function TeacherView() {
             setIsLoading(false);
         }, (error) => {
             console.error("Error fetching gradings: ", error);
+            toast({ variant: 'destructive', title: 'Chyba načítání hodnocení', description: 'Nemáte dostatečná oprávnění.'});
             setIsLoading(false);
         });
         return () => unsubscribe();
-    }, [user, firestore]);
+    }, [user, firestore, toast]);
 
     const handleOpenDialog = useCallback((grading: Grading | null) => {
         setEditingGrading(grading);
+        const predmetIdParam = searchParams.get('predmetId');
+        
         if (grading) {
-            setValue('ziakId', grading.ziakId);
-            setValue('predmetId', grading.predmetId);
+            setValue('studentIds', [grading.ziakId]);
+            setValue('predmetId', predmety?.find(p => p.name === grading.predmet)?.id || '');
             setValue('znamka', grading.znamka);
             setValue('vaha', grading.vaha);
             setValue('komentar', grading.komentar || '');
+            const studentClass = students?.find(s => s.id === grading.ziakId)?.tridaId;
+            setSelectedClassId(studentClass || null);
         } else {
-            const predmetIdParam = searchParams.get('predmetId');
-            reset({ vaha: 1.0, znamka: 1, predmetId: predmetIdParam || '', ziakId: '', komentar: '' });
-             if (predmetIdParam) {
-                setValue('predmetId', predmetIdParam);
-            }
+            reset({ studentIds: [], vaha: 1.0, znamka: 1, predmetId: predmetIdParam || '', komentar: '' });
         }
         setIsDialogOpen(true);
-    }, [reset, setValue, searchParams]);
+    }, [reset, setValue, searchParams, predmety, students]);
+
 
     const handleSaveGrading = async (data: GradingFormData) => {
-        if (!user || !firestore) return;
-        const student = students?.find(s => s.id === data.ziakId);
+        if (!user || !firestore || !allStudents) return;
+        
         const predmet = predmety?.find(p => p.id === data.predmetId);
-        if (!student || !predmet) {
-            toast({ variant: 'destructive', title: 'Chyba', description: 'Vybraný žák nebo předmět nebyl nalezen.' });
+        if (!predmet) {
+            toast({ variant: 'destructive', title: 'Chyba', description: 'Vybraný předmět nebyl nalezen.' });
             return;
         }
 
-        const gradingData = {
-            ...data,
-            datum: format(new Date(), 'dd.MM.yyyy'),
-            cas: format(new Date(), 'HH:mm'),
-            ziakJmeno: student.name,
-            predmet: predmet.name, // Store subject name for display
-            ucitelId: user.id,
-            createdAt: serverTimestamp(),
-        };
-
         try {
-            if (editingGrading) {
+             if (editingGrading) {
+                const student = allStudents.find(s => s.id === data.studentIds[0]);
+                if(!student) return;
+                const gradingData = {
+                    ...data,
+                    studentIds: undefined, // remove from data
+                    ziakId: student.id,
+                    datum: format(new Date(), 'dd.MM.yyyy'),
+                    cas: format(new Date(), 'HH:mm'),
+                    ziakJmeno: student.name,
+                    predmet: predmet.name,
+                    ucitelId: user.id,
+                };
                 await updateDocumentNonBlocking(doc(firestore, 'gradings', editingGrading.id), gradingData);
                 toast({ title: 'Hodnocení upraveno', description: 'Změny byly úspěšně uloženy.' });
             } else {
-                await addDocumentNonBlocking(collection(firestore, 'gradings'), gradingData);
-                toast({ title: 'Hodnocení přidáno', description: 'Nové hodnocení bylo úspěšně uloženo.' });
+                const batch = writeBatch(firestore);
+                data.studentIds.forEach(studentId => {
+                    const student = allStudents.find(s => s.id === studentId);
+                    if (student) {
+                        const newGradingDoc = doc(collection(firestore, 'gradings'));
+                        const gradingData = {
+                            ...data,
+                            studentIds: undefined,
+                            ziakId: studentId,
+                            datum: format(new Date(), 'dd.MM.yyyy'),
+                            cas: format(new Date(), 'HH:mm'),
+                            ziakJmeno: student.name,
+                            predmet: predmet.name,
+                            ucitelId: user.id,
+                            createdAt: serverTimestamp(),
+                        };
+                        batch.set(newGradingDoc, gradingData);
+                    }
+                });
+                await batch.commit();
+                toast({ title: 'Hodnocení přidáno', description: `Nové hodnocení bylo úspěšně uloženo pro ${data.studentIds.length} žáků.` });
             }
             setIsDialogOpen(false);
         } catch (error) {
@@ -153,6 +198,9 @@ function TeacherView() {
         }
     }
     
+    // We need all students for the parent selector in edit mode
+    const { data: allStudents } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, 'users'), where('roles', 'array-contains', 'ziak')) : null, [firestore]));
+
     return (
         <div className="p-4 md:p-6 space-y-6">
             <div className="flex justify-between items-center">
@@ -208,60 +256,103 @@ function TeacherView() {
             </Card>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="sm:max-w-2xl">
+                <DialogContent className="max-w-4xl">
                     <DialogHeader>
                         <DialogTitle className="text-2xl">{editingGrading ? 'Upravit hodnocení' : 'Nové hodnocení'}</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleSubmit(handleSaveGrading)} className="space-y-6 pt-4">
-                        
-                        <div className="grid md:grid-cols-2 gap-6">
-                            <div className="space-y-2">
-                                <Label>Žák</Label>
-                                <Controller name="ziakId" control={control} render={({ field }) => (
-                                    <Select onValueChange={field.onChange} value={field.value} disabled={studentsLoading}>
-                                        <SelectTrigger><SelectValue placeholder="Vyberte žáka" /></SelectTrigger>
-                                        <SelectContent>{students?.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                )} />
-                                {errors.ziakId && <p className="text-sm text-destructive">{errors.ziakId.message}</p>}
+                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <div className="lg:col-span-2">
+                                <div className="grid gap-2">
+                                     <Label>Třída</Label>
+                                     <Select onValueChange={(val) => {
+                                        setSelectedClassId(val);
+                                        setValue('studentIds', []); // Reset student selection on class change
+                                     }} value={selectedClassId || ''}>
+                                         <SelectTrigger>
+                                             <SelectValue placeholder="Vyberte třídu" />
+                                         </SelectTrigger>
+                                         <SelectContent>
+                                            {teacherClasses?.map(c => <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>)}
+                                         </SelectContent>
+                                     </Select>
+                                 </div>
+                                 <Controller name="studentIds" control={control} render={({ field }) => (
+                                     <div className="mt-4 border rounded-lg max-h-60 overflow-y-auto">
+                                         <Table>
+                                             <TableHeader>
+                                                 <TableRow>
+                                                    <TableHead className="w-12"><Checkbox 
+                                                        checked={field.value.length === students?.length && students.length > 0}
+                                                        onCheckedChange={(checked) => {
+                                                            if(checked) {
+                                                                field.onChange(students?.map(s => s.id) || []);
+                                                            } else {
+                                                                field.onChange([]);
+                                                            }
+                                                        }}
+                                                    /></TableHead>
+                                                     <TableHead>Příjmení a jméno</TableHead>
+                                                 </TableRow>
+                                             </TableHeader>
+                                             <TableBody>
+                                                 {studentsLoading ? (
+                                                    <TableRow><TableCell colSpan={2} className="text-center h-24">Načítání žáků...</TableCell></TableRow>
+                                                 ) : students?.map(student => (
+                                                     <TableRow key={student.id}>
+                                                         <TableCell><Checkbox 
+                                                            checked={field.value.includes(student.id)}
+                                                            onCheckedChange={(checked) => {
+                                                                if(checked) {
+                                                                    field.onChange([...field.value, student.id]);
+                                                                } else {
+                                                                    field.onChange(field.value.filter(id => id !== student.id));
+                                                                }
+                                                            }}
+                                                         /></TableCell>
+                                                         <TableCell>{student.name}</TableCell>
+                                                     </TableRow>
+                                                 ))}
+                                             </TableBody>
+                                         </Table>
+                                     </div>
+                                 )} />
+                                 {errors.studentIds && <p className="text-sm text-destructive mt-1">{errors.studentIds.message}</p>}
                             </div>
-                            <div className="space-y-2">
-                                <Label>Předmět</Label>
-                                <Controller name="predmetId" control={control} render={({ field }) => (
-                                    <Select onValueChange={field.onChange} value={field.value} disabled={predmetyLoading}>
-                                        <SelectTrigger><SelectValue placeholder="Vyberte předmět" /></SelectTrigger>
-                                        <SelectContent>{predmety?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                )} />
-                                {errors.predmetId && <p className="text-sm text-destructive">{errors.predmetId.message}</p>}
+                            <div className="space-y-6">
+                                <div className="space-y-2">
+                                    <Label>Předmět</Label>
+                                    <Controller name="predmetId" control={control} render={({ field }) => (
+                                        <Select onValueChange={field.onChange} value={field.value} disabled={predmetyLoading}>
+                                            <SelectTrigger><SelectValue placeholder="Vyberte předmět" /></SelectTrigger>
+                                            <SelectContent>{predmety?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                    )} />
+                                    {errors.predmetId && <p className="text-sm text-destructive">{errors.predmetId.message}</p>}
+                                </div>
+                                 <div className="space-y-3">
+                                   <Label>Známka</Label>
+                                   <Controller name="znamka" control={control} render={({ field }) => (
+                                      <ToggleGroup type="single" value={String(field.value)} onValueChange={(val) => val && field.onChange(Number(val))} className="grid grid-cols-5 gap-2">
+                                        {[1, 2, 3, 4, 5].map(z => (
+                                            <ToggleGroupItem key={z} value={String(z)} className="h-12 w-full text-xl font-bold border data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+                                              {z}
+                                            </ToggleGroupItem>
+                                        ))}
+                                      </ToggleGroup>
+                                    )}/>
+                                </div>
+                                <div className="space-y-3">
+                                     <Label htmlFor="vaha">Váha</Label>
+                                     <div className="flex items-center gap-2">
+                                         <Star className="text-muted-foreground" />
+                                         <Controller name="vaha" control={control} render={({ field }) => <Input id="vaha" type="number" step="0.1" {...field} className="text-lg" />} />
+                                     </div>
+                                    {errors.vaha && <p className="text-sm text-destructive">{errors.vaha.message}</p>}
+                                </div>
                             </div>
                         </div>
 
-                        <Separator />
-
-                         <div className="grid md:grid-cols-2 gap-6">
-                            <div className="space-y-3">
-                               <Label>Známka</Label>
-                               <Controller name="znamka" control={control} render={({ field }) => (
-                                  <ToggleGroup type="single" value={String(field.value)} onValueChange={(val) => val && field.onChange(Number(val))} className="grid grid-cols-5 gap-2">
-                                    {[1, 2, 3, 4, 5].map(z => (
-                                        <ToggleGroupItem key={z} value={String(z)} className="h-12 w-full text-xl font-bold border data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
-                                          {z}
-                                        </ToggleGroupItem>
-                                    ))}
-                                  </ToggleGroup>
-                                )}/>
-                            </div>
-                            <div className="space-y-3">
-                                 <Label htmlFor="vaha">Váha</Label>
-                                 <div className="flex items-center gap-2">
-                                     <Star className="text-muted-foreground" />
-                                     <Controller name="vaha" control={control} render={({ field }) => <Input id="vaha" type="number" step="0.1" {...field} className="text-lg" />} />
-                                 </div>
-                                {errors.vaha && <p className="text-sm text-destructive">{errors.vaha.message}</p>}
-                            </div>
-                         </div>
-                        
                         <div className="space-y-2">
                             <Label htmlFor="komentar">Komentář / Název hodnocení</Label>
                             <div className="flex items-center gap-2">
