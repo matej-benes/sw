@@ -15,6 +15,10 @@ service cloud.firestore {
     function getUserData(userId) {
       return get(/databases/$(database)/documents/users/$(userId)).data;
     }
+    
+    function isSuperAdmin() {
+      return isAuthenticated() && getUserData(request.auth.uid).isSuperAdmin == true;
+    }
 
     function isMember(organizationId) {
       return isAuthenticated() && getUserData(request.auth.uid).memberships.exists(m, m.organizationId == organizationId);
@@ -32,28 +36,30 @@ service cloud.firestore {
        return isMember(organizationId) && getMembership(organizationId).roles.hasAny(roles);
     }
     
-    // An organization owner can do anything within their organization
     function isOrganizationOwner(organizationId) {
         return isAuthenticated() && get(/databases/$(database)/documents/organizations/$(organizationId)).data.ownerId == request.auth.uid;
     }
 
     match /organizations/{organizationId} {
-      allow read: if isMember(organizationId);
-      allow create: if isAuthenticated(); // User creates their own org
-      allow update: if isOrganizationOwner(organizationId);
+      allow read: if isMember(organizationId) || isSuperAdmin();
+      allow create: if isAuthenticated() || isSuperAdmin();
+      allow update: if isOrganizationOwner(organizationId) || isSuperAdmin();
+      allow list: if isSuperAdmin();
     }
 
     match /users/{userId} {
-      allow get: if isAuthenticated();
-      // Allow user to update their own document, or an org owner to update any user in their org
-      allow update: if isOwner(userId);
-      // Let anyone create a user document initially (e.g. registration placeholders)
+      allow get: if isAuthenticated() || isSuperAdmin();
+      allow update: if isOwner(userId) || isSuperAdmin();
       allow create: if true; 
-      allow delete: if hasRole(request.resource.data.organizationId, 'administrator'); // Needs context of an org
+      allow delete: if hasRole(request.resource.data.organizationId, 'administrator') || isSuperAdmin();
+      allow list: if isAuthenticated() || isSuperAdmin();
     }
     
-    // Rules for organization-scoped data
     match /{collection}/{docId} {
+       // SuperAdmin can do anything
+       allow read, write: if isSuperAdmin();
+       
+       // Org-scoped rules
        allow read, write: if request.resource.data.keys().hasAny(['organizationId']) &&
                            (hasAnyRole(request.resource.data.organizationId, ['administrator', 'ucitel']) || 
                             isOrganizationOwner(request.resource.data.organizationId));
@@ -72,3 +78,5 @@ service cloud.firestore {
     }
   }
 }
+
+    

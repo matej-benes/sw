@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useFirestore, useActiveOrganization } from '@/firebase';
 import { getAuth, signInWithEmailAndPassword, signOut as firebaseSignOut, onIdTokenChanged, type User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import { toast } from '@/hooks/use-toast';
 
@@ -20,6 +20,7 @@ interface AuthContextType {
   signIn: (email: string, pass: string) => Promise<void>;
   signOut: () => Promise<void>;
   hasRole: (role: Role) => boolean;
+  isSuperAdmin: () => boolean;
   activeMembership: UserMembership | null;
 }
 
@@ -40,13 +41,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       if (firebaseUser) {
            const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-           const docSnap = await getDoc(userDocRef);
+           let docSnap = await getDoc(userDocRef);
+           
+           // Special handling for the super admin user
+           if (!docSnap.exists() && firebaseUser.email === 'admin@sw.cz') {
+                const superAdminData: User = {
+                    id: firebaseUser.uid,
+                    name: "Super Administrátor",
+                    email: firebaseUser.email,
+                    isSuperAdmin: true,
+                    memberships: [],
+                };
+                await setDoc(userDocRef, superAdminData);
+                docSnap = await getDoc(userDocRef); // Re-fetch the doc
+           }
+
            if (docSnap.exists()) {
              const userData = { id: docSnap.id, ...docSnap.data() } as User;
              setUser(userData);
              // Logic to set active organization
              if (userData.memberships && userData.memberships.length > 0) {
-                 // Check if there is a stored active organization, otherwise default to the first one
                  const storedOrgId = localStorage.getItem('activeOrganizationId');
                  if (storedOrgId && userData.memberships.some(m => m.organizationId === storedOrgId)) {
                      setActiveOrganizationId(storedOrgId);
@@ -85,7 +99,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, pass);
-      // The onIdTokenChanged listener will handle setting user and org state.
     } catch (error) {
       console.error("Sign in error", error);
       setLoading(false);
@@ -103,10 +116,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const hasRole = useCallback((role: Role) => {
+    if (user?.isSuperAdmin) return true; // Super admin has all roles
     return activeMembership?.roles.includes(role) ?? false;
-  }, [activeMembership]);
+  }, [activeMembership, user]);
+  
+  const isSuperAdmin = useCallback(() => {
+    return user?.isSuperAdmin === true;
+  }, [user]);
 
-  const value = { user, loading, signIn, signOut, hasRole, activeMembership };
+  const value = { user, loading, signIn, signOut, hasRole, isSuperAdmin, activeMembership };
 
    if (loading && !pathname.startsWith('/dashboard/profil')) {
     return (
@@ -123,3 +141,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     </AuthContext.Provider>
   );
 }
+
+    

@@ -1,11 +1,13 @@
 import { Timestamp } from "firebase/firestore";
 
-export type Role = 'ucitel' | 'rodic' | 'ziak' | 'administrator' | 'vedouci pracovnik' | 'asistent pedagoga';
+export type Role = 'ucitel' | 'rodic' | 'ziak' | 'administrator' | 'vedouci pracovnik' | 'asistent pedagoga' | 'superAdmin';
 
 export interface Organization {
   id: string;
   name: string;
   ownerId: string;
+  status: 'trial' | 'active' | 'expired';
+  trialEndDate?: string; // YYYY-MM-DD
 }
 
 export interface UserMembership {
@@ -22,6 +24,7 @@ export interface User {
   // Per-organization data that might need to be specific
   studentId?: string; 
   pin?: string;
+  isSuperAdmin?: boolean;
 }
 
 export interface Grading {
@@ -252,3 +255,5 @@ export interface ZapisDoPrvniTridy {
     datumPodani: string; // YYYY-MM-DD HH:MM
     status: 'Podáno' | 'Přijato' | 'Nepřijato' | 'Odklad';
 }
+
+    

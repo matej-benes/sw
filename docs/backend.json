@@ -7,9 +7,11 @@
       "properties": {
         "id": { "type": "string", "description": "Unique identifier for the organization." },
         "name": { "type": "string", "description": "The name of the organization." },
-        "ownerId": { "type": "string", "description": "The user ID of the organization's owner." }
+        "ownerId": { "type": "string", "description": "The user ID of the organization's owner." },
+        "status": { "type": "string", "enum": ["trial", "active", "expired"], "description": "The subscription status of the organization." },
+        "trialEndDate": { "type": "string", "format": "date", "description": "The end date for the trial period." }
       },
-      "required": ["id", "name", "ownerId"]
+      "required": ["id", "name", "ownerId", "status"]
     },
     "User": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -33,7 +35,8 @@
           }
         },
         "studentId": { "type": "string", "description": "For parents, the ID of their child student. This assumes a parent is linked to one child per organization context." },
-        "pin": { "type": "string", "description": "A 6-digit PIN for initial user registration." }
+        "pin": { "type": "string", "description": "A 6-digit PIN for initial user registration." },
+        "isSuperAdmin": { "type": "boolean", "description": "Indicates if the user is a super administrator." }
       },
       "required": ["id", "name", "email"]
     },
@@ -253,3 +256,5 @@
     ]
   }
 }
+
+    

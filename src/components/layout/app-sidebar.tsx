@@ -22,6 +22,7 @@ import {
     Book,
     Home,
     UserCheck,
+    Building,
 } from 'lucide-react';
 
 const mainNavLinks = [
@@ -51,6 +52,7 @@ const adminNavLinks = [
 ];
 
 const spravaSystemuLinks = [
+     { name: "Organizace", href: "/dashboard/sprava-systemu/organizace", icon: Building },
      { name: "Evidence osob", href: "/dashboard/sprava-systemu/evidence-osob", icon: Users },
      { name: "Třídy", href: "/dashboard/sprava-systemu/tridy", icon: School },
      { name: "Předměty", href: "/dashboard/sprava-systemu/predmety", icon: Book },
@@ -59,16 +61,22 @@ const spravaSystemuLinks = [
 ]
 
 export function AppSidebar() {
-  const { hasRole } = useAuth();
+  const { hasRole, isSuperAdmin } = useAuth();
   const { unreadCount } = useUnreadMessages();
   const pathname = usePathname();
   
   const isAdministrator = hasRole('administrator');
   const isTeacher = hasRole('ucitel');
   const isParentOrStudent = hasRole('rodic') || hasRole('ziak');
+  const superAdmin = isSuperAdmin();
 
   const renderNavLinks = (links: {name: string, href: string, icon?: any}[], isSubMenu = false) => (
     links.map(link => {
+        // Hide "Organizace" link if not super admin
+        if (link.name === "Organizace" && !superAdmin) {
+            return null;
+        }
+
         const isActive = pathname.startsWith(link.href);
         const LinkIcon = link.icon;
         const isCommunication = link.name === 'Komunikace';
@@ -105,13 +113,13 @@ export function AppSidebar() {
         <div className="flex-1 overflow-y-auto">
             <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
                  {renderNavLinks(mainNavLinks)}
-                 {isParentOrStudent && (
+                 {isParentOrStudent && !superAdmin && (
                     <>
                         <div className='my-2'></div>
                         {renderNavLinks(studentParentLinks)}
                     </>
                  )}
-                 {(isTeacher) && (
+                 {(isTeacher) && !superAdmin && (
                     <>
                         <div className='my-2'></div>
                         {renderNavLinks(teacherNavLinks)}
@@ -130,10 +138,10 @@ export function AppSidebar() {
                         </Accordion>
                     </>
                  )}
-                {isAdministrator && (
+                {(isAdministrator || superAdmin) && (
                     <>
                         <div className='my-2'></div>
-                        {renderNavLinks(adminNavLinks)}
+                        {isAdministrator && !superAdmin && renderNavLinks(adminNavLinks)}
                          <Accordion type="single" collapsible className="w-full" defaultValue={pathname.includes('/dashboard/sprava-systemu') ? 'sprava-systemu' : undefined}>
                             <AccordionItem value="sprava-systemu" className="border-b-0">
                                 <AccordionTrigger className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary hover:no-underline [&[data-state=open]>svg]:rotate-180">
@@ -154,3 +162,5 @@ export function AppSidebar() {
     </div>
   );
 }
+
+    
