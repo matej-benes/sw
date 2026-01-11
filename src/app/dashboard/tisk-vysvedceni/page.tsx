@@ -2,8 +2,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, collectionGroup } from 'firebase/firestore';
-import type { Trida, User, Znamka, ZapisHodiny } from '@/lib/types';
+import { collection, query, where } from 'firebase/firestore';
+import type { Trida, User, Grading, ZapisHodiny } from '@/lib/types';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,10 +46,11 @@ export default function TiskVysvedceniPage() {
     const { data: students, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
     
     const gradesQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
-        return query(collectionGroup(firestore, 'znamky'));
-    }, [firestore]);
-    const { data: allGrades, isLoading: gradesLoading } = useCollection<Znamka>(gradesQuery);
+        if (!firestore || !selectedClassId) return null;
+        // Correctly query gradings only for the selected class
+        return query(collection(firestore, 'gradings'), where('tridaId', '==', selectedClassId));
+    }, [firestore, selectedClassId]);
+    const { data: allGrades, isLoading: gradesLoading } = useCollection<Grading>(gradesQuery);
 
     const attendanceQuery = useMemoFirebase(() => {
          if (!firestore || !selectedClassId) return null;
@@ -67,13 +68,13 @@ export default function TiskVysvedceniPage() {
         if (students && allGrades && attendanceRecords) {
             const studentIdsInClass = students.map(s => s.id);
             const reportData = students.map(student => {
-                const studentGrades = allGrades.filter(g => g.studentId === student.id);
+                const studentGrades = allGrades.filter(g => g.ziakId === student.id);
                 const totalLessons = attendanceRecords.length;
                 const presentLessons = attendanceRecords.filter(r => r.attendance.some(a => a.studentId === student.id && a.status === '-')).length;
 
                 let avgGrade = 'N/A';
                 if (studentGrades.length > 0) {
-                    const sum = studentGrades.reduce((acc, g) => acc + g.hodnota, 0);
+                    const sum = studentGrades.reduce((acc, g) => acc + g.znamka, 0);
                     avgGrade = (sum / studentGrades.length).toFixed(2);
                 }
 
