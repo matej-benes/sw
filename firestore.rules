@@ -33,12 +33,10 @@ service cloud.firestore {
     }
     
     match /gradings/{gradingId} {
-        allow get: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
-        allow list: if hasAnyRole(['ucitel', 'administrator']) ||
-                     (isAuthenticated() && request.query.ziakId == request.auth.uid) ||
-                     (isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentId == request.query.ziakId);
-        allow create: if hasAnyRole(['ucitel', 'administrator']);
-        allow update, delete: if hasAnyRole(['ucitel', 'administrator']) && resource.data.ucitelId == request.auth.uid;
+      allow get: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
+      allow list: if hasAnyRole(['ucitel', 'administrator']) || (request.auth.uid != null && request.query.ziakId == request.auth.uid) || (request.auth.uid != null && isMyStudent(request.query.ziakId));
+      allow create: if hasAnyRole(['ucitel', 'administrator']);
+      allow update, delete: if hasAnyRole(['ucitel', 'administrator']) && resource.data.ucitelId == request.auth.uid;
     }
     
     match /tridy/{tridaId} {
