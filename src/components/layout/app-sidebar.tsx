@@ -77,6 +77,11 @@ export function AppSidebar() {
             return null;
         }
 
+        // Hide other system management links if super admin
+        if (superAdmin && ["Třídy", "Předměty", "Učebny", "Zápisy do 1. ročníku"].includes(link.name)) {
+            return null;
+        }
+
         const isActive = pathname.startsWith(link.href);
         const LinkIcon = link.icon;
         const isCommunication = link.name === 'Komunikace';
