@@ -15,7 +15,8 @@ export interface User {
 
 export interface Grading {
   id: string;
-  datum: Timestamp;
+  datum: string; // YYYY-MM-DD
+  cas: string;   // HH:MM
   ziakId: string;
   ziakJmeno: string;
   predmet: string;
@@ -23,7 +24,9 @@ export interface Grading {
   vaha: number;
   komentar: string;
   ucitelId: string;
+  createdAt: Timestamp;
 }
+
 
 export interface Trida {
     id: string;
@@ -222,7 +225,3 @@ export interface ZapisDoPrvniTridy {
     datumPodani: string; // YYYY-MM-DD HH:MM
     status: 'Podáno' | 'Přijato' | 'Nepřijato' | 'Odklad';
 }
-
-    
-
-    
