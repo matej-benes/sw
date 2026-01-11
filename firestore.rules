@@ -33,8 +33,8 @@ service cloud.firestore {
                   || (isAuthenticated() && resource.data.ziakId == request.auth.uid)
                   || (isAuthenticated() && isMyStudent(resource.data.ziakId));
       allow list: if (isAuthenticated() && (hasRole('ucitel') || hasRole('administrator')))
-                  || (isAuthenticated() && request.query.where.ziakId == request.auth.uid)
-                  || (isAuthenticated() && isMyStudent(request.query.where.ziakId));
+                  || (isAuthenticated() && request.query.where[0][2] == request.auth.uid)
+                  || (isAuthenticated() && isMyStudent(request.query.where[0][2]));
       allow write: if hasRole('ucitel');
     }
     
@@ -113,5 +113,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
