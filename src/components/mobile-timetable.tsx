@@ -95,7 +95,7 @@ function LessonCard({ lesson, period, timeRange, day, classId, isTeacher, grades
         ].join('/');
         router.push(`/dashboard/hodina/${slug}`);
     };
-
+    
     const cardContent = (
         <div className="rounded-lg bg-card border p-3" onClick={handleLessonClick}>
             <div className="flex gap-4">
@@ -110,11 +110,7 @@ function LessonCard({ lesson, period, timeRange, day, classId, isTeacher, grades
                 </div>
                  {gradesForThisLesson.length > 0 && (
                     <div className="flex-shrink-0 flex flex-col items-center justify-center gap-1">
-                        {gradesForThisLesson.map(grade => (
-                            <div key={grade.id} className="flex items-center justify-center h-8 w-8 rounded-full bg-primary/10 border-2 border-primary">
-                                <span className="font-bold text-primary">{grade.znamka}</span>
-                            </div>
-                        ))}
+                         <Award className="h-6 w-6 text-amber-500 fill-amber-300" />
                     </div>
                  )}
             </div>
