@@ -412,8 +412,7 @@ function StudentParentView() {
         if (!studentId || !firestore) return null;
         return query(
           collection(firestore, 'gradings'), 
-          where('ziakId', '==', studentId),
-          limit(30)
+          where('ziakId', '==', studentId)
         );
     }, [studentId, firestore]);
 
