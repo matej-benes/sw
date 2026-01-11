@@ -262,15 +262,20 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                     ...prefilledUser,
                     id: newFirebaseUser.uid, // Override ID with the new one from Auth
                     email: values.email, // Set the final email
-                    pin: null, // Clear PIN after use
+                    pin: undefined, // Clear PIN after use
                 };
                 
                 // Firestore doesn't like `undefined` values.
                 Object.keys(finalUserData).forEach(key => {
-                    if (finalUserData[key as keyof User] === undefined) {
-                        delete finalUserData[key as keyof User];
+                    const typedKey = key as keyof User;
+                    if (finalUserData[typedKey] === undefined) {
+                        delete finalUserData[typedKey];
                     }
                 });
+                
+                if (finalUserData.pin === undefined) {
+                    delete finalUserData.pin;
+                }
 
                 batch.set(newUserDocRef, finalUserData);
 
@@ -348,7 +353,9 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                                 <>
                                     <p><strong>Jméno:</strong> {registrationData.prefilledUser?.name}</p>
                                     {registrationData.organization && <p><strong>Organizace:</strong> {registrationData.organization.name}</p>}
-                                    <p><strong>Role:</strong> {(registrationData.prefilledUser?.roles || []).map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(', ')}</p>
+                                    {registrationData.prefilledUser?.memberships && registrationData.prefilledUser.memberships.length > 0 && 
+                                        <p><strong>Role:</strong> {registrationData.prefilledUser.memberships[0].roles.map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(', ')}</p>
+                                    }
                                     {registrationData.student && <p><strong>Vaše dítě:</strong> {registrationData.student.name}</p>}
                                     {registrationData.trida && <p><strong>Třída:</strong> {registrationData.trida.nazev}</p>}
                                 </>
