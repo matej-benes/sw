@@ -68,7 +68,7 @@ function TeacherLessonContextMenu({ children, lesson, dayInfo, period }: { child
 //==============================================================================
 // 2. CARD COMPONENTS (Lesson, Event, Cancelled)
 //==============================================================================
-function LessonCard({ lesson, period, timeRange, day, classId, isTeacher, grades }: { lesson: LessonBlock, period: number, timeRange: string, day: Date, classId: string, isTeacher: boolean, grades: Grading[] }) {
+function LessonCard({ lesson, period, timeRange, day, classId, isTeacher, grades = [] }: { lesson: LessonBlock, period: number, timeRange: string, day: Date, classId: string, isTeacher: boolean, grades: Grading[] }) {
     const router = useRouter();
     const { toast } = useToast();
 
@@ -195,6 +195,7 @@ export function MobileTimetable({
     // Fetch grades only if the user is a student or parent.
     const gradesQuery = useMemoFirebase(() => {
         if (!firestore || isTeacher || !studentId) return null;
+        // This query must match the security rules.
         return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
     }, [firestore, isTeacher, studentId]);
 
@@ -205,7 +206,7 @@ export function MobileTimetable({
         if (!schedule) return null;
 
         const timeSlots = schedule.timeSlots || defaultTimeSlots;
-        const dayIndex = (getDay(selectedDate) + 6) % 7; 
+        const dayIndex = getDay(selectedDate); 
         const dayName = dayNames[dayIndex];
 
         const processedItems = timeSlots.map((time, periodIndex) => {
@@ -252,8 +253,12 @@ export function MobileTimetable({
 
             // Find grades for this specific lesson on this day
             const lessonGrades = (grades || []).filter(g => {
-                const gradeDate = parse(g.datum, "dd.MM.yyyy", new Date());
-                return g.predmetId === lessonToShow?.subjectId && isSameDay(gradeDate, selectedDate);
+                try {
+                    const gradeDate = parse(g.datum, "dd.MM.yyyy", new Date());
+                    return g.predmetId === lessonToShow?.subjectId && isSameDay(gradeDate, selectedDate);
+                } catch {
+                    return false;
+                }
             });
 
             return { type: 'lesson', data: lessonToShow, period: periodIndex, timeRange: time, classId: schedule.tridaId, grades: lessonGrades };
