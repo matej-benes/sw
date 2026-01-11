@@ -17,7 +17,7 @@ export default function SpravaSystemuPage() {
     <div className="flex-1 space-y-8">
         <div className="space-y-2">
             <h1 className="text-3xl font-bold tracking-tight">Správa systému</h1>
-            <p className="text-muted-foreground">Centrální místo pro konfiguraci a správu aplikace Škola Online.</p>
+            <p className="text-muted-foreground">Centrální místo pro konfiguraci a správu aplikace ŠkolaWeb.</p>
         </div>
         
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

@@ -51,7 +51,7 @@ export default function AboutPage() {
             <header className="fixed top-0 left-0 right-0 z-50 flex h-16 items-center justify-between bg-background/80 px-6 backdrop-blur-sm">
                  <div className="flex items-center gap-2 font-semibold text-primary">
                     <Logo className="h-8 w-8" />
-                    <span className="text-lg font-bold uppercase tracking-wider text-foreground">Škola Online</span>
+                    <span className="text-lg font-bold uppercase tracking-wider text-foreground">ŠkolaWeb</span>
                 </div>
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" onClick={() => router.push('/login')}>Přihlásit se</Button>
@@ -63,7 +63,7 @@ export default function AboutPage() {
                 {/* Hero Section */}
                 <section className="py-20 text-center">
                     <div className="container mx-auto px-6">
-                        <h1 className="text-5xl font-bold tracking-tight text-primary">Vítejte ve Škole Online</h1>
+                        <h1 className="text-5xl font-bold tracking-tight text-primary">Vítejte ve ŠkolaWeb</h1>
                         <p className="mt-4 text-xl text-muted-foreground">Moderní, rychlý a intuitivní informační systém pro vaši školu nebo organizaci.</p>
                         <div className="mt-8 flex justify-center gap-4">
                             <Button size="lg" onClick={() => router.push('/login')}>Vyzkoušet zdarma</Button>
@@ -138,7 +138,7 @@ export default function AboutPage() {
             {/* Footer */}
             <footer className="border-t bg-muted/40 py-8">
                 <div className="container mx-auto px-6 text-center text-muted-foreground">
-                    <p>&copy; {new Date().getFullYear()} Škola Online. Všechna práva vyhrazena.</p>
+                    <p>&copy; {new Date().getFullYear()} ŠkolaWeb. Všechna práva vyhrazena.</p>
                 </div>
             </footer>
         </div>

@@ -114,7 +114,7 @@ export function AppSidebar() {
         <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
             <Link href="/dashboard" className="flex items-center gap-2 font-semibold text-primary">
                 <Logo className="h-8 w-8" />
-                <span className="text-lg font-bold uppercase tracking-wider text-foreground">Škola Online</span>
+                <span className="text-lg font-bold uppercase tracking-wider text-foreground">ŠkolaWeb</span>
             </Link>
         </div>
         <div className="flex-1 overflow-y-auto">
