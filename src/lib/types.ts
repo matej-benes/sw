@@ -8,7 +8,7 @@ export interface Organization {
   name: string;
   ownerId: string;
   status: 'trial' | 'active' | 'expired';
-  trialEndDate?: string; // YYYY-MM-DD
+  trialEndDate?: string; // YYYY-MM-DDTHH:mm:ss
   registrationPin?: string | null;
   type: OrganizationType;
 }
