@@ -403,8 +403,7 @@ function TeacherView() {
 function StudentParentView() {
     const { user } = useAuth();
     const firestore = useFirestore();
-    const [gradings, setGradings] = useState<Grading[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const {toast} = useToast();
     
     const studentId = user?.roles.includes('ziak') ? user.id : user?.studentId;
     
@@ -416,22 +415,18 @@ function StudentParentView() {
         );
     }, [studentId, firestore]);
 
-    const { data: gradingsData, error, isLoading: gradingsLoading } = useCollection<Grading>(gradingsQuery);
+    const { data: gradings, isLoading, error } = useCollection<Grading>(gradingsQuery);
     
     useEffect(() => {
-        setGradings(gradingsData || []);
-        setIsLoading(gradingsLoading);
         if(error) {
             console.error("Firestore Error:", error);
             toast({variant: 'destructive', title: 'Chyba oprávnění', description: 'Nepodařilo se načíst hodnocení.'})
         }
-    }, [gradingsData, error, gradingsLoading]);
+    }, [error, toast]);
 
-
-    const {toast} = useToast();
 
     const gradesBySubject = useMemo(() => {
-        return gradings.reduce((acc, g) => {
+        return (gradings || []).reduce((acc, g) => {
             if (!acc[g.predmet]) {
                 acc[g.predmet] = [];
             }
@@ -465,9 +460,9 @@ function StudentParentView() {
                     <CardDescription>Seznam všech vašich známek seřazených od nejnovější.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {gradings.length === 0 ? <p>Nemáte žádné známky.</p> : (
+                    {(gradings || []).length === 0 ? <p>Nemáte žádné známky.</p> : (
                         <ul className="space-y-3">
-                            {gradings.map(g => (
+                            {(gradings || []).map(g => (
                                 <li key={g.id} className="flex justify-between items-center p-3 border rounded-lg">
                                     <div>
                                         <p className="font-semibold">{g.predmet}</p>
