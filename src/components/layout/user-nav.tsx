@@ -24,13 +24,16 @@ import { doc, collection, getDocs, where, query } from 'firebase/firestore';
 import type { Trida, User, Organization } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import { differenceInDays, parseISO } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 export function UserNav() {
-  const { user, signOut, hasRole, activeMembership } = useAuth();
+  const { user, signOut, hasRole, activeMembership, activeOrganization } = useAuth();
   const { activeOrganizationId, setActiveOrganizationId } = useActiveOrganization();
   const firestore = useFirestore();
   const router = useRouter();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [trialDaysLeft, setTrialDaysLeft] = useState<number | null>(null);
   
   const isZiak = hasRole('ziak');
 
@@ -51,8 +54,22 @@ export function UserNav() {
     fetchOrganizations();
   }, [user, firestore]);
   
-
-  const activeOrganization = organizations.find(org => org.id === activeOrganizationId);
+  useEffect(() => {
+    if (activeOrganization?.status === 'trial' && activeOrganization.trialEndDate) {
+        try {
+            const endDate = parseISO(activeOrganization.trialEndDate);
+            const days = differenceInDays(endDate, new Date());
+            setTrialDaysLeft(days >= 0 ? days + 1 : 0);
+        } catch(e) {
+            console.error("Error parsing trialEndDate:", e);
+            setTrialDaysLeft(null);
+        }
+    } else {
+        setTrialDaysLeft(null);
+    }
+  }, [activeOrganization]);
+  
+  const currentActiveOrganization = organizations.find(org => org.id === activeOrganizationId);
 
   if (!user) {
     return null;
@@ -93,6 +110,11 @@ export function UserNav() {
                     ))}
                 </div>
              )}
+             {trialDaysLeft !== null && (
+                <p className={cn("text-xs mt-1", trialDaysLeft <= 3 ? 'text-destructive font-semibold' : 'text-muted-foreground')}>
+                    Zkušební verze: {trialDaysLeft} {trialDaysLeft === 1 ? 'den' : (trialDaysLeft > 1 && trialDaysLeft < 5 ? 'dny' : 'dní')}
+                </p>
+             )}
           </div>
         </div>
       <DropdownMenu>
@@ -115,7 +137,7 @@ export function UserNav() {
            <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                     <Building className="mr-2 h-4 w-4" />
-                    <span>{activeOrganization?.name || "Vybrat organizaci"}</span>
+                    <span>{currentActiveOrganization?.name || "Vybrat organizaci"}</span>
                 </DropdownMenuSubTrigger>
                 <DropdownMenuPortal>
                     <DropdownMenuSubContent>
