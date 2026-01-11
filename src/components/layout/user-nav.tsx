@@ -9,32 +9,54 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/use-auth';
-import { LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut, User as UserIcon, ChevronsUpDown, Building } from 'lucide-react';
 import { Badge } from '../ui/badge';
-import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { doc } from 'firebase/firestore';
-import type { Trida, User } from '@/lib/types';
+import { useFirestore, useDoc, useMemoFirebase, useActiveOrganization } from '@/firebase';
+import { doc, collection, getDocs } from 'firebase/firestore';
+import type { Trida, User, Organization } from '@/lib/types';
 import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 
 export function UserNav() {
-  const { user, signOut, hasRole } = useAuth();
+  const { user, signOut, hasRole, activeMembership } = useAuth();
+  const { activeOrganizationId, setActiveOrganizationId } = useActiveOrganization();
   const firestore = useFirestore();
-  const isZiak = hasRole('ziak');
   const router = useRouter();
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  
+  const isZiak = hasRole('ziak');
 
-  const tridaRef = useMemoFirebase(() => {
-    if (!firestore || !user?.tridaId) return null;
-    return doc(firestore, 'tridy', user.tridaId);
-  }, [firestore, user?.tridaId]);
-  const { data: tridaData } = useDoc<Trida>(tridaRef);
+  useEffect(() => {
+    const fetchOrganizations = async () => {
+        if (!user || !user.memberships || !firestore) return;
+        const orgIds = user.memberships.map(m => m.organizationId);
+        if (orgIds.length === 0) return;
+        
+        const orgs: Organization[] = [];
+        // Firestore 'in' query is limited to 10 items.
+        // We fetch them one by one, which is acceptable for a small number of user memberships.
+        for (const orgId of orgIds) {
+            const docRef = doc(firestore, 'organizations', orgId);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                orgs.push({ id: docSnap.id, ...docSnap.data() } as Organization);
+            }
+        }
+        setOrganizations(orgs);
+    };
+    fetchOrganizations();
+  }, [user, firestore]);
+  
 
-  const ucitelRef = useMemoFirebase(() => {
-    if (!firestore || !tridaData?.ucitelId) return null;
-    return doc(firestore, 'users', tridaData.ucitelId);
-  }, [firestore, tridaData?.ucitelId]);
-  const { data: ucitelData } = useDoc<User>(ucitelRef);
+  const activeOrganization = organizations.find(org => org.id === activeOrganizationId);
 
   if (!user) {
     return null;
@@ -56,15 +78,19 @@ export function UserNav() {
     'vedouci pracovnik': 'Vedoucí pracovník',
     'asistent pedagoga': 'Asistent pedagoga',
   };
+  
+  const handleOrgChange = (orgId: string) => {
+      setActiveOrganizationId(orgId);
+  }
 
   return (
     <div className="flex items-center gap-4">
        <div className="hidden text-right md:flex items-center gap-4">
           <div className="text-right">
             <p className="text-sm font-medium leading-none">{user.name}</p>
-             {(user.roles?.length > 0) && (
+             {activeMembership?.roles.length > 0 && (
                 <div className="flex flex-wrap justify-end gap-1 mt-1">
-                    {user.roles.map(role => (
+                    {activeMembership?.roles.map(role => (
                     <Badge key={role} variant="secondary" className="text-xs">
                         {roleTranslations[role] || role}
                     </Badge>
@@ -82,19 +108,31 @@ export function UserNav() {
             </Avatar>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-56" align="end" forceMount>
+        <DropdownMenuContent className="w-64" align="end" forceMount>
           <DropdownMenuLabel className="font-normal">
             <div className="flex flex-col space-y-1">
               <p className="text-sm font-medium leading-none">{user.name}</p>
               <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
-                 {isZiak && (
-                    <div className="text-xs text-muted-foreground mt-1 pt-1 border-t">
-                        <p>Třída: {tridaData?.nazev || '...'}</p>
-                        <p>Třídní učitel: {ucitelData?.name || '...'}</p>
-                    </div>
-                )}
             </div>
           </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+           <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                    <Building className="mr-2 h-4 w-4" />
+                    <span>{activeOrganization?.name || "Vybrat organizaci"}</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuPortal>
+                    <DropdownMenuSubContent>
+                        <DropdownMenuRadioGroup value={activeOrganizationId || ''} onValueChange={handleOrgChange}>
+                            {organizations.map(org => (
+                                <DropdownMenuRadioItem key={org.id} value={org.id}>
+                                    {org.name}
+                                </DropdownMenuRadioItem>
+                            ))}
+                        </DropdownMenuRadioGroup>
+                    </DropdownMenuSubContent>
+                </DropdownMenuPortal>
+            </DropdownMenuSub>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem onClick={() => router.push('/dashboard/profil')}>

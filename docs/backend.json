@@ -1,403 +1,183 @@
 {
   "entities": {
+    "Organization": {
+      "title": "Organization",
+      "type": "object",
+      "description": "Represents a single organization, such as a school, a faculty, or a project group.",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the organization." },
+        "name": { "type": "string", "description": "The name of the organization." },
+        "ownerId": { "type": "string", "description": "The user ID of the organization's owner." }
+      },
+      "required": ["id", "name", "ownerId"]
+    },
     "User": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "User",
       "type": "object",
-      "description": "Represents a user in the system.",
+      "description": "Represents a user in the system, potentially across multiple organizations.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the user."
-        },
-        "name": {
-          "type": "string",
-          "description": "The user's full name."
-        },
-        "email": {
-          "type": "string",
-          "description": "The user's email address.",
-          "format": "email"
-        },
-        "roles": {
+        "id": { "type": "string", "description": "Unique identifier for the user (matches Firebase Auth UID)." },
+        "name": { "type": "string", "description": "The user's full name." },
+        "email": { "type": "string", "format": "email", "description": "The user's email address." },
+        "memberships": {
           "type": "array",
-          "description": "The user's roles (e.g., ucitel, rodic, ziak, administrator, vedouci pracovnik, asistent pedagoga).",
+          "description": "An array of organizations the user is a member of, along with their roles.",
           "items": {
-            "type": "string"
+            "type": "object",
+            "properties": {
+              "organizationId": { "type": "string" },
+              "roles": { "type": "array", "items": { "type": "string" } }
+            },
+            "required": ["organizationId", "roles"]
           }
         },
-        "tridaId": {
-          "type": "string",
-          "description": "Reference to Trida. (Relationship: User N:1 Trida) The class ID to which the user belongs."
-        },
-        "studentId": {
-          "type": "string",
-          "description": "For parents, the ID of their child student."
-        },
-        "pin": {
-          "type": "string",
-          "description": "A 6-digit PIN for initial user registration."
-        }
+        "studentId": { "type": "string", "description": "For parents, the ID of their child student. This assumes a parent is linked to one child per organization context." },
+        "pin": { "type": "string", "description": "A 6-digit PIN for initial user registration." }
       },
-      "required": [
-        "id",
-        "name",
-        "email",
-        "roles"
-      ]
+      "required": ["id", "name", "email"]
     },
     "Trida": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Trida",
       "type": "object",
-      "description": "Represents a class (trida) in the school.",
+      "description": "Represents a class (trida) within a specific organization.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the class."
-        },
-        "nazev": {
-          "type": "string",
-          "description": "The name of the class."
-        },
-        "ucitelId": {
-          "type": "string",
-          "description": "Reference to User. (Relationship: User 1:N Trida) The ID of the teacher in charge of the class."
-        },
-        "zastupciIds": {
-            "type": "array",
-            "description": "References to Users. An array of substitute class teacher IDs.",
-            "items": { "type": "string" }
-        },
-        "asistentiIds": {
-            "type": "array",
-            "description": "References to Users. An array of pedagogical assistant IDs.",
-            "items": { "type": "string" }
-        },
-        "ziaciIds": {
-          "type": "array",
-          "description": "References to Users. (Relationship: User N:N Trida) An array of student IDs belonging to this class.",
-          "items": {
-            "type": "string"
-          }
-        }
+        "id": { "type": "string", "description": "Unique identifier for the class." },
+        "organizationId": { "type": "string", "description": "The ID of the organization this class belongs to." },
+        "nazev": { "type": "string", "description": "The name of the class." },
+        "ucitelId": { "type": "string", "description": "The ID of the teacher in charge of the class." },
+        "zastupciIds": { "type": "array", "items": { "type": "string" } },
+        "asistentiIds": { "type": "array", "items": { "type": "string" } },
+        "ziaciIds": { "type": "array", "items": { "type": "string" } }
       },
-      "required": [
-        "id",
-        "nazev",
-        "ucitelId"
-      ]
+      "required": ["id", "organizationId", "nazev", "ucitelId"]
     },
     "Rozvrh": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Rozvrh",
       "type": "object",
-      "description": "Represents a class schedule (rozvrh) for a specific day and class.",
+      "description": "Represents a class schedule for a specific day and class within an organization.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the schedule."
-        },
-        "tridaId": {
-          "type": "string",
-          "description": "Reference to Trida. (Relationship: Trida 1:N Rozvrh) The ID of the class for which the schedule is defined."
-        },
-        "datum": {
-          "type": "string",
-          "description": "The date for the schedule.",
-          "format": "date"
-        },
-        "hodiny": {
-          "type": "array",
-          "items": {
-             "oneOf": [
-                { "$ref": "#/backend/entities/LessonBlock" },
-                { "type": "null" }
-             ]
-          }
-        },
-        "timeSlots": {
-            "type": "array",
-            "items": { "type": "string" }
-        }
+        "id": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "tridaId": { "type": "string" },
+        "datum": { "type": "string", "format": "date" },
+        "hodiny": { "type": "array", "items": { "oneOf": [{ "$ref": "#/backend/entities/LessonBlock" }, { "type": "null" }] } },
+        "timeSlots": { "type": "array", "items": { "type": "string" } }
       },
-      "required": [
-        "id",
-        "tridaId",
-        "datum",
-        "hodiny",
-        "timeSlots"
-      ]
+      "required": ["id", "organizationId", "tridaId", "datum", "hodiny", "timeSlots"]
     },
-    "Oznameni": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Oznameni",
-      "type": "object",
-      "description": "Represents an announcement (oznameni) for a class.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the announcement."
+    "ScheduleTemplate": {
+        "title": "ScheduleTemplate",
+        "type": "object",
+        "description": "A template for a class's weekly schedule within an organization.",
+        "properties": {
+            "id": { "type": "string" },
+            "organizationId": { "type": "string" },
+            "tridaId": { "type": "string" },
+            "timeSlots": { "type": "array", "items": { "type": "string" } },
+            "days": { "type": "array", "items": { "$ref": "#/backend/entities/StorableDay" } }
         },
-        "proTridu": {
-          "type": "string",
-          "description": "Reference to Trida. (Relationship: Trida 1:N Oznameni) The ID of the class for which the announcement is intended."
-        },
-        "text": {
-          "type": "string",
-          "description": "The text of the announcement."
-        },
-        "datum": {
-          "type": "string",
-          "description": "The date the announcement was created.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "proTridu",
-        "text",
-        "datum"
-      ]
+        "required": ["id", "organizationId", "tridaId", "timeSlots", "days"]
     },
     "Predmet": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Predmet",
       "type": "object",
-      "description": "Represents a subject taught in school.",
+      "description": "Represents a subject taught in an organization.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the subject."
-        },
-        "name": {
-          "type": "string",
-          "description": "The name of the subject."
-        },
-        "shortcut": {
-          "type": "string",
-          "description": "A short abbreviation for the subject."
-        },
-        "teacherCount": {
-          "type": "number",
-          "description": "The number of teachers teaching this subject."
-        }
+        "id": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "name": { "type": "string" },
+        "shortcut": { "type": "string" },
+        "teacherCount": { "type": "number" }
       },
-      "required": [
-        "id",
-        "name",
-        "shortcut"
-      ]
+      "required": ["id", "organizationId", "name", "shortcut"]
     },
     "Ucebna": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Ucebna",
       "type": "object",
-      "description": "Represents a classroom in the school.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the classroom."
-        },
-        "nazev": {
-          "type": "string",
-          "description": "The name or number of the classroom."
-        },
-        "kapacita": {
-          "type": "number",
-          "description": "The capacity of the classroom."
-        }
-      },
-      "required": [
-        "id",
-        "nazev"
-      ]
-    },
-    "PoznamkaZaka": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "PoznamkaZaka",
-      "type": "object",
-      "description": "Represents a note for a student.",
-      "properties": {
-        "id": { "type": "string", "description": "Unique identifier for the note." },
-        "studentId": { "type": "string", "description": "Reference to the student (User)." },
-        "tridaId": { "type": "string", "description": "Reference to the class (Trida)." },
-        "predmet": { "type": "string", "description": "The subject related to the note." },
-        "datum": { "type": "string", "format": "date-time", "description": "Date the note was created." },
-        "druh": { "type": "string", "description": "Type of note (e.g., pochvala, zapomenuté pomůcky)." },
-        "text": { "type": "string", "description": "The content of the note." },
-        "ucitelId": { "type": "string", "description": "Reference to the teacher who wrote the note." },
-        "datumPodpisu": { "type": "string", "format": "date-time", "description": "Date the note was signed by a parent." }
-      },
-      "required": ["id", "studentId", "tridaId", "datum", "druh", "text", "ucitelId"]
-    },
-    "Udalost": {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "title": "Udalost",
-        "type": "object",
-        "description": "Represents a general event in the school calendar.",
-        "properties": {
-            "id": { "type": "string", "description": "Unique identifier for the event." },
-            "nazev": { "type": "string", "description": "The name of the event." },
-            "typ": { "type": "string", "description": "The type of event (e.g., Školní akce, Porada)." },
-            "datum": { "type": "string", "format": "date", "description": "The date of the event." },
-            "cas": { "type": "string", "format": "time", "description": "The time of the event." },
-            "tridyIds": { "type": "array", "items": { "type": "string" }, "description": "List of class IDs involved in the event." },
-            "uciteleIds": { "type": "array", "items": { "type": "string" }, "description": "List of teacher IDs involved in the event." },
-            "nahrazujeHodiny": { "type": "boolean", "description": "If true, this event replaces regular lessons at the same time." }
-        },
-        "required": ["id", "nazev", "typ", "datum", "cas"]
-    },
-    "Substitution": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Substitution",
-      "type": "object",
-      "description": "Represents a temporary change (substitution) for a specific lesson on a specific date.",
-      "properties": {
-        "id": { "type": "string", "description": "Unique identifier for the substitution." },
-        "date": { "type": "string", "format": "date", "description": "The date the substitution occurs." },
-        "originalLesson": {
-          "type": "object",
-          "properties": {
-            "day": { "type": "string", "description": "Day of the week." },
-            "period": { "type": "number", "description": "Lesson period index." },
-            "classId": { "type": "string", "description": "Original class ID." },
-            "lessonBlock": { "$ref": "#/backend/entities/LessonBlock" }
-          },
-          "required": ["day", "period", "classId", "lessonBlock"]
-        },
-        "changes": {
-          "type": "object",
-          "properties": {
-            "teacherId": { "type": "string", "description": "ID of the substitute teacher." },
-            "ucebnaId": { "type": "string", "description": "ID of the substitute classroom." },
-            "subjectId": { "type": "string", "description": "ID of the substitute subject." },
-            "note": { "type": "string", "description": "A note regarding the substitution." },
-            "type": { 
-              "oneOf": [
-                { "type": "string" },
-                { "type": "array", "items": { "type": "string" } }
-              ],
-              "description": "Type of substitution (e.g., 'zmena-ucitele', 'zruseno', 'spojeno')."
-            }
-          },
-          "required": ["type"]
-        }
-      },
-      "required": ["id", "date", "originalLesson", "changes"]
-    },
-     "LessonBlock": {
-      "title": "LessonBlock",
-      "type": "object",
-      "description": "A reusable block representing a single lesson in a schedule.",
+      "description": "Represents a classroom in an organization.",
       "properties": {
         "id": { "type": "string" },
-        "subjectId": { "type": "string" },
-        "teacherId": { "type": "string" },
-        "classId": { "type": "string" },
-        "subjectName": { "type": "string" },
-        "subjectShortcut": { "type": "string" },
-        "teacherName": { "type": "string" },
-        "className": { "type": "string" },
-        "ucebnaId": { "type": "string" },
-        "ucebnaName": { "type": "string" }
-      }
+        "organizationId": { "type": "string" },
+        "nazev": { "type": "string" },
+        "kapacita": { "type": "number" }
+      },
+      "required": ["id", "organizationId", "nazev"]
     },
-    "ScheduleTemplate": {
-        "title": "ScheduleTemplate",
-        "type": "object",
-        "description": "A template for a class's weekly schedule.",
-        "properties": {
-            "id": { "type": "string", "description": "Unique ID, same as tridaId." },
-            "tridaId": { "type": "string" },
-            "timeSlots": { "type": "array", "items": { "type": "string" } },
-            "days": { 
-                "type": "array", 
-                "description": "An array of day objects representing the week's schedule.",
-                "items": { "$ref": "#/backend/entities/StorableDay" }
-            }
-        },
-        "required": ["id", "tridaId", "timeSlots", "days"]
+     "PoznamkaZaka": {
+      "title": "PoznamkaZaka",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "tridaId": { "type": "string" },
+        "predmet": { "type": "string" },
+        "datum": { "type": "string", "format": "date-time" },
+        "druh": { "type": "string" },
+        "text": { "type": "string" },
+        "ucitelId": { "type": "string" },
+        "datumPodpisu": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "organizationId", "studentId", "tridaId", "datum", "druh", "text", "ucitelId"]
     },
-    "StorableDay": {
-        "title": "StorableDay",
+    "Udalost": {
+        "title": "Udalost",
         "type": "object",
-        "description": "Represents a single day's schedule to be stored in Firestore.",
         "properties": {
-            "dayIndex": { "type": "number" },
-            "lessons": {
-                "type": "array",
-                "items": {
-                    "oneOf": [
-                        { "$ref": "#/backend/entities/LessonBlock" },
-                        { "type": "null" }
-                    ]
-                }
-            }
+            "id": { "type": "string" },
+            "organizationId": { "type": "string" },
+            "nazev": { "type": "string" },
+            "typ": { "type": "string" },
+            "datum": { "type": "string", "format": "date" },
+            "cas": { "type": "string", "format": "time" },
+            "tridyIds": { "type": "array", "items": { "type": "string" } },
+            "uciteleIds": { "type": "array", "items": { "type": "string" } },
+            "nahrazujeHodiny": { "type": "boolean" }
         },
-        "required": ["dayIndex", "lessons"]
+        "required": ["id", "organizationId", "nazev", "typ", "datum", "cas"]
     },
     "Message": {
       "title": "Message",
       "type": "object",
-      "description": "Represents a single message between users.",
       "properties": {
         "id": { "type": "string" },
+        "organizationId": { "type": "string" },
         "senderId": { "type": "string" },
         "recipientIds": { "type": "array", "items": { "type": "string" } },
         "text": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
-        "readBy": { "type": "array", "items": { "type": "string" }, "description": "List of user IDs who have read the message." }
+        "readBy": { "type": "array", "items": { "type": "string" } }
       },
-      "required": ["id", "senderId", "recipientIds", "text", "createdAt"]
+      "required": ["id", "organizationId", "senderId", "recipientIds", "text", "createdAt"]
     },
     "ZapisHodiny": {
         "title": "ZapisHodiny",
         "type": "object",
-        "description": "Represents an entry in the class book for a specific lesson.",
         "properties": {
-            "id": { "type": "string", "description": "Composite key, e.g., {tridaId}-{datum}-{hodina}" },
+            "id": { "type": "string" },
+            "organizationId": { "type": "string" },
             "tridaId": { "type": "string" },
             "datum": { "type": "string", "format": "date" },
             "hodina": { "type": "string" },
             "predmetId": { "type": "string" },
             "ucitelId": { "type": "string" },
-            "topic": { "type": "string", "description": "The topic covered in the lesson." },
-            "note": { "type": "string", "description": "Additional notes (e.g., safety instructions)." },
-            "attendance": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "studentId": { "type": "string" },
-                        "status": { "type": "string", "enum": ["-", "/", "O", "N", "S"] },
-                        "reason": { "type": "string" }
-                    },
-                    "required": ["studentId", "status"]
-                }
-            }
+            "topic": { "type": "string" },
+            "note": { "type": "string" },
+            "attendance": { "type": "array", "items": { "type": "object", "properties": { "studentId": { "type": "string" }, "status": { "type": "string", "enum": ["-", "/", "O", "N", "S"] }, "reason": { "type": "string" } }, "required": ["studentId", "status"] } }
         },
-        "required": ["id", "tridaId", "datum", "hodina", "predmetId", "ucitelId", "topic", "attendance"]
-    },
-    "Absence": {
-      "title": "Absence",
-      "type": "object",
-      "description": "Represents a teacher's absence.",
-      "properties": {
-        "id": { "type": "string" },
-        "teacherId": { "type": "string" },
-        "startDate": { "type": "string", "format": "date" },
-        "endDate": { "type": "string", "format": "date" },
-        "reason": { "type": "string" }
-      },
-      "required": ["id", "teacherId", "startDate", "endDate"]
+        "required": ["id", "organizationId", "tridaId", "datum", "hodina", "predmetId", "ucitelId", "topic", "attendance"]
     },
      "Omluvenka": {
       "title": "Omluvenka",
       "type": "object",
-      "description": "Represents an excuse for a student's absence submitted by a parent.",
       "properties": {
         "id": { "type": "string" },
+        "organizationId": { "type": "string" },
         "studentId": { "type": "string" },
         "parentId": { "type": "string" },
         "tridaId": { "type": "string" },
@@ -406,16 +186,16 @@
         "duvod": { "type": "string" },
         "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
         "datumPodani": { "type": "string", "format": "date-time" },
-        "vyjadreniUcitele": { "type": "string", "description": "Teacher's comment on the excuse." }
+        "vyjadreniUcitele": { "type": "string" }
       },
-      "required": ["id", "studentId", "parentId", "tridaId", "datumOd", "datumDo", "duvod", "status", "datumPodani"]
+      "required": ["id", "organizationId", "studentId", "parentId", "tridaId", "datumOd", "datumDo", "duvod", "status", "datumPodani"]
     },
     "DomaciUkol": {
       "title": "DomaciUkol",
       "type": "object",
-      "description": "Represents a homework assignment.",
       "properties": {
         "id": { "type": "string" },
+        "organizationId": { "type": "string" },
         "tridaId": { "type": "string" },
         "predmetId": { "type": "string" },
         "ucitelId": { "type": "string" },
@@ -423,16 +203,17 @@
         "popis": { "type": "string" },
         "datumZadani": { "type": "string", "format": "date" },
         "terminOdevzdani": { "type": "string", "format": "date" },
-        "prilohy": { "type": "array", "items": { "type": "string" }, "description": "Array of URLs to attachments." }
+        "prilohy": { "type": "array", "items": { "type": "string" } }
       },
-      "required": ["id", "tridaId", "predmetId", "ucitelId", "nazev", "popis", "datumZadani", "terminOdevzdani"]
+      "required": ["id", "organizationId", "tridaId", "predmetId", "ucitelId", "nazev", "popis", "datumZadani", "terminOdevzdani"]
     },
-    "ZapisDoPrvniTridy": {
+     "ZapisDoPrvniTridy": {
         "title": "ZapisDoPrvniTridy",
         "type": "object",
-        "description": "Represents an application for first-grade enrollment.",
+        "description": "Represents an application for first-grade enrollment, scoped to an organization.",
         "properties": {
             "id": { "type": "string" },
+            "organizationId": { "type": "string" },
             "jmenoDitete": { "type": "string" },
             "datumNarozeniDitete": { "type": "string", "format": "date" },
             "bydlisteDitete": { "type": "string" },
@@ -442,223 +223,33 @@
             "datumPodani": { "type": "string", "format": "date-time" },
             "status": { "type": "string", "enum": ["Podáno", "Přijato", "Nepřijato", "Odklad"] }
         },
-        "required": ["id", "jmenoDitete", "datumNarozeniDitete", "jmenoZastupce", "emailZastupce", "datumPodani", "status"]
-    }
+        "required": ["id", "organizationId", "jmenoDitete", "datumNarozeniDitete", "jmenoZastupce", "emailZastupce", "datumPodani", "status"]
+    },
+    "LessonBlock": { "type": "object" },
+    "StorableDay": { "type": "object" },
+    "Substitution": { "type": "object" },
+    "Oznameni": { "type": "object" },
+    "Absence": { "type": "object" }
   },
   "auth": {
-    "providers": [
-      "password",
-      "anonymous"
-    ]
+    "providers": ["password", "anonymous"]
   },
   "firestore": {
     "structure": [
-      {
-        "path": "/users/{userId}",
-        "definition": {
-          "entityName": "User",
-          "schema": {
-            "$ref": "#/backend/entities/User"
-          },
-          "description": "Stores user information. Includes 'tridaId' for authorization independence.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/tridy/{tridaId}",
-        "definition": {
-          "entityName": "Trida",
-          "schema": {
-            "$ref": "#/backend/entities/Trida"
-          },
-          "description": "Stores class information, including the teacher in charge ('ucitelId') and a list of student IDs ('ziaciIds').",
-          "params": [
-            {
-              "name": "tridaId",
-              "description": "The unique identifier of the class."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/predmety/{predmetId}",
-        "definition": {
-          "entityName": "Predmet",
-          "schema": {
-            "$ref": "#/backend/entities/Predmet"
-          },
-          "description": "Stores school subjects.",
-          "params": [
-            {
-              "name": "predmetId",
-              "description": "The unique identifier of the subject."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/ucebny/{ucebnaId}",
-        "definition": {
-          "entityName": "Ucebna",
-          "schema": {
-            "$ref": "#/backend/entities/Ucebna"
-          },
-          "description": "Stores school classrooms.",
-          "params": [
-            {
-              "name": "ucebnaId",
-              "description": "The unique identifier of the classroom."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/rozvrhy/{rozvrhId}",
-        "definition": {
-          "entityName": "Rozvrh",
-          "schema": {
-            "$ref": "#/backend/entities/Rozvrh"
-          },
-          "description": "Stores a single day's schedule for a class. Document ID is a composite key like '{tridaId}-{YYYY-MM-DD}' (e.g., '7A-2024-09-02').",
-          "params": [
-            {
-              "name": "rozvrhId",
-              "description": "Composite key for the schedule, e.g., 'classId-YYYY-MM-DD'."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/scheduleTemplates/{templateId}",
-        "definition": {
-            "entityName": "ScheduleTemplate",
-            "schema": { "$ref": "#/backend/entities/ScheduleTemplate" },
-            "description": "Stores the weekly schedule template for a class. The document ID should be the class ID.",
-            "params": [
-                { "name": "templateId", "description": "The ID of the template, which is the same as the class ID." }
-            ]
-        }
-      },
-      {
-        "path": "/oznameni/{oznameniId}",
-        "definition": {
-          "entityName": "Oznameni",
-          "schema": {
-            "$ref": "#/backend/entities/Oznameni"
-          },
-          "description": "Stores announcements. The 'proTridu' field indicates the target class.",
-          "params": [
-            {
-              "name": "oznameniId",
-              "description": "The unique identifier of the announcement."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/poznamky-zaku/{poznamkaId}",
-        "definition": {
-            "entityName": "PoznamkaZaka",
-            "schema": { "$ref": "#/backend/entities/PoznamkaZaka" },
-            "description": "Stores notes related to students.",
-            "params": [
-                { "name": "poznamkaId", "description": "The unique ID of the student note." }
-            ]
-        }
-      },
-      {
-        "path": "/udalosti/{udalostId}",
-        "definition": {
-            "entityName": "Udalost",
-            "schema": { "$ref": "#/backend/entities/Udalost" },
-            "description": "Stores general calendar events for classes and teachers.",
-            "params": [
-                { "name": "udalostId", "description": "The unique ID of the event." }
-            ]
-        }
-      },
-      {
-        "path": "/suplovani/{substitutionId}",
-        "definition": {
-            "entityName": "Substitution",
-            "schema": { "$ref": "#/backend/entities/Substitution" },
-            "description": "Stores temporary lesson substitutions for specific dates.",
-            "params": [
-                { "name": "substitutionId", "description": "The unique ID of the substitution." }
-            ]
-        }
-      },
-      {
-        "path": "/messages/{messageId}",
-        "definition": {
-          "entityName": "Message",
-          "schema": { "$ref": "#/backend/entities/Message" },
-          "description": "Collection for all messages. Each document is a single message with its own recipients.",
-          "params": [
-            { "name": "messageId", "description": "The unique ID of the message." }
-          ]
-        }
-      },
-       {
-        "path": "/zapisyHodin/{zapisId}",
-        "definition": {
-          "entityName": "ZapisHodiny",
-          "schema": { "$ref": "#/backend/entities/ZapisHodiny" },
-          "description": "Stores class book entries for each lesson. Document ID is a composite key like '{tridaId}-{YYYY-MM-DD}-{hodina}'.",
-          "params": [
-            { "name": "zapisId", "description": "The unique ID of the class book entry." }
-          ]
-        }
-      },
-       {
-        "path": "/absences/{absenceId}",
-        "definition": {
-          "entityName": "Absence",
-          "schema": { "$ref": "#/backend/entities/Absence" },
-          "description": "Stores teacher absences.",
-          "params": [
-            { "name": "absenceId", "description": "The unique ID of the absence record." }
-          ]
-        }
-      },
-      {
-        "path": "/omluvenky/{omluvenkaId}",
-        "definition": {
-          "entityName": "Omluvenka",
-          "schema": { "$ref": "#/backend/entities/Omluvenka" },
-          "description": "Stores absence excuses from parents.",
-          "params": [
-            { "name": "omluvenkaId", "description": "The unique ID of the excuse record." }
-          ]
-        }
-      },
-      {
-        "path": "/ukoly/{ukolId}",
-        "definition": {
-          "entityName": "DomaciUkol",
-          "schema": { "$ref": "#/backend/entities/DomaciUkol" },
-          "description": "Stores homework assignments.",
-          "params": [
-            { "name": "ukolId", "description": "The unique ID of the homework." }
-          ]
-        }
-      },
-      {
-        "path": "/zapisy/{zapisId}",
-        "definition": {
-          "entityName": "ZapisDoPrvniTridy",
-          "schema": { "$ref": "#/backend/entities/ZapisDoPrvniTridy" },
-          "description": "Stores first-grade enrollment applications.",
-          "params": [
-            { "name": "zapisId", "description": "The unique ID of the enrollment application." }
-          ]
-        }
-      }
+      { "path": "/organizations/{organizationId}", "definition": { "schema": { "$ref": "#/backend/entities/Organization" } } },
+      { "path": "/users/{userId}", "definition": { "schema": { "$ref": "#/backend/entities/User" } } },
+      { "path": "/tridy/{tridaId}", "definition": { "schema": { "$ref": "#/backend/entities/Trida" } } },
+      { "path": "/predmety/{predmetId}", "definition": { "schema": { "$ref": "#/backend/entities/Predmet" } } },
+      { "path": "/ucebny/{ucebnaId}", "definition": { "schema": { "$ref": "#/backend/entities/Ucebna" } } },
+      { "path": "/rozvrhy/{rozvrhId}", "definition": { "schema": { "$ref": "#/backend/entities/Rozvrh" } } },
+      { "path": "/scheduleTemplates/{templateId}", "definition": { "schema": { "$ref": "#/backend/entities/ScheduleTemplate" } } },
+      { "path": "/poznamky-zaku/{poznamkaId}", "definition": { "schema": { "$ref": "#/backend/entities/PoznamkaZaka" } } },
+      { "path": "/udalosti/{udalostId}", "definition": { "schema": { "$ref": "#/backend/entities/Udalost" } } },
+      { "path": "/messages/{messageId}", "definition": { "schema": { "$ref": "#/backend/entities/Message" } } },
+      { "path": "/zapisyHodin/{zapisId}", "definition": { "schema": { "$ref": "#/backend/entities/ZapisHodiny" } } },
+      { "path": "/omluvenky/{omluvenkaId}", "definition": { "schema": { "$ref": "#/backend/entities/Omluvenka" } } },
+      { "path": "/ukoly/{ukolId}", "definition": { "schema": { "$ref": "#/backend/entities/DomaciUkol" } } },
+      { "path": "/zapisy/{zapisId}", "definition": { "schema": { "$ref": "#/backend/entities/ZapisDoPrvniTridy" } } }
     ]
   }
 }

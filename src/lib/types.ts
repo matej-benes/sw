@@ -2,19 +2,31 @@ import { Timestamp } from "firebase/firestore";
 
 export type Role = 'ucitel' | 'rodic' | 'ziak' | 'administrator' | 'vedouci pracovnik' | 'asistent pedagoga';
 
+export interface Organization {
+  id: string;
+  name: string;
+  ownerId: string;
+}
+
+export interface UserMembership {
+    organizationId: string;
+    roles: Role[];
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
-  roles: Role[];
+  memberships: UserMembership[];
   avatarUrl?: string;
-  tridaId?: string; // Class for student or teacher
-  studentId?: string; // For parent role -> student's ID, for student role -> parent's ID
-  pin?: string; // 6-digit PIN for registration
+  // Per-organization data that might need to be specific
+  studentId?: string; 
+  pin?: string;
 }
 
 export interface Grading {
   id: string;
+  organizationId: string;
   datum: string; // YYYY-MM-DD
   cas: string;   // HH:MM
   ziakId: string;
@@ -31,6 +43,7 @@ export interface Grading {
 
 export interface Trida {
     id: string;
+    organizationId: string;
     nazev: string;
     ucitelId: string;
     zastupciIds?: string[];
@@ -40,6 +53,7 @@ export interface Trida {
 
 export interface Predmet {
   id: string;
+  organizationId: string;
   name: string;
   shortcut: string;
   teacherCount: number;
@@ -47,6 +61,7 @@ export interface Predmet {
 
 export interface Ucebna {
   id: string;
+  organizationId: string;
   nazev: string;
   kapacita?: number;
 }
@@ -86,6 +101,7 @@ export type ScheduleGrid = {
 
 export interface Rozvrh {
     id: string;
+    organizationId: string;
     tridaId: string;
     datum: string; // YYYY-MM-DD
     timeSlots: string[];
@@ -99,6 +115,7 @@ export interface StorableDay {
 
 export interface ScheduleTemplate {
     id: string; // Should be the same as tridaId
+    organizationId: string;
     tridaId: string;
     timeSlots: string[];
     days: StorableDay[];
@@ -114,6 +131,7 @@ export interface DailySchedule {
 
 export interface PoznamkaZaka {
   id: string;
+  organizationId: string;
   studentId: string;
   tridaId: string;
   predmet?: string;
@@ -126,6 +144,7 @@ export interface PoznamkaZaka {
 
 export interface Udalost {
   id: string;
+  organizationId: string;
   nazev: string;
   typ: string;
   datum: string; // YYYY-MM-DD
@@ -139,6 +158,7 @@ export type SubstitutionType = 'zmena-ucitele' | 'zmena-ucebny' | 'zruseno' | 's
 
 export interface Substitution {
     id: string;
+    organizationId: string;
     date: string; // YYYY-MM-DD
     originalLesson: {
         day: string;
@@ -157,6 +177,7 @@ export interface Substitution {
 
 export interface Message {
     id: string;
+    organizationId: string;
     senderId: string;
     recipientIds: string[];
     text: string;
@@ -168,6 +189,7 @@ export type AttendanceStatus = '-' | '/' | 'O' | 'N' | 'S';
 
 export interface ZapisHodiny {
     id: string; // e.g., {tridaId}-{datum}-{hodina}
+    organizationId: string;
     tridaId: string;
     datum: string; // YYYY-MM-DD
     hodina: string; // period number
@@ -184,6 +206,7 @@ export interface ZapisHodiny {
 
 export interface Absence {
     id: string;
+    organizationId: string;
     teacherId: string;
     startDate: string; // YYYY-MM-DD
     endDate: string; // YYYY-MM-DD
@@ -192,6 +215,7 @@ export interface Absence {
 
 export interface Omluvenka {
     id: string;
+    organizationId: string;
     studentId: string;
     parentId: string;
     tridaId: string;
@@ -205,6 +229,7 @@ export interface Omluvenka {
 
 export interface DomaciUkol {
     id: string;
+    organizationId: string;
     tridaId: string;
     predmetId: string;
     ucitelId: string;
@@ -217,6 +242,7 @@ export interface DomaciUkol {
 
 export interface ZapisDoPrvniTridy {
     id: string;
+    organizationId: string;
     jmenoDitete: string;
     datumNarozeniDitete: string; // YYYY-MM-DD
     bydlisteDitete: string;
