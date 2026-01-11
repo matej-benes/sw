@@ -48,7 +48,7 @@ import {
 } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
-import type { Organization } from '@/lib/types';
+import type { Organization, OrganizationType } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -58,6 +58,7 @@ import { cs } from 'date-fns/locale';
 const orgSchema = z.object({
   name: z.string().min(1, 'Název je povinný'),
   status: z.enum(['trial', 'active', 'expired']),
+  type: z.enum(['skola', 'zajmova_skupina']),
   trialEndDate: z.date().optional(),
   registrationPin: z.string().optional().nullable(),
 });
@@ -85,6 +86,7 @@ function OrgForm({
     defaultValues: {
       name: org?.name || '',
       status: org?.status || 'trial',
+      type: org?.type || 'skola',
       trialEndDate: org?.trialEndDate ? new Date(org.trialEndDate) : undefined,
       registrationPin: org?.registrationPin || null,
     },
@@ -113,6 +115,22 @@ function OrgForm({
         {errors.name && (
           <p className="text-sm text-destructive">{errors.name.message}</p>
         )}
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="type">Typ organizace</Label>
+        <Controller
+            name="type"
+            control={control}
+            render={({ field }) => (
+                <Select onValueChange={field.onChange} value={field.value}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="skola">Škola</SelectItem>
+                        <SelectItem value="zajmova_skupina">Zájmová skupina</SelectItem>
+                    </SelectContent>
+                </Select>
+            )}
+        />
       </div>
       <div className="space-y-1">
         <Label htmlFor="status">Stav</Label>
@@ -220,6 +238,11 @@ function AdminOrgManagement() {
     setIsDialogOpen(true);
   };
 
+  const orgTypeTranslations: Record<OrganizationType, string> = {
+    'skola': 'Škola',
+    'zajmova_skupina': 'Zájmová skupina'
+  }
+
   return (
     <>
       <Dialog open={isDialogOpen} onOpenChange={(isOpen) => {
@@ -244,6 +267,7 @@ function AdminOrgManagement() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Název</TableHead>
+                  <TableHead>Typ</TableHead>
                   <TableHead>Stav</TableHead>
                   <TableHead>Konec zkušební verze</TableHead>
                   <TableHead>Registrační PIN</TableHead>
@@ -255,7 +279,7 @@ function AdminOrgManagement() {
               <TableBody>
                 {orgsLoading && (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
+                    <TableCell colSpan={6} className="h-24 text-center">
                       Načítání dat...
                     </TableCell>
                   </TableRow>
@@ -263,6 +287,7 @@ function AdminOrgManagement() {
                 {!orgsLoading && organizations?.map((org) => (
                     <TableRow key={org.id}>
                         <TableCell className="font-medium">{org.name}</TableCell>
+                        <TableCell>{orgTypeTranslations[org.type] || org.type}</TableCell>
                         <TableCell>{org.status}</TableCell>
                         <TableCell>{org.trialEndDate ? format(new Date(org.trialEndDate), 'd. M. yyyy') : '-'}</TableCell>
                         <TableCell className="font-mono">{org.registrationPin || '-'}</TableCell>

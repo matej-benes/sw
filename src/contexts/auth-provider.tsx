@@ -1,6 +1,6 @@
 'use client';
 
-import type { User, Role, UserMembership } from '@/lib/types';
+import type { User, Role, UserMembership, Organization, OrganizationType } from '@/lib/types';
 import { useRouter, usePathname } from 'next/navigation';
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useFirestore, useActiveOrganization } from '@/firebase';
@@ -22,6 +22,8 @@ interface AuthContextType {
   hasRole: (role: Role) => boolean;
   isSuperAdmin: () => boolean;
   activeMembership: UserMembership | null;
+  activeOrganization: Organization | null;
+  activeOrganizationType: OrganizationType | null;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -35,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const auth = getAuth();
   const { activeOrganizationId, setActiveOrganizationId } = useActiveOrganization();
   const [activeMembership, setActiveMembership] = useState<UserMembership | null>(null);
+  const [activeOrganization, setActiveOrganization] = useState<Organization | null>(null);
 
   useEffect(() => {
     const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
@@ -86,14 +89,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [auth, firestore, setActiveOrganizationId]);
 
   useEffect(() => {
-    if (user && activeOrganizationId) {
-        const membership = user.memberships.find(m => m.organizationId === activeOrganizationId);
-        setActiveMembership(membership || null);
-        localStorage.setItem('activeOrganizationId', activeOrganizationId);
-    } else {
-        setActiveMembership(null);
-    }
-  }, [user, activeOrganizationId]);
+    const updateActiveOrganization = async () => {
+        if (user && activeOrganizationId) {
+            const membership = user.memberships.find(m => m.organizationId === activeOrganizationId);
+            setActiveMembership(membership || null);
+
+            if (firestore) {
+                const orgDocRef = doc(firestore, 'organizations', activeOrganizationId);
+                const orgDocSnap = await getDoc(orgDocRef);
+                if (orgDocSnap.exists()) {
+                    setActiveOrganization({ id: orgDocSnap.id, ...orgDocSnap.data() } as Organization);
+                } else {
+                    setActiveOrganization(null);
+                }
+            }
+            
+            localStorage.setItem('activeOrganizationId', activeOrganizationId);
+        } else {
+            setActiveMembership(null);
+            setActiveOrganization(null);
+        }
+    };
+    updateActiveOrganization();
+  }, [user, activeOrganizationId, firestore]);
 
   const signIn = async (email: string, pass: string): Promise<void> => {
     setLoading(true);
@@ -111,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setActiveOrganizationId(null);
     setActiveMembership(null);
+    setActiveOrganization(null);
     localStorage.removeItem('activeOrganizationId');
     router.push('/');
   };
@@ -124,7 +143,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user?.isSuperAdmin === true;
   }, [user]);
 
-  const value = { user, loading, signIn, signOut, hasRole, isSuperAdmin, activeMembership };
+  const value = { 
+    user, 
+    loading, 
+    signIn, 
+    signOut, 
+    hasRole, 
+    isSuperAdmin, 
+    activeMembership, 
+    activeOrganization,
+    activeOrganizationType: activeOrganization?.type || null
+  };
 
    if (loading && !pathname.startsWith('/dashboard/profil')) {
     return (

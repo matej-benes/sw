@@ -1,6 +1,7 @@
 import { Timestamp } from "firebase/firestore";
 
 export type Role = 'ucitel' | 'rodic' | 'ziak' | 'administrator' | 'vedouci pracovnik' | 'asistent pedagoga' | 'superAdmin';
+export type OrganizationType = 'skola' | 'zajmova_skupina';
 
 export interface Organization {
   id: string;
@@ -9,6 +10,7 @@ export interface Organization {
   status: 'trial' | 'active' | 'expired';
   trialEndDate?: string; // YYYY-MM-DD
   registrationPin?: string | null;
+  type: OrganizationType;
 }
 
 export interface UserMembership {

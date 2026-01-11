@@ -20,7 +20,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { LogOut, User as UserIcon, ChevronsUpDown, Building } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { useFirestore, useDoc, useMemoFirebase, useActiveOrganization } from '@/firebase';
-import { doc, collection, getDocs } from 'firebase/firestore';
+import { doc, collection, getDocs, where, query } from 'firebase/firestore';
 import type { Trida, User, Organization } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -40,16 +40,12 @@ export function UserNav() {
         const orgIds = user.memberships.map(m => m.organizationId);
         if (orgIds.length === 0) return;
         
+        const q = query(collection(firestore, 'organizations'), where('__name__', 'in', orgIds));
+        const querySnapshot = await getDocs(q);
         const orgs: Organization[] = [];
-        // Firestore 'in' query is limited to 10 items.
-        // We fetch them one by one, which is acceptable for a small number of user memberships.
-        for (const orgId of orgIds) {
-            const docRef = doc(firestore, 'organizations', orgId);
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                orgs.push({ id: docSnap.id, ...docSnap.data() } as Organization);
-            }
-        }
+        querySnapshot.forEach((doc) => {
+             orgs.push({ id: doc.id, ...doc.data() } as Organization);
+        });
         setOrganizations(orgs);
     };
     fetchOrganizations();

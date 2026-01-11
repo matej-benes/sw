@@ -61,7 +61,7 @@ const spravaSystemuLinks = [
 ]
 
 export function AppSidebar() {
-  const { hasRole, isSuperAdmin } = useAuth();
+  const { hasRole, isSuperAdmin, activeOrganizationType } = useAuth();
   const { unreadCount } = useUnreadMessages();
   const pathname = usePathname();
   
@@ -69,6 +69,8 @@ export function AppSidebar() {
   const isTeacher = hasRole('ucitel');
   const isParentOrStudent = hasRole('rodic') || hasRole('ziak');
   const superAdmin = isSuperAdmin();
+
+  const isSchool = activeOrganizationType === 'skola';
 
   const renderNavLinks = (links: {name: string, href: string, icon?: any}[], isSubMenu = false) => (
     links.map(link => {
@@ -118,29 +120,34 @@ export function AppSidebar() {
         <div className="flex-1 overflow-y-auto">
             <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
                  {!superAdmin && renderNavLinks(mainNavLinks)}
-                 {isParentOrStudent && !superAdmin && (
+                 
+                 {isParentOrStudent && !superAdmin && isSchool && (
                     <>
                         <div className='my-2'></div>
                         {renderNavLinks(studentParentLinks)}
                     </>
                  )}
+
                  {(isTeacher) && !superAdmin && (
                     <>
                         <div className='my-2'></div>
-                        {renderNavLinks(teacherNavLinks)}
-                        <Accordion type="single" collapsible className="w-full" defaultValue={pathname.includes('/dashboard/tisk') ? 'tiskove-vystupy' : undefined}>
-                            <AccordionItem value="tiskove-vystupy" className="border-b-0">
-                                <AccordionTrigger className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary hover:no-underline [&[data-state=open]>svg]:rotate-180">
-                                     <Printer className="h-4 w-4" />
-                                    Tiskové výstupy
-                                </AccordionTrigger>
-                                <AccordionContent className="pl-8 pb-0">
-                                    <nav className='grid gap-1'>
-                                        {renderNavLinks(printNavLinks, true)}
-                                    </nav>
-                                </AccordionContent>
-                            </AccordionItem>
-                        </Accordion>
+                        {isSchool ? renderNavLinks(teacherNavLinks) : renderNavLinks(teacherNavLinks.filter(l => l.name === 'Rozvrhy a suplování'))}
+                        
+                        {isSchool && (
+                            <Accordion type="single" collapsible className="w-full" defaultValue={pathname.includes('/dashboard/tisk') ? 'tiskove-vystupy' : undefined}>
+                                <AccordionItem value="tiskove-vystupy" className="border-b-0">
+                                    <AccordionTrigger className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary hover:no-underline [&[data-state=open]>svg]:rotate-180">
+                                         <Printer className="h-4 w-4" />
+                                        Tiskové výstupy
+                                    </AccordionTrigger>
+                                    <AccordionContent className="pl-8 pb-0">
+                                        <nav className='grid gap-1'>
+                                            {renderNavLinks(printNavLinks, true)}
+                                        </nav>
+                                    </AccordionContent>
+                                </AccordionItem>
+                            </Accordion>
+                        )}
                     </>
                  )}
                 {(isAdministrator || superAdmin) && (
