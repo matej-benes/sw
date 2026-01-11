@@ -48,9 +48,9 @@ service cloud.firestore {
         allow get: if isAuthenticated() && (isAdmin() || hasAnyRole(['ucitel']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
         // Teacher/admin can list all. Student/parent can only list their own.
         allow list: if hasAnyRole(['ucitel', 'administrator']) || 
-                     (request.query.ziakId == request.auth.uid) || 
                      (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentId == request.query.ziakId);
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentId == request.query.ziakId) ||
+                     (request.query.ziakId == request.auth.uid);
         allow create: if hasAnyRole(['ucitel', 'administrator']);
         allow update, delete: if resource.data.ucitelId == request.auth.uid || isAdmin();
     }
