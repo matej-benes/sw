@@ -462,10 +462,10 @@ function AdminUserManagement() {
               {editingUser ? 'Upravit uživatele' : 'Přidat nového uživatele'}
             </DialogTitle>
           </DialogHeader>
-          {isDialogOpen && (
+          {isDialogOpen && allUsers && (
              <UserForm
                 user={editingUser}
-                allUsers={allUsers || []}
+                allUsers={allUsers}
                 onSave={handleSaveUser}
                 closeDialog={() => setIsDialogOpen(false)}
             />
