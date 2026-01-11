@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, writeBatch, limit } from 'firebase/firestore';
 import type { Grading, User, Trida, Predmet } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -411,7 +411,7 @@ function StudentParentView() {
     useEffect(() => {
         if (!studentId || !firestore) return;
         setIsLoading(true);
-        const q = query(collection(firestore, 'gradings'), where('ziakId', '==', studentId), orderBy('createdAt', 'desc'));
+        const q = query(collection(firestore, 'gradings'), where('ziakId', '==', studentId), orderBy('createdAt', 'desc'), limit(30));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Grading));
             setGradings(data);

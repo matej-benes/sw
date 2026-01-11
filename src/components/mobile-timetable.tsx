@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import { collection, query, where, limit } from 'firebase/firestore';
 
 
 const dayNames = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
@@ -95,7 +95,7 @@ export function MobileTimetable({
 
     const gradesQuery = useMemoFirebase(() => {
         if (!firestore || !studentId) return null;
-        return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
+        return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId), limit(30));
     }, [firestore, studentId]);
     const { data: grades } = useCollection<Grading>(gradesQuery);
     
@@ -193,7 +193,7 @@ export function MobileTimetable({
 
                         const lessonGrades = grades?.filter(g => 
                             g.predmetId === lesson.subjectId && 
-                            format(g.createdAt.toDate(), 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
+                            g.datum === format(selectedDate, 'dd.MM.yyyy')
                         ) || [];
                         
                         const lessonCard = (
