@@ -63,9 +63,9 @@ function TeacherView() {
 
     const teacherClassesQuery = useMemoFirebase(() => {
         if (!user || !firestore) return null;
+        // Query for classes where the user is the main teacher, a substitute, or an assistant.
         return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
     }, [firestore, user]);
-
     const { data: teacherClasses, isLoading: classesLoading } = useCollection<Trida>(teacherClassesQuery);
     
     // The class ID to be used for displaying students. Prioritize URL param.

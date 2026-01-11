@@ -44,28 +44,60 @@ import type {
   ScheduleTemplate,
 } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
-import { useUnreadMessages } from '@/hooks/use-unread-messages';
 
 export function MobileDashboard() {
   const firestore = useFirestore();
   const { user, hasRole, loading: isUserLoading } = useAuth();
   
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined);
+
+  // Fetch classes for teacher selector if the user is a teacher
+  const teacherClassesQuery = useMemoFirebase(() => {
+    if (!firestore || !user || !hasRole('ucitel')) return null;
+    return query(
+      collection(firestore, 'tridy'),
+      where('ucitelId', '==', user.id)
+    );
+  }, [firestore, user, hasRole]);
+  const { data: teacherClasses, isLoading: teacherClassesLoading } = useCollection<Trida>(teacherClassesQuery);
+  
+  // Determine the target class ID based on role
+  const targetClassId = useMemo(() => {
+    if (hasRole('ucitel')) {
+      return selectedClassId;
+    }
+    return user?.tridaId;
+  }, [hasRole, user?.tridaId, selectedClassId]);
+
+  // Set default class for teachers
+  useEffect(() => {
+    if (hasRole('ucitel') && teacherClasses && teacherClasses.length > 0 && !selectedClassId) {
+      setSelectedClassId(teacherClasses[0].id);
+    }
+  }, [hasRole, teacherClasses, selectedClassId]);
+
+  // Set class for non-teachers
+  useEffect(() => {
+    if (!hasRole('ucitel') && user?.tridaId) {
+      setSelectedClassId(user.tridaId);
+    }
+  }, [hasRole, user?.tridaId]);
 
   const schedulesQuery = useMemoFirebase(() => {
-    if (!firestore || !user?.tridaId) return null;
-    return query(collection(firestore, 'rozvrhy'), where('tridaId', '==', user.tridaId));
-  }, [firestore, user?.tridaId]);
+    if (!firestore || !targetClassId) return null;
+    return query(collection(firestore, 'rozvrhy'), where('tridaId', '==', targetClassId));
+  }, [firestore, targetClassId]);
 
   const eventsQuery = useMemoFirebase(() => {
-    if (!firestore || !user?.tridaId) return null;
-    return query(collection(firestore, 'udalosti'), where('tridyIds', 'array-contains', user.tridaId));
-  }, [firestore, user?.tridaId]);
+    if (!firestore || !targetClassId) return null;
+    return query(collection(firestore, 'udalosti'), where('tridyIds', 'array-contains', targetClassId));
+  }, [firestore, targetClassId]);
   
   const substitutionsQuery = useMemoFirebase(() => {
-    if (!firestore || !user?.tridaId) return null;
-     return query(collection(firestore, 'suplovani'), where('originalLesson.classId', '==', user.tridaId));
-  }, [firestore, user?.tridaId]);
+    if (!firestore || !targetClassId) return null;
+     return query(collection(firestore, 'suplovani'), where('originalLesson.classId', '==', targetClassId));
+  }, [firestore, targetClassId]);
 
   const { data: schedulesData } = useCollection<Rozvrh>(schedulesQuery);
   const { data: eventsData } = useCollection<Udalost>(eventsQuery);
@@ -73,13 +105,13 @@ export function MobileDashboard() {
 
   useEffect(() => {
     const generateSchedulesForWeek = async () => {
-        if (!firestore || !user?.tridaId || !schedulesData) return;
+        if (!firestore || !targetClassId || !schedulesData) return;
 
         const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
         const weekEnd = addDays(weekStart, 6);
 
         const weekSchedulesExist = schedulesData.some(s => 
-            s.tridaId === user.tridaId &&
+            s.tridaId === targetClassId &&
             isWithinInterval(parseISO(s.datum), { start: weekStart, end: weekEnd })
         );
 
@@ -87,7 +119,7 @@ export function MobileDashboard() {
             return;
         }
 
-        const templateRef = doc(firestore, 'scheduleTemplates', user.tridaId);
+        const templateRef = doc(firestore, 'scheduleTemplates', targetClassId);
         const templateSnap = await getDoc(templateRef);
 
         if (!templateSnap.exists()) return;
@@ -101,11 +133,11 @@ export function MobileDashboard() {
             const templateDay = template.days.find(d => d.dayIndex === i);
             const dayLessons = templateDay ? templateDay.lessons : [];
 
-            const rozvrhId = `${user.tridaId}-${dayDateString}`;
+            const rozvrhId = `${targetClassId}-${dayDateString}`;
             const rozvrhRef = doc(firestore, 'rozvrhy', rozvrhId);
 
             const newRozvrh: Omit<Rozvrh, 'id'> = {
-                tridaId: user.tridaId,
+                tridaId: targetClassId,
                 datum: dayDateString,
                 timeSlots: template.timeSlots,
                 hodiny: dayLessons,
@@ -115,16 +147,16 @@ export function MobileDashboard() {
         await batch.commit();
     };
 
-    if(user?.tridaId){
+    if(targetClassId){
       generateSchedulesForWeek();
     }
-  }, [firestore, user?.tridaId, currentDate, schedulesData]);
+  }, [firestore, targetClassId, currentDate, schedulesData]);
 
   const handlePrevDay = () => setCurrentDate(prev => subDays(prev, 1));
   const handleNextDay = () => setCurrentDate(prev => addDays(prev, 1));
   const handleSetToday = () => setCurrentDate(new Date());
 
-  const isDataLoading = !schedulesData || !eventsData || !substitutionsData || isUserLoading;
+  const isDataLoading = !schedulesData || !eventsData || !substitutionsData || isUserLoading || (hasRole('ucitel') && teacherClassesLoading);
 
   if (isDataLoading) {
     return <div className="flex h-full w-full items-center justify-center">Načítání...</div>;
@@ -153,6 +185,21 @@ export function MobileDashboard() {
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
+          
+          {hasRole('ucitel') && (
+            <div className="mb-4">
+              <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Vyberte třídu" />
+                </SelectTrigger>
+                <SelectContent>
+                  {teacherClasses?.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <TimetableWidget
             schedules={schedulesData || []}
@@ -160,7 +207,7 @@ export function MobileDashboard() {
             substitutionsData={substitutionsData || []}
             isTeacher={hasRole('ucitel')}
             userId={user.id}
-            userClassId={user.tridaId}
+            userClassId={targetClassId}
             days={[currentDate]}
           />
         </CardContent>
