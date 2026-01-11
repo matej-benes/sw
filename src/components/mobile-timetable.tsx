@@ -26,7 +26,7 @@ const defaultTimeSlots = [
 const dayNames = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'];
 
 //==============================================================================
-// 1. CONTEXT MENU (for Teachers)
+// CONTEXT MENU (for Teachers)
 //==============================================================================
 function TeacherLessonContextMenu({ children, lesson, dayInfo, period }: { children: React.ReactNode, lesson: LessonBlock, dayInfo: { fullDate: Date }, period: number }) {
     const router = useRouter();
@@ -66,7 +66,7 @@ function TeacherLessonContextMenu({ children, lesson, dayInfo, period }: { child
 }
 
 //==============================================================================
-// 2. CARD COMPONENTS (Lesson, Event, Cancelled)
+// CARD COMPONENTS
 //==============================================================================
 function LessonCard({ lesson, period, timeRange, day, classId, isTeacher, grades = [] }: { lesson: LessonBlock, period: number, timeRange: string, day: Date, classId: string, isTeacher: boolean, grades: Grading[] }) {
     const router = useRouter();
@@ -165,7 +165,7 @@ function CancelledLessonCard({ substitution, period, timeRange }: { substitution
 }
 
 //==============================================================================
-// 3. MAIN COMPONENT
+// MAIN COMPONENT
 //==============================================================================
 interface MobileTimetableProps {
     schedules: Rozvrh[];
@@ -192,13 +192,10 @@ export function MobileTimetable({
     const [selectedDate, setSelectedDate] = useState(today);
     const firestore = useFirestore();
 
-    // Fetch grades only if the user is a student or parent.
     const gradesQuery = useMemoFirebase(() => {
-        if (!firestore || isTeacher || !studentId) return null;
-        // This query must match the security rules.
+        if (!firestore || !studentId) return null;
         return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
-    }, [firestore, isTeacher, studentId]);
-
+    }, [firestore, studentId]);
     const { data: grades, isLoading: gradesLoading } = useCollection<Grading>(gradesQuery);
 
     const timetableForSelectedDay = useMemo(() => {
@@ -206,13 +203,12 @@ export function MobileTimetable({
         if (!schedule) return null;
 
         const timeSlots = schedule.timeSlots || defaultTimeSlots;
-        const dayIndex = getDay(selectedDate); 
+        const dayIndex = getDay(selectedDate);
         const dayName = dayNames[dayIndex];
 
         const processedItems = timeSlots.map((time, periodIndex) => {
             const lesson = schedule.hodiny[periodIndex];
 
-            // 1. Check for a replacing event
             const event = eventsData.find(e =>
                 isSameDay(parseISO(e.datum), selectedDate) &&
                 e.nahrazujeHodiny &&
@@ -223,7 +219,6 @@ export function MobileTimetable({
                 return { type: 'event', data: event, period: periodIndex, timeRange: time };
             }
 
-            // 2. Check for substitutions
             const substitution = substitutionsData.find(sub =>
                 isSameDay(parseISO(sub.date), selectedDate) &&
                 sub.originalLesson.day === dayName &&
@@ -235,7 +230,6 @@ export function MobileTimetable({
                 return { type: 'cancelled', data: substitution, period: periodIndex, timeRange: time };
             }
             
-            // 3. Determine the lesson to display (original, substituted, or none)
             let lessonToShow: LessonBlock | null = lesson;
             if (substitution && lesson) {
                 const substitutedLesson = { ...lesson, ...substitution.changes };
@@ -245,13 +239,11 @@ export function MobileTimetable({
                 lessonToShow = substitutedLesson;
             }
 
-            if (!lessonToShow) return null; // No lesson for this slot
+            if (!lessonToShow) return null; 
             
-            // Filter by teacher/student
             if (isTeacher && lessonToShow.teacherId !== userId) return null;
             if (!isTeacher && schedule.tridaId !== userClassId) return null;
 
-            // Find grades for this specific lesson on this day
             const lessonGrades = (grades || []).filter(g => {
                 try {
                     const gradeDate = parse(g.datum, "dd.MM.yyyy", new Date());
@@ -287,7 +279,7 @@ export function MobileTimetable({
                 ))}
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-3">
+            <div className="flex-1 overflow-y-auto space-y-3 pb-16">
                 {!timetableForSelectedDay || timetableForSelectedDay.length === 0 ? (
                     <div className="text-center text-muted-foreground pt-16">
                         Žádné hodiny pro tento den.
