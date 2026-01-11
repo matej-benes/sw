@@ -172,7 +172,7 @@ function OrgForm({
                             {field.value ? format(field.value, 'PPP', {locale: cs}) : <span>Vyberte datum</span>}
                         </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={field.value || undefined} onSelect={field.onChange} /></PopoverContent>
+                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={field.value || undefined} onSelect={field.onChange} initialFocus /></PopoverContent>
                 </Popover>
                 )}
             />
@@ -235,11 +235,11 @@ function AdminOrgManagement() {
         title: 'Organizace uložena',
       });
     } else {
-        const dataToSave = {
+        const dataToSave: Partial<Organization> = {
           ...formData,
           ownerId: user.id
         };
-        if (dataToSave.trialEndDate === undefined) {
+        if (dataToSave.trialEndDate === undefined || dataToSave.trialEndDate === null) {
             delete dataToSave.trialEndDate;
         }
       addDocumentNonBlocking(collection(firestore, 'organizations'), dataToSave);
