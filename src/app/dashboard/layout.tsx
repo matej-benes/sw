@@ -23,7 +23,6 @@ const mainNavLinks = [
 ];
 
 const studentParentLinks = [
-    { name: 'Klasifikace', href: '/dashboard/hodnoceni', icon: PencilRuler },
     { name: 'Domácí úkoly', href: '/dashboard/ukoly', icon: Backpack },
     { name: 'Omluvenky', href: '/dashboard/omluvenky', icon: ClipboardCheck },
 ];
@@ -34,7 +33,6 @@ const adminNavLinks = [
 
 const teacherNavLinks = [
     { name: "Rozvrhy a suplování", href: "/dashboard/rozvrhy-suplovani", icon: Replace },
-    { name: "Klasifikace", href: "/dashboard/hodnoceni", icon: PencilRuler },
     { name: 'Domácí úkoly', href: '/dashboard/ukoly', icon: Backpack },
     { name: 'Omluvenky', href: '/dashboard/omluvenky', icon: ClipboardCheck },
 ]

@@ -28,20 +28,6 @@ service cloud.firestore {
       allow delete: if hasRole('administrator');
     }
     
-    match /gradings/{gradingId} {
-      allow read: if (isAuthenticated() && (hasRole('ucitel') || hasRole('administrator')))
-                  || (isAuthenticated() && resource.data.ziakId == request.auth.uid)
-                  || (isAuthenticated() && isMyStudent(resource.data.ziakId))
-                  || (isAuthenticated() && request.query.where[0][2] == request.auth.uid) // Student can list their own grades
-                  || (isAuthenticated() && request.query.where[2] == request.auth.uid) // Teacher can list their own grades
-                  || (isAuthenticated() && isMyStudent(request.query.where[0][2])); // Parent can list their child's grades
-      allow list: if (isAuthenticated() && (hasRole('ucitel') || hasRole('administrator')))
-                  || (isAuthenticated() && request.query.where[0][2] == request.auth.uid) // Student can list their own grades
-                  || (isAuthenticated() && request.query.where[0][0] == 'ucitelId' && request.query.where[0][2] == request.auth.uid) // Teacher can list their grades
-                  || (isAuthenticated() && isMyStudent(request.query.where[0][2])); // Parent can list their child's grades
-      allow write: if hasRole('ucitel');
-    }
-    
     match /tridy/{tridaId} {
       allow read: if isAuthenticated();
       allow write: if hasRole('administrator');

@@ -28,7 +28,6 @@ const userMenuItems = [
 ];
 
 const appMenuItems = [
-    { href: '/dashboard/hodnoceni', icon: PencilRuler, label: 'Hodnocení' },
     { href: '/dashboard/ukoly', icon: Backpack, label: 'Domácí úkoly' },
     { href: '/dashboard/omluvenky', icon: ClipboardCheck, label: 'Omluvenky' },
 ]

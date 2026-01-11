@@ -88,24 +88,6 @@
         "ucitelId"
       ]
     },
-    "Grading": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Grading",
-      "type": "object",
-      "description": "Represents a single grade given to a student.",
-      "properties": {
-        "id": { "type": "string", "description": "Unique identifier for the grade entry." },
-        "datum": { "type": "string", "format": "date-time", "description": "The exact date and time the grade was given." },
-        "ziakId": { "type": "string", "description": "ID of the student who received the grade." },
-        "ziakJmeno": { "type": "string", "description": "Name of the student (denormalized for easy display)." },
-        "predmet": { "type": "string", "description": "The subject for which the grade was given." },
-        "znamka": { "type": "number", "description": "The numerical value of the grade (e.g., 1, 2, 3, 4, 5)." },
-        "vaha": { "type": "number", "description": "The weight of the grade (e.g., 1 for homework, 10 for a final exam)." },
-        "komentar": { "type": "string", "description": "A comment or note from the teacher." },
-        "ucitelId": { "type": "string", "description": "ID of the teacher who gave the grade." }
-      },
-      "required": ["datum", "ziakId", "ziakJmeno", "predmet", "znamka", "vaha", "ucitelId"]
-    },
     "Rozvrh": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Rozvrh",
@@ -488,20 +470,6 @@
         }
       },
       {
-        "path": "/gradings/{gradingId}",
-        "definition": {
-          "entityName": "Grading",
-          "schema": { "$ref": "#/backend/entities/Grading" },
-          "description": "Stores individual grading events created by teachers.",
-          "params": [
-            {
-              "name": "gradingId",
-              "description": "The unique identifier of the grading event."
-            }
-          ]
-        }
-      },
-      {
         "path": "/tridy/{tridaId}",
         "definition": {
           "entityName": "Trida",
@@ -694,6 +662,3 @@
     ]
   }
 }
-    
-
-    
