@@ -15,6 +15,7 @@ import { useUnreadMessages } from '@/hooks/use-unread-messages';
 import { Badge } from '@/components/ui/badge';
 import { usePageTitleUpdater } from '@/hooks/usePageTitleUpdater';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { PwaInstallButton } from '@/components/pwa-install-button';
 
 const mainNavLinks = [
     { name: 'Komunikace', href: '/dashboard/zpravy', icon: MessageSquare },
@@ -191,7 +192,7 @@ export default function DashboardLayout({
             </Sheet>
            
           <div className="w-full flex-1">
-            {/* Can add search bar here if needed */}
+             <PwaInstallButton />
           </div>
           <UserNav />
         </header>
