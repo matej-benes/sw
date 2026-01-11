@@ -18,12 +18,13 @@ export default function AboutPage() {
     const pricingTiers = [
         {
             name: "Zkušební verze",
-            price: "Zdarma",
-            period: "/ 30 dní",
+            price: "Kontaktujte nás",
+            period: "",
             description: "Vyzkoušejte si všechny funkce bez závazků.",
             features: ["Plná funkčnost", "Podpora pro 1 organizaci", "Limit 50 uživatelů"],
-            buttonText: "Začít zdarma",
-            variant: "outline"
+            buttonText: "Kontaktovat",
+            variant: "outline",
+            href: "mailto:matej.romana@seznam.cz"
         },
         {
             name: "Základní balíček",
@@ -32,7 +33,8 @@ export default function AboutPage() {
             description: "Ideální pro menší školy a zájmové skupiny.",
             features: ["Vše ze zkušební verze", "Neomezený počet uživatelů", "Prioritní podpora"],
             buttonText: "Kontaktovat",
-            variant: "default"
+            variant: "default",
+            href: "mailto:matej.romana@seznam.cz"
         },
         {
             name: "Profi balíček",
@@ -41,7 +43,8 @@ export default function AboutPage() {
             description: "Pro velké organizace s potřebou individuálních úprav.",
             features: ["Vše ze základního balíčku", "Individuální úpravy na míru", "API přístup"],
             buttonText: "Kontaktovat",
-             variant: "outline"
+             variant: "outline",
+             href: "mailto:matej.romana@seznam.cz"
         },
     ];
 
@@ -126,7 +129,9 @@ export default function AboutPage() {
                                         </ul>
                                     </CardContent>
                                     <CardFooter>
-                                        <Button className="w-full" variant={tier.variant as any}>{tier.buttonText}</Button>
+                                        <Button asChild className="w-full" variant={tier.variant as any}>
+                                            <a href={tier.href}>{tier.buttonText}</a>
+                                        </Button>
                                     </CardFooter>
                                 </Card>
                             ))}
