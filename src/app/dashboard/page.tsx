@@ -18,6 +18,7 @@ import {
   ChevronRight,
   Calendar as CalendarIcon,
   ChevronDown,
+  BookCopy,
 } from 'lucide-react';
 import { TimetableWidget } from '@/components/timetable-widget';
 import {
@@ -55,6 +56,7 @@ import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { MobileTimetable } from '@/components/mobile-timetable';
 import { useUnreadMessages } from '@/hooks/use-unread-messages';
+import Link from 'next/link';
 
 
 export default function DashboardPage() {
@@ -337,17 +339,25 @@ export default function DashboardPage() {
         isClassTeacher={isClassTeacher}
     />
     <div className="space-y-6">
-      <div 
-        className="flex items-center gap-2 cursor-pointer group"
-        onClick={() => setIsFullWeekView(prev => !prev)}
-        >
-        <div>
-            <h1 className="text-3xl font-bold tracking-tight">Kalendář</h1>
-            <p className="text-muted-foreground">
-            {isFullWeekView ? 'Váš týdenní přehled událostí.' : 'Váš přehled na dnešek a zítřek.'}
-            </p>
+       <div className="flex justify-between items-start">
+        <div 
+          className="flex items-center gap-2 cursor-pointer group"
+          onClick={() => setIsFullWeekView(prev => !prev)}
+          >
+          <div>
+              <h1 className="text-3xl font-bold tracking-tight">Kalendář</h1>
+              <p className="text-muted-foreground">
+              {isFullWeekView ? 'Váš týdenní přehled událostí.' : 'Váš přehled na dnešek a zítřek.'}
+              </p>
+          </div>
+          <ChevronDown className={cn("h-6 w-6 text-muted-foreground transition-transform group-hover:text-foreground", isFullWeekView && "rotate-180")} />
         </div>
-        <ChevronDown className={cn("h-6 w-6 text-muted-foreground transition-transform group-hover:text-foreground", isFullWeekView && "rotate-180")} />
+        <Button asChild>
+          <Link href="/dashboard/hodnoceni">
+            <BookCopy className="mr-2 h-4 w-4" />
+            Žákovská knížka
+          </Link>
+        </Button>
       </div>
 
       <Card>
