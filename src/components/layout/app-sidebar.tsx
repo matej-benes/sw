@@ -76,9 +76,9 @@ export function AppSidebar() {
         if (link.name === "Organizace" && !superAdmin) {
             return null;
         }
-
+        
         // Hide other system management links if super admin
-        if (superAdmin && ["Třídy", "Předměty", "Učebny", "Zápisy do 1. ročníku"].includes(link.name)) {
+        if (superAdmin && ["Evidence osob", "Třídy", "Předměty", "Učebny", "Zápisy do 1. ročníku"].includes(link.name)) {
             return null;
         }
 

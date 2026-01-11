@@ -54,7 +54,7 @@ import { useUnreadMessages } from '@/hooks/use-unread-messages';
 
 export function DesktopDashboard() {
   const firestore = useFirestore();
-  const { user, hasRole, loading: isUserLoading } = useAuth();
+  const { user, hasRole, isSuperAdmin, loading: isUserLoading } = useAuth();
   const { unreadCount } = useUnreadMessages();
   
   const { data: tridy } = useCollection<Trida>(
@@ -266,14 +266,21 @@ export function DesktopDashboard() {
     };
   }, [studentClassData, allStaff, classTeacherData]);
 
-  const isDataLoading = !schedulesData || !eventsData || !substitutionsData || !tridy || isUserLoading;
+  const isLoading = isUserLoading || !user;
 
-  if (isDataLoading) {
+  if (isLoading) {
     return <div className="flex h-full w-full items-center justify-center">Načítání dat...</div>;
   }
   
-  if (!user) {
-     return <div className="flex h-full w-full items-center justify-center">Uživatel nenalezen.</div>;
+  if(isSuperAdmin()) {
+    return (
+        <div className="space-y-6">
+            <h1 className="text-3xl font-bold tracking-tight">Vítejte, Super Administrátore</h1>
+            <p className="text-muted-foreground">
+                Pro správu systému použijte navigační panel vlevo.
+            </p>
+        </div>
+    )
   }
 
   return (

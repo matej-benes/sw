@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { useFirestore } from '@/firebase';
 import { collection, query, where, getDocs, doc, getDoc, writeBatch, setDoc, updateDoc, arrayRemove, arrayUnion } from 'firebase/firestore';
-import type { User, Trida } from '@/lib/types';
+import type { User, Trida, Organization } from '@/lib/types';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 
 
@@ -117,7 +117,13 @@ function LoginForm() {
 function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
     const [step, setStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
-    const [registrationData, setRegistrationData] = useState<{ userToRegister: User, userWithPin: User, tridaName: string | null } | null>(null);
+    const [registrationData, setRegistrationData] = useState<{ 
+        userToRegister?: User, 
+        userWithPin?: User, 
+        tridaName: string | null,
+        organization?: Organization,
+        registrationType: 'user' | 'director'
+    } | null>(null);
     const { toast } = useToast();
     const firestore = useFirestore();
     const auth = getAuth();
@@ -141,24 +147,43 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
         }
 
         try {
-            const usersRef = collection(firestore, 'users');
-            const q = query(usersRef, where("pin", "==", values.pin));
-            const querySnapshot = await getDocs(q);
+            // First, check for organization PIN
+            const orgsRef = collection(firestore, 'organizations');
+            const orgQuery = query(orgsRef, where("registrationPin", "==", values.pin));
+            const orgSnapshot = await getDocs(orgQuery);
 
-            if (querySnapshot.empty) {
-                toast({ variant: 'destructive', title: 'Chyba', description: 'Neplatný PIN kód.' });
+            if (!orgSnapshot.empty) {
+                // This is an organization director registration
+                const orgDoc = orgSnapshot.docs[0];
+                const organization = { id: orgDoc.id, ...orgDoc.data() } as Organization;
+                
+                setRegistrationData({
+                    organization,
+                    tridaName: null,
+                    registrationType: 'director'
+                });
+                setStep(2);
                 setIsLoading(false);
                 return;
             }
 
-            const userDoc = querySnapshot.docs[0];
+            // If not an org PIN, check for user PIN
+            const usersRef = collection(firestore, 'users');
+            const userQuery = query(usersRef, where("pin", "==", values.pin));
+            const userSnapshot = await getDocs(userQuery);
+
+            if (userSnapshot.empty) {
+                toast({ variant: 'destructive', title: 'Chyba', description: 'Neplatný PIN kód.' });
+                setIsLoading(false);
+                return;
+            }
+            
+            // This is a standard user (parent/teacher) registration
+            const userDoc = userSnapshot.docs[0];
             const userWithPin = { id: userDoc.id, ...userDoc.data() } as User;
             let userToRegister: User;
 
-            const isStudentPin = userWithPin.roles.includes('ziak');
-            const isParentPin = userWithPin.roles.includes('rodic');
-
-            if (isParentPin) {
+            if (userWithPin.roles.includes('rodic')) {
                  toast({
                     variant: 'destructive',
                     title: 'Nesprávný typ PINu',
@@ -167,39 +192,17 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                 setIsLoading(false);
                 return;
             }
-
-            if (isStudentPin) {
-                // Pin belongs to a student. Now, we need to find the associated parent account.
-                if (userWithPin.studentId) {
-                    const parentDocRef = doc(firestore, 'users', userWithPin.studentId);
-                    const parentDoc = await getDoc(parentDocRef);
-                    if (parentDoc.exists()) {
-                        userToRegister = { id: parentDoc.id, ...parentDoc.data() } as User;
-                    } else {
-                         throw new Error("Propojený rodičovský účet nebyl nalezen. Kontaktujte administrátora.");
-                    }
-                } else {
-                    // This case means a student is registering themselves, OR a parent is registering
-                    // for a student who doesn't have a pre-assigned parent. This logic might need refinement
-                    // based on school's process. For now, we assume parent registration via student PIN.
-                    // Let's find a parent placeholder or decide what to do.
-                    // For now, let's assume if there's no studentId, the student registers themselves.
-                    // BUT the user story says parent registers with student PIN.
-                    // The most robust way is to find the pre-created (but unregistered) parent account.
-                    // This assumes a parent account was created with a link to the student.
-                     const parentQuery = query(usersRef, where("studentId", "==", userWithPin.id), where("roles", "array-contains", "rodic"));
-                     const parentSnapshot = await getDocs(parentQuery);
-                     if (!parentSnapshot.empty) {
-                         const parentDoc = parentSnapshot.docs[0];
-                         userToRegister = { id: parentDoc.id, ...parentDoc.data() } as User;
-                     } else {
-                         // Fallback or error: what if no parent account is pre-created?
-                         // For this flow, let's throw an error.
-                         throw new Error("Pro tohoto žáka nebyl nalezen žádný předvytvořený rodičovský účet. Kontaktujte prosím administrátora školy.");
-                     }
-                }
+            
+            if (userWithPin.roles.includes('ziak')) {
+                 const parentQuery = query(usersRef, where("studentId", "==", userWithPin.id), where("roles", "array-contains", "rodic"));
+                 const parentSnapshot = await getDocs(parentQuery);
+                 if (!parentSnapshot.empty) {
+                     const parentDoc = parentSnapshot.docs[0];
+                     userToRegister = { id: parentDoc.id, ...parentDoc.data() } as User;
+                 } else {
+                     throw new Error("Pro tohoto žáka nebyl nalezen žádný předvytvořený rodičovský účet. Kontaktujte prosím administrátora školy.");
+                 }
             } else {
-                // Pin belongs to a teacher, admin etc.
                 userToRegister = userWithPin;
             }
             
@@ -209,12 +212,10 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             if (classIdForDisplay) {
                 const tridaRef = doc(firestore, 'tridy', classIdForDisplay);
                 const tridaDoc = await getDoc(tridaRef);
-                if (tridaDoc.exists()) {
-                    tridaName = tridaDoc.data().nazev;
-                }
+                tridaName = tridaDoc.exists() ? tridaDoc.data().nazev : null;
             }
 
-            setRegistrationData({ userToRegister, userWithPin, tridaName });
+            setRegistrationData({ userToRegister, userWithPin, tridaName, registrationType: 'user' });
             registrationForm.setValue('email', userToRegister.email || '');
             setStep(2);
 
@@ -234,45 +235,60 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
             return;
         }
 
-        const { userToRegister, userWithPin } = registrationData;
-
         try {
-            // Step 1: Create the Firebase Auth user
             const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
             const newFirebaseUser = userCredential.user;
-
-            const isRegisteringParent = userToRegister.roles.includes('rodic');
-
-            // Step 2: Use a batch to perform multiple writes atomically
             const batch = writeBatch(firestore);
 
-            // Operation A: Create the new user document with the new UID
-            const newUserDocRef = doc(firestore, 'users', newFirebaseUser.uid);
-            const finalUserData: Partial<User> = {
-                id: newFirebaseUser.uid,
-                name: userToRegister.name,
-                email: values.email,
-                roles: userToRegister.roles,
-                avatarUrl: userToRegister.avatarUrl || `https://picsum.photos/seed/${newFirebaseUser.uid}/100/100`,
-                // If parent is registering, they get the class of their child (userWithPin)
-                tridaId: isRegisteringParent ? userWithPin.tridaId : userToRegister.tridaId,
-                 // If parent is registering, their studentId becomes the child's ID (userWithPin.id)
-                studentId: isRegisteringParent ? userWithPin.id : userToRegister.studentId,
-            };
-            batch.set(newUserDocRef, finalUserData);
+            if (registrationData.registrationType === 'director') {
+                const { organization } = registrationData;
+                if(!organization) throw new Error("Chybí data organizace.");
 
-            // Operation B: If a parent registered, update the student document to link to the new parent's UID.
-            if (isRegisteringParent) {
-                const studentRef = doc(firestore, 'users', userWithPin.id);
-                batch.update(studentRef, { studentId: newFirebaseUser.uid });
-            }
+                const directorData: User = {
+                    id: newFirebaseUser.uid,
+                    name: "Ředitel/Správce Organizace", // Temporary name
+                    email: values.email,
+                    memberships: [{
+                        organizationId: organization.id,
+                        roles: ['administrator']
+                    }],
+                    avatarUrl: `https://picsum.photos/seed/${newFirebaseUser.uid}/100/100`,
+                };
+                
+                const newUserDocRef = doc(firestore, 'users', newFirebaseUser.uid);
+                batch.set(newUserDocRef, directorData);
+
+                // Clear the PIN from the organization document
+                const orgRef = doc(firestore, 'organizations', organization.id);
+                batch.update(orgRef, { registrationPin: null });
+
+            } else if (registrationData.registrationType === 'user') {
+                const { userToRegister, userWithPin } = registrationData;
+                if(!userToRegister || !userWithPin) throw new Error("Chybí data uživatele.");
+                
+                const isRegisteringParent = userToRegister.roles.includes('rodic');
+                const newUserDocRef = doc(firestore, 'users', newFirebaseUser.uid);
+
+                const finalUserData: Partial<User> = {
+                    id: newFirebaseUser.uid,
+                    name: userToRegister.name,
+                    email: values.email,
+                    roles: userToRegister.roles,
+                    avatarUrl: userToRegister.avatarUrl || `https://picsum.photos/seed/${newFirebaseUser.uid}/100/100`,
+                    tridaId: isRegisteringParent ? userWithPin.tridaId : userToRegister.tridaId,
+                    studentId: isRegisteringParent ? userWithPin.id : userToRegister.studentId,
+                };
+                batch.set(newUserDocRef, finalUserData);
+
+                if (isRegisteringParent) {
+                    const studentRef = doc(firestore, 'users', userWithPin.id);
+                    batch.update(studentRef, { studentId: newFirebaseUser.uid });
+                }
             
-            // Operation C: Delete the original placeholder document that was used for registration
-            const placeholderUserRef = doc(firestore, 'users', userToRegister.id);
-            batch.delete(placeholderUserRef);
+                const placeholderUserRef = doc(firestore, 'users', userToRegister.id);
+                batch.delete(placeholderUserRef);
+            }
 
-
-            // Commit the batch
             await batch.commit();
 
             toast({ title: 'Registrace úspěšná', description: 'Váš účet byl vytvořen, nyní se můžete přihlásit.' });
@@ -331,14 +347,24 @@ function RegistrationForm({ onLoginClick }: { onLoginClick: () => void }) {
                         <CardDescription>Vytvořte si svůj účet pro přístup do systému.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm">
-                            <p><strong>Jméno:</strong> {registrationData.userToRegister.name}</p>
-                            <p><strong>Role:</strong> {registrationData.userToRegister.roles.map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(', ')}</p>
-                             {registrationData.userToRegister.roles.includes('rodic') && (
-                                <p><strong>Dítě:</strong> {registrationData.userWithPin.name}</p>
-                            )}
-                            <p><strong>Třída:</strong> {registrationData.tridaName || 'N/A'}</p>
-                        </div>
+                       {registrationData.registrationType === 'director' && registrationData.organization && (
+                            <div className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm">
+                                <p>Dokončujete registraci pro organizaci:</p>
+                                <p className="font-bold text-lg">{registrationData.organization.name}</p>
+                                <p className="mt-2">Váš účet bude mít roli **Administrátor** pro tuto organizaci.</p>
+                            </div>
+                        )}
+
+                        {registrationData.registrationType === 'user' && registrationData.userToRegister && (
+                            <div className="mb-4 rounded-lg border bg-muted/50 p-3 text-sm">
+                                <p><strong>Jméno:</strong> {registrationData.userToRegister.name}</p>
+                                <p><strong>Role:</strong> {registrationData.userToRegister.roles.map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(', ')}</p>
+                                {registrationData.userToRegister.roles.includes('rodic') && registrationData.userWithPin && (
+                                    <p><strong>Dítě:</strong> {registrationData.userWithPin.name}</p>
+                                )}
+                                <p><strong>Třída:</strong> {registrationData.tridaName || 'N/A'}</p>
+                            </div>
+                        )}
                         <Form {...registrationForm}>
                             <form onSubmit={registrationForm.handleSubmit(handleRegistrationSubmit)} className="space-y-4">
                                 <FormField

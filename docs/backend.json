@@ -9,7 +9,8 @@
         "name": { "type": "string", "description": "The name of the organization." },
         "ownerId": { "type": "string", "description": "The user ID of the organization's owner." },
         "status": { "type": "string", "enum": ["trial", "active", "expired"], "description": "The subscription status of the organization." },
-        "trialEndDate": { "type": "string", "format": "date", "description": "The end date for the trial period." }
+        "trialEndDate": { "type": "string", "format": "date", "description": "The end date for the trial period." },
+        "registrationPin": { "type": "string", "description": "A 6-digit PIN for initial director/admin registration." }
       },
       "required": ["id", "name", "ownerId", "status"]
     },
@@ -256,5 +257,3 @@
     ]
   }
 }
-
-    

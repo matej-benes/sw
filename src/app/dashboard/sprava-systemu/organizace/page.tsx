@@ -8,7 +8,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, MoreHorizontal, Pencil, Trash2, Calendar as CalendarIcon } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Pencil, Trash2, Calendar as CalendarIcon, ShieldCheck } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -59,6 +59,7 @@ const orgSchema = z.object({
   name: z.string().min(1, 'Název je povinný'),
   status: z.enum(['trial', 'active', 'expired']),
   trialEndDate: z.date().optional(),
+  registrationPin: z.string().optional().nullable(),
 });
 
 type OrgFormData = z.infer<typeof orgSchema>;
@@ -76,6 +77,8 @@ function OrgForm({
     register,
     handleSubmit,
     control,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<OrgFormData>({
     resolver: zodResolver(orgSchema),
@@ -83,6 +86,7 @@ function OrgForm({
       name: org?.name || '',
       status: org?.status || 'trial',
       trialEndDate: org?.trialEndDate ? new Date(org.trialEndDate) : undefined,
+      registrationPin: org?.registrationPin || null,
     },
   });
 
@@ -93,6 +97,13 @@ function OrgForm({
     });
     closeDialog();
   };
+  
+  const generatePin = () => {
+    const pin = Math.floor(100000 + Math.random() * 900000).toString();
+    setValue('registrationPin', pin, { shouldValidate: true });
+  };
+
+  const currentPin = watch('registrationPin');
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
@@ -137,6 +148,17 @@ function OrgForm({
             </Popover>
             )}
         />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="pin">Registrační PIN ředitele</Label>
+        <div className="flex items-center gap-2">
+          <Input id="pin" {...register('registrationPin')} readOnly placeholder="PIN není vygenerován" />
+          <Button type="button" variant="outline" onClick={generatePin}>
+            <ShieldCheck className="mr-2 h-4 w-4" />
+            Generovat
+          </Button>
+        </div>
+        {currentPin && <p className="text-xs text-muted-foreground">Tento PIN slouží pro první registraci ředitele organizace.</p>}
       </div>
       <DialogFooter>
         <DialogClose asChild>
@@ -224,6 +246,7 @@ function AdminOrgManagement() {
                   <TableHead>Název</TableHead>
                   <TableHead>Stav</TableHead>
                   <TableHead>Konec zkušební verze</TableHead>
+                  <TableHead>Registrační PIN</TableHead>
                    <TableHead>
                     <span className="sr-only">Akce</span>
                   </TableHead>
@@ -232,7 +255,7 @@ function AdminOrgManagement() {
               <TableBody>
                 {orgsLoading && (
                   <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center">
+                    <TableCell colSpan={5} className="h-24 text-center">
                       Načítání dat...
                     </TableCell>
                   </TableRow>
@@ -242,6 +265,7 @@ function AdminOrgManagement() {
                         <TableCell className="font-medium">{org.name}</TableCell>
                         <TableCell>{org.status}</TableCell>
                         <TableCell>{org.trialEndDate ? format(new Date(org.trialEndDate), 'd. M. yyyy') : '-'}</TableCell>
+                        <TableCell className="font-mono">{org.registrationPin || '-'}</TableCell>
                         <TableCell className="text-right">
                            <Button variant="ghost" size="icon" onClick={() => openDialog(org)}><Pencil className="h-4 w-4" /></Button>
                             <Button variant="ghost" size="icon" onClick={() => setDeletingOrg(org)} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
@@ -341,5 +365,4 @@ export default function SpravaOrganizaciPage() {
     </div>
   );
 }
-
     
