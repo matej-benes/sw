@@ -69,6 +69,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { MultiSelect } from '@/components/ui/multi-select';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { StudentMatrika } from '@/components/student-matrika';
+import { cn } from '@/lib/utils';
 
 
 const roleTranslations: { [key in Role]: string } = {
