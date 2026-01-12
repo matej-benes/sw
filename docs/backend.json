@@ -24,17 +24,10 @@
         "id": { "type": "string", "description": "Unique identifier for the user (matches Firebase Auth UID)." },
         "name": { "type": "string", "description": "The user's full name." },
         "email": { "type": "string", "format": "email", "description": "The user's email address." },
-        "memberships": {
+        "roles": {
           "type": "array",
-          "description": "An array of organizations the user is a member of, along with their roles.",
-          "items": {
-            "type": "object",
-            "properties": {
-              "organizationId": { "type": "string" },
-              "roles": { "type": "array", "items": { "type": "string" } }
-            },
-            "required": ["organizationId", "roles"]
-          }
+          "description": "An array of roles the user has within the school.",
+          "items": { "type": "string" }
         },
         "studentId": { "type": "string", "description": "For parents, the ID of their child student. This assumes a parent is linked to one child per organization context." },
         "pin": { "type": "string", "description": "A 6-digit PIN for initial user registration." },
@@ -193,7 +186,7 @@
         "datumPodani": { "type": "string", "format": "date-time" },
         "vyjadreniUcitele": { "type": "string" }
       },
-      "required": ["id", "organizationId", "studentId", "parentId", "tridaId", "datumOd", "datumDo", "duvod", "status", "datumPodani"]
+      "required": ["id", "organizationId", "studentId", "tridaId", "datumOd", "datumDo", "duvod", "status", "datumPodani"]
     },
     "DomaciUkol": {
       "title": "DomaciUkol",
@@ -212,10 +205,10 @@
       },
       "required": ["id", "organizationId", "tridaId", "predmetId", "ucitelId", "nazev", "popis", "datumZadani", "terminOdevzdani"]
     },
-     "ZapisDoPrvniTridy": {
-        "title": "ZapisDoPrvniTridy",
+     "PrijimaciRizeni": {
+        "title": "PrijimaciRizeni",
         "type": "object",
-        "description": "Represents an application for first-grade enrollment, scoped to an organization.",
+        "description": "Represents an application for enrollment, scoped to an organization.",
         "properties": {
             "id": { "type": "string" },
             "organizationId": { "type": "string" },
@@ -269,7 +262,7 @@
       { "path": "/zapisyHodin/{zapisId}", "definition": { "schema": { "$ref": "#/backend/entities/ZapisHodiny" } } },
       { "path": "/omluvenky/{omluvenkaId}", "definition": { "schema": { "$ref": "#/backend/entities/Omluvenka" } } },
       { "path": "/ukoly/{ukolId}", "definition": { "schema": { "$ref": "#/backend/entities/DomaciUkol" } } },
-      { "path": "/zapisy/{zapisId}", "definition": { "schema": { "$ref": "#/backend/entities/ZapisDoPrvniTridy" } } },
+      { "path": "/prijimaci-rizeni/{rizeniId}", "definition": { "schema": { "$ref": "#/backend/entities/PrijimaciRizeni" } } },
       { "path": "/zaznamy-schuzek/{zaznamId}", "definition": { "schema": { "$ref": "#/backend/entities/ZaznamSchuzky" } } }
     ]
   }

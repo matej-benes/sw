@@ -57,7 +57,7 @@ const spravaSystemuLinks = [
      { name: "Třídy", href: "/dashboard/sprava-systemu/tridy", icon: School },
      { name: "Předměty", href: "/dashboard/sprava-systemu/predmety", icon: Book },
      { name: "Učebny", href: "/dashboard/sprava-systemu/ucebny", icon: Home },
-     { name: "Zápisy do 1. ročníku", href: "/dashboard/zapisy", icon: UserCheck },
+     { name: "Přijímací řízení", href: "/dashboard/prijimaci-rizeni", icon: UserCheck },
 ]
 
 export function AppSidebar() {

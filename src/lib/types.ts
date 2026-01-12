@@ -261,7 +261,7 @@ export interface DomaciUkol {
     prilohy?: string[];
 }
 
-export interface ZapisDoPrvniTridy {
+export interface PrijimaciRizeni {
     id: string;
     organizationId: string;
     jmenoDitete: string;
