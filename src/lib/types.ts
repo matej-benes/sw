@@ -28,6 +28,26 @@ export interface User {
   studentId?: string; 
   pin?: string | null;
   isSuperAdmin?: boolean;
+
+  // Student-specific data (matrika)
+  rodneCislo?: string;
+  datumNarozeni?: string;
+  rodnePrijmeni?: string;
+  mistoNarozeni?: string;
+  statNarozeni?: string;
+  pohlavi?: 'Muž' | 'Žena';
+  rodinnyStav?: 'Svobodný/Svobodná' | 'Ženatý/Vdaná' | 'Rozvedený/Rozvedená';
+  stav?: 'Aktivní' | 'Neaktivní';
+  okresNarozeni?: string;
+  plnolety?: boolean;
+  pocetDeti?: number;
+  cisloOP?: string;
+  cisloPasu?: string;
+  osobniEmail?: string;
+  skolniEmail?: string;
+  oborVzdelani?: string;
+  cvtv?: string;
+  tridaId?: string;
 }
 
 export interface Grading {

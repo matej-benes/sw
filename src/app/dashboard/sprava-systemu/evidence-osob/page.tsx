@@ -69,6 +69,8 @@ import type { User } from '@/lib/types';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { StudentMatrika } from '@/components/student-matrika';
 
 
 const roleTranslations: { [key in Role]: string } = {
@@ -166,6 +168,9 @@ function UserForm({
   const students = useMemo(() => allUsers.filter(u => u.memberships && u.memberships.some(m => m.roles.includes('ziak'))), [allUsers]);
   const parents = useMemo(() => allUsers.filter(u => u.memberships && u.memberships.some(m => m.roles.includes('rodic'))), [allUsers]);
 
+  if (user && roles.includes('ziak')) {
+    return <StudentMatrika user={user} onSave={onSave} closeDialog={closeDialog} />
+  }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
@@ -309,6 +314,7 @@ function UserRow({ user, onEdit, onDelete, activeOrganizationId }: { user: User,
 
 function AdminUserManagement() {
     const firestore = useFirestore();
+    const auth = getAuth();
     const { activeOrganizationId } = useAuth();
     
     const usersCollection = useMemoFirebase(
@@ -328,54 +334,81 @@ function AdminUserManagement() {
     const [deletingUser, setDeletingUser] = useState<User | null>(null);
     const { toast } = useToast();
 
-    const handleSaveUser = async (formData: Partial<UserFormData>) => {
+    const handleSaveUser = async (formData: Partial<User>) => {
       if (!firestore || !activeOrganizationId) return;
-      
-      const newMembership: UserMembership = {
-          organizationId: activeOrganizationId,
-          roles: (formData.roles as Role[]) || []
-      };
 
       try {
-        if (editingUser) { // --- UPDATE EXISTING USER ---
-            const userRef = doc(firestore, 'users', editingUser.id);
-            const existingMemberships = editingUser.memberships || [];
-            const otherMemberships = existingMemberships.filter(m => m.organizationId !== activeOrganizationId);
-            
-            const dataToUpdate: Partial<User> = {
-                name: formData.name,
-                email: formData.email,
-                studentId: formData.studentId || undefined,
-                tridaId: formData.tridaId || undefined, // This is not a standard User property, handle with care.
-                memberships: [...otherMemberships, newMembership]
-            };
-            
-            await updateDocumentNonBlocking(userRef, dataToUpdate);
+        if (editingUser) {
+          // --- UPDATE ---
+          const userRef = doc(firestore, 'users', editingUser.id);
+          const userSnap = await getDoc(userRef);
+          if (!userSnap.exists()) {
+            throw new Error("User document not found for update.");
+          }
 
-        } else { // --- CREATE NEW USER ---
-            // Creating a placeholder user. The real user is created during PIN registration.
-            const newUserDocRef = doc(collection(firestore, 'users'));
-            const newUserForDb: Partial<User> = {
-                id: newUserDocRef.id,
-                name: formData.name,
-                email: formData.email,
-                pin: formData.pin,
-                studentId: formData.studentId || undefined,
-                tridaId: formData.tridaId || undefined, // This is not a standard User property, handle with care.
-                memberships: [newMembership],
-                avatarUrl: `https://picsum.photos/seed/${newUserDocRef.id}/100/100`,
-            };
-            await setDoc(newUserDocRef, newUserForDb);
+          const existingMemberships: UserMembership[] = userSnap.data().memberships || [];
+          const otherMemberships = existingMemberships.filter(m => m.organizationId !== activeOrganizationId);
+          const newMembership: UserMembership = {
+            organizationId: activeOrganizationId,
+            roles: (formData.roles as Role[]) || []
+          };
+          
+          const dataToUpdate: Partial<User> = {
+            name: formData.name,
+            email: formData.email,
+            memberships: [...otherMemberships, newMembership],
+            // Add other fields from matriky here if needed
+            ...(formData.datumNarozeni && { datumNarozeni: formData.datumNarozeni }),
+            ...(formData.rodnePrijmeni && { rodnePrijmeni: formData.rodnePrijmeni }),
+            ...(formData.mistoNarozeni && { mistoNarozeni: formData.mistoNarozeni }),
+            ...(formData.statNarozeni && { statNarozeni: formData.statNarozeni }),
+            ...(formData.pohlavi && { pohlavi: formData.pohlavi }),
+            ...(formData.rodinnyStav && { rodinnyStav: formData.rodinnyStav }),
+            ...(formData.stav && { stav: formData.stav }),
+            ...(formData.plnolety && { plnolety: formData.plnolety }),
+            ...(formData.cisloOP && { cisloOP: formData.cisloOP }),
+            ...(formData.cisloPasu && { cisloPasu: formData.cisloPasu }),
+            ...(formData.osobniEmail && { osobniEmail: formData.osobniEmail }),
+            ...(formData.skolniEmail && { skolniEmail: formData.skolniEmail }),
+          };
+
+          await updateDoc(userRef, dataToUpdate);
+          toast({ title: 'Uživatel aktualizován' });
+
+        } else {
+          // --- CREATE ---
+          if (!formData.email || !formData.pin) {
+            throw new Error("Email and PIN are required to create a new user.");
+          }
+
+          const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.pin);
+          const newFirebaseUser = userCredential.user;
+
+          const newMembership: UserMembership = {
+            organizationId: activeOrganizationId,
+            roles: (formData.roles as Role[]) || []
+          };
+
+          const newUserForDb: Partial<User> = {
+            id: newFirebaseUser.uid,
+            name: formData.name,
+            email: formData.email,
+            memberships: [newMembership],
+            avatarUrl: `https://picsum.photos/seed/${newFirebaseUser.uid}/100/100`,
+            ...(formData.studentId && { studentId: formData.studentId }),
+            ...(formData.tridaId && { tridaId: formData.tridaId }),
+          };
+
+          await setDoc(doc(firestore, 'users', newFirebaseUser.uid), newUserForDb);
+          toast({ title: 'Uživatel vytvořen' });
         }
-        
-        toast({
-            title: editingUser ? 'Uživatel aktualizován' : 'Uživatel přidán',
-            description: `Uživatel ${formData.name} byl úspěšně zpracován.`,
-        });
-
-      } catch(e) {
-          console.error("Error saving user:", e);
-          toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se uložit uživatele.' });
+      } catch (e: any) {
+        console.error("Error saving user:", e);
+        let description = 'Nepodařilo se uložit uživatele.';
+        if (e.code === 'auth/email-already-in-use') {
+          description = 'Tento e-mail je již používán jiným účtem.';
+        }
+        toast({ variant: 'destructive', title: 'Chyba', description });
       }
 
       setIsDialogOpen(false);
@@ -456,7 +489,7 @@ function AdminUserManagement() {
             </Table>
           </CardContent>
         </Card>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className={cn("sm:max-w-[425px]", editingUser && editingUser.roles?.includes('ziak') && "max-w-4xl")}>
           <DialogHeader>
             <DialogTitle>
               {editingUser ? 'Upravit uživatele' : 'Přidat nového uživatele'}
