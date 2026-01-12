@@ -69,6 +69,14 @@ service cloud.firestore {
       allow update: if isOwner(userId) || isSuperAdmin();
     }
     
+    // Specific override for applications
+    match /prijimaci-rizeni/{rizeniId} {
+      // Anyone can create an application (public form)
+      allow create: if true;
+      // Only admins can read/update/delete applications
+      allow read, update, delete: if hasRole(resource.data.organizationId, 'administrator');
+    }
+    
     // Default rules for collections within an organization
     match /{collection}/{docId} {
        // This rule applies to any document that has an 'organizationId' field.
