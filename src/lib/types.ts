@@ -243,7 +243,7 @@ export interface Omluvenka {
     id: string;
     organizationId: string;
     studentId: string;
-    parentId: string;
+    parentId?: string;
     tridaId: string;
     datumOd: string; // YYYY-MM-DD
     datumDo: string; // YYYY-MM-DD
