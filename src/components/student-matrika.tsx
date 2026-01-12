@@ -3,7 +3,7 @@
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { User } from '@/lib/types';
+import type { User, Trida } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,6 +18,9 @@ import { format, parse } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
+import { doc } from 'firebase/firestore';
+
 
 const matriSchema = z.object({
     name: z.string().min(1, "Jméno je povinné"),
@@ -51,13 +54,15 @@ interface StudentMatrikaProps {
 }
 
 export function StudentMatrika({ user, onSave, closeDialog }: StudentMatrikaProps) {
+    const firestore = useFirestore();
+
     const { register, handleSubmit, control, setValue, formState: { errors } } = useForm<MatrikaFormData>({
         resolver: zodResolver(matriSchema),
         defaultValues: {
             name: user.name.split(' ').slice(1).join(' ') || '',
             prijmeni: user.name.split(' ')[0] || '',
             rodneCislo: user.rodneCislo || '',
-            oborVzdelani: user.oborVzdelani || '7901C01 - Základní škola - ZŠ (9 let, denní)',
+            oborVzdelani: user.oborVzdelani || '79-01-C/01 Základní škola',
             tridaId: user.tridaId || '',
             cvtv: user.cvtv || '31',
             datumNarozeni: user.datumNarozeni ? parse(user.datumNarozeni, 'dd.MM.yyyy', new Date()) : undefined,
@@ -76,6 +81,9 @@ export function StudentMatrika({ user, onSave, closeDialog }: StudentMatrikaProp
             skolniEmail: user.skolniEmail || '',
         },
     });
+
+    const classRef = useMemoFirebase(() => user.tridaId ? doc(firestore, 'tridy', user.tridaId) : null, [firestore, user.tridaId]);
+    const {data: classData} = useDoc<Trida>(classRef);
     
     const onSubmit = (data: MatrikaFormData) => {
         const finalData = {
@@ -117,16 +125,10 @@ export function StudentMatrika({ user, onSave, closeDialog }: StudentMatrikaProp
                         <p className="text-sm font-medium text-muted-foreground">Uživatelské jméno: <span className="text-foreground font-normal">nevytvořeno</span></p>
                         <Button variant="link" className="p-0 h-auto">Založit účet</Button>
                     </div>
-                    <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4">
-                        <div className="space-y-1 sm:col-span-2">
-                           <Label>Škola</Label>
-                           <Input value="Základní škola Kvítečkov" readOnly />
-                        </div>
-                         <div className="space-y-1">
-                           <Label>Část školy</Label>
-                           <Input value="Část 01" readOnly />
-                        </div>
-                    </div>
+                     <div className="space-y-1 sm:col-span-2">
+                        <Label>Škola</Label>
+                        <Input value="Soukromá zábavná a základní škola, Bukovany" readOnly />
+                     </div>
                      <div className="space-y-1">
                         <Label>Obor vzdělání</Label>
                         <Input {...register('oborVzdelani')} readOnly />
@@ -134,7 +136,7 @@ export function StudentMatrika({ user, onSave, closeDialog }: StudentMatrikaProp
                     <div className="flex items-end gap-2">
                         <div className="space-y-1 flex-grow">
                             <Label>Třída</Label>
-                            <Input value="II.A (Josef Barcaba)" readOnly />
+                            <Input value={classData?.nazev || 'Nepřiřazeno'} readOnly />
                         </div>
                          <div className="space-y-1 w-20">
                             <Label>ČVTV</Label>
