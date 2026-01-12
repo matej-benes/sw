@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import type { Role, Trida, UserMembership } from '@/lib/types';
+import type { Role, Trida } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
@@ -55,8 +55,6 @@ import {
   doc,
   getDoc,
   updateDoc,
-  arrayUnion,
-  arrayRemove,
   setDoc,
   writeBatch,
   query,
@@ -110,13 +108,13 @@ function UserForm({
   onSave: (data: Partial<User>) => void;
   closeDialog: () => void;
 }) {
-  const { activeOrganization, activeOrganizationType } = useAuth();
+  const { hasRole } = useAuth();
   const firestore = useFirestore();
   
   const tridyQuery = useMemoFirebase(() => {
-    if (!firestore || !activeOrganization) return null;
-    return query(collection(firestore, 'tridy'), where('organizationId', '==', activeOrganization.id));
-  }, [firestore, activeOrganization]);
+    if (!firestore) return null;
+    return query(collection(firestore, 'tridy'));
+  }, [firestore]);
 
   const { data: classes } = useCollection<Trida>(tridyQuery);
 
@@ -132,7 +130,7 @@ function UserForm({
     defaultValues: {
       name: user?.name || '',
       email: user?.email || '',
-      roles: user?.memberships?.find(m => m.organizationId === activeOrganization?.id)?.roles || [],
+      roles: user?.roles || [],
       pin: user?.pin || '',
       tridaId: (user as any)?.tridaId || null,
       studentId: user?.studentId || null,
@@ -154,7 +152,7 @@ function UserForm({
   const isZiak = roles.includes('ziak');
   const isRodic = roles.includes('rodic');
   
-  const availableRoles = activeOrganizationType === 'skola' ? allSchoolRoles : allInterestGroupRoles;
+  const availableRoles = allSchoolRoles;
 
   useEffect(() => {
     if (!isZiak) {
@@ -165,8 +163,7 @@ function UserForm({
     }
   }, [isZiak, isRodic, setValue]);
   
-  const students = useMemo(() => allUsers.filter(u => u.memberships && u.memberships.some(m => m.roles.includes('ziak'))), [allUsers]);
-  const parents = useMemo(() => allUsers.filter(u => u.memberships && u.memberships.some(m => m.roles.includes('rodic'))), [allUsers]);
+  const students = useMemo(() => allUsers.filter(u => u.roles?.includes('ziak')), [allUsers]);
 
   if (user && roles.includes('ziak')) {
     return <StudentMatrika user={user} onSave={onSave} closeDialog={closeDialog} />
@@ -270,16 +267,14 @@ function UserForm({
   );
 }
 
-function UserRow({ user, onEdit, onDelete, activeOrganizationId }: { user: User, onEdit: (user: User) => void, onDelete: (user: User) => void, activeOrganizationId: string | null }) {
-    const membership = user.memberships?.find(m => m.organizationId === activeOrganizationId);
-    
+function UserRow({ user, onEdit, onDelete }: { user: User, onEdit: (user: User) => void, onDelete: (user: User) => void }) {
     return (
         <TableRow>
             <TableCell className="font-medium">{user.name}</TableCell>
             <TableCell>{user.email}</TableCell>
             <TableCell>
                 <div className="flex flex-wrap gap-1">
-                {(membership?.roles || []).map((role) => (
+                {(user.roles || []).map((role) => (
                     <Badge key={role} variant="secondary">
                     {roleTranslations[role as Role] || role}
                     </Badge>
@@ -315,7 +310,6 @@ function UserRow({ user, onEdit, onDelete, activeOrganizationId }: { user: User,
 function AdminUserManagement() {
     const firestore = useFirestore();
     const auth = getAuth();
-    const { activeOrganizationId } = useAuth();
     
     const usersCollection = useMemoFirebase(
       () => (firestore) ? collection(firestore, 'users') : null,
@@ -324,40 +318,22 @@ function AdminUserManagement() {
 
     const { data: allUsers, isLoading: usersLoading } = useCollection<User>(usersCollection);
 
-    const usersInOrg = useMemo(() => {
-        if (!allUsers || !activeOrganizationId) return [];
-        return allUsers.filter(u => u.memberships?.some(m => m.organizationId === activeOrganizationId));
-    }, [allUsers, activeOrganizationId]);
-
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [deletingUser, setDeletingUser] = useState<User | null>(null);
     const { toast } = useToast();
 
     const handleSaveUser = async (formData: Partial<User>) => {
-      if (!firestore || !activeOrganizationId) return;
+      if (!firestore) return;
 
       try {
         if (editingUser) {
           // --- UPDATE ---
           const userRef = doc(firestore, 'users', editingUser.id);
-          const userSnap = await getDoc(userRef);
-          if (!userSnap.exists()) {
-            throw new Error("User document not found for update.");
-          }
-
-          const existingMemberships: UserMembership[] = userSnap.data().memberships || [];
-          const otherMemberships = existingMemberships.filter(m => m.organizationId !== activeOrganizationId);
-          const newMembership: UserMembership = {
-            organizationId: activeOrganizationId,
-            roles: (formData.roles as Role[]) || []
-          };
-          
           const dataToUpdate: Partial<User> = {
             name: formData.name,
             email: formData.email,
-            memberships: [...otherMemberships, newMembership],
-            // Add other fields from matriky here if needed
+            roles: formData.roles || [],
             ...(formData.datumNarozeni && { datumNarozeni: formData.datumNarozeni }),
             ...(formData.rodnePrijmeni && { rodnePrijmeni: formData.rodnePrijmeni }),
             ...(formData.mistoNarozeni && { mistoNarozeni: formData.mistoNarozeni }),
@@ -384,16 +360,11 @@ function AdminUserManagement() {
           const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.pin);
           const newFirebaseUser = userCredential.user;
 
-          const newMembership: UserMembership = {
-            organizationId: activeOrganizationId,
-            roles: (formData.roles as Role[]) || []
-          };
-
           const newUserForDb: Partial<User> = {
             id: newFirebaseUser.uid,
             name: formData.name,
             email: formData.email,
-            memberships: [newMembership],
+            roles: formData.roles || [],
             avatarUrl: `https://picsum.photos/seed/${newFirebaseUser.uid}/100/100`,
             ...(formData.studentId && { studentId: formData.studentId }),
             ...(formData.tridaId && { tridaId: formData.tridaId }),
@@ -454,7 +425,7 @@ function AdminUserManagement() {
             <div>
               <CardTitle>Seznam uživatelů</CardTitle>
               <CardDescription>
-                Celkem {usersInOrg?.length ?? 0} uživatelů v této organizaci.
+                Celkem {allUsers?.length ?? 0} uživatelů.
               </CardDescription>
             </div>
             <Button onClick={() => openDialog(null)}>
@@ -482,8 +453,8 @@ function AdminUserManagement() {
                     </TableCell>
                   </TableRow>
                 )}
-                {!usersLoading && usersInOrg?.map((user) => (
-                    <UserRow key={user.id} user={user} onEdit={openDialog} onDelete={setDeletingUser} activeOrganizationId={activeOrganizationId} />
+                {!usersLoading && allUsers?.map((user) => (
+                    <UserRow key={user.id} user={user} onEdit={openDialog} onDelete={setDeletingUser} />
                 ))}
               </TableBody>
             </Table>

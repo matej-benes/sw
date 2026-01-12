@@ -13,16 +13,11 @@ export interface Organization {
   type: OrganizationType;
 }
 
-export interface UserMembership {
-    organizationId: string;
-    roles: Role[];
-}
-
 export interface User {
   id: string;
   name: string;
   email: string;
-  memberships: UserMembership[];
+  roles: Role[];
   avatarUrl?: string;
   // Per-organization data that might need to be specific
   studentId?: string; 

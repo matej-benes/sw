@@ -53,20 +53,15 @@ const adminNavLinks = [
 ];
 
 const spravaSystemuLinks = [
-     { name: "Organizace", href: "/dashboard/sprava-systemu/organizace", icon: Building },
      { name: "Evidence osob", href: "/dashboard/sprava-systemu/evidence-osob", icon: Users },
      { name: "Třídy", href: "/dashboard/sprava-systemu/tridy", icon: School },
-     { name: "Předměty", href: "/dashboard/sprava-systemu/predmety", icon: Book, type: 'skola' },
-     { name: "Učebny", href: "/dashboard/sprava-systemu/ucebny", icon: Home, type: 'skola' },
-     { name: "Zápisy do 1. ročníku", href: "/dashboard/zapisy", icon: UserCheck, type: 'skola' },
-]
-
-const interestGroupAdminLinks = [
-    { name: "Schůzky", href: "/dashboard/udalosti", icon: CalendarDays },
+     { name: "Předměty", href: "/dashboard/sprava-systemu/predmety", icon: Book },
+     { name: "Učebny", href: "/dashboard/sprava-systemu/ucebny", icon: Home },
+     { name: "Zápisy do 1. ročníku", href: "/dashboard/zapisy", icon: UserCheck },
 ]
 
 export function AppSidebar() {
-  const { hasRole, isSuperAdmin, activeOrganizationType } = useAuth();
+  const { hasRole, isSuperAdmin } = useAuth();
   const { unreadCount } = useUnreadMessages();
   const pathname = usePathname();
   
@@ -75,25 +70,8 @@ export function AppSidebar() {
   const isParentOrStudent = hasRole('rodic') || hasRole('ziak');
   const superAdmin = isSuperAdmin();
 
-  const isSchool = activeOrganizationType === 'skola';
-
-  const renderNavLinks = (links: {name: string, href: string, icon?: any, type?: string}[], isSubMenu = false) => (
+  const renderNavLinks = (links: {name: string, href: string, icon?: any}[], isSubMenu = false) => (
     links.map(link => {
-        // Hide "Organizace" link if not super admin
-        if (link.name === "Organizace" && !superAdmin) {
-            return null;
-        }
-        
-        // Hide other system management links if super admin
-        if (superAdmin && ["Evidence osob", "Třídy", "Předměty", "Učebny", "Zápisy do 1. ročníku"].includes(link.name)) {
-            return null;
-        }
-
-        // Hide links based on organization type
-        if (link.type && link.type !== activeOrganizationType) {
-            return null;
-        }
-
         const isActive = pathname.startsWith(link.href);
         const LinkIcon = link.icon;
         const isCommunication = link.name === 'Komunikace';
@@ -129,41 +107,39 @@ export function AppSidebar() {
         </div>
         <div className="flex-1 overflow-y-auto">
             <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
-                 {!superAdmin && renderNavLinks(mainNavLinks)}
+                 {renderNavLinks(mainNavLinks)}
                  
-                 {isParentOrStudent && !superAdmin && isSchool && (
+                 {isParentOrStudent && (
                     <>
                         <div className='my-2'></div>
                         {renderNavLinks(studentParentLinks)}
                     </>
                  )}
 
-                 {(isTeacher) && !superAdmin && (
+                 {(isTeacher) && (
                     <>
                         <div className='my-2'></div>
-                        {isSchool ? renderNavLinks(teacherNavLinks) : null}
+                        {renderNavLinks(teacherNavLinks)}
                         
-                        {isSchool && (
-                            <Accordion type="single" collapsible className="w-full" defaultValue={pathname.includes('/dashboard/tisk') ? 'tiskove-vystupy' : undefined}>
-                                <AccordionItem value="tiskove-vystupy" className="border-b-0">
-                                    <AccordionTrigger className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary hover:no-underline [&[data-state=open]>svg]:rotate-180">
-                                         <Printer className="h-4 w-4" />
-                                        Tiskové výstupy
-                                    </AccordionTrigger>
-                                    <AccordionContent className="pl-8 pb-0">
-                                        <nav className='grid gap-1'>
-                                            {renderNavLinks(printNavLinks, true)}
-                                        </nav>
-                                    </AccordionContent>
-                                </AccordionItem>
-                            </Accordion>
-                        )}
+                        <Accordion type="single" collapsible className="w-full" defaultValue={pathname.includes('/dashboard/tisk') ? 'tiskove-vystupy' : undefined}>
+                            <AccordionItem value="tiskove-vystupy" className="border-b-0">
+                                <AccordionTrigger className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary hover:no-underline [&[data-state=open]>svg]:rotate-180">
+                                     <Printer className="h-4 w-4" />
+                                    Tiskové výstupy
+                                </AccordionTrigger>
+                                <AccordionContent className="pl-8 pb-0">
+                                    <nav className='grid gap-1'>
+                                        {renderNavLinks(printNavLinks, true)}
+                                    </nav>
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
                     </>
                  )}
-                {(isAdministrator || superAdmin) && (
+                {(isAdministrator) && (
                     <>
                         <div className='my-2'></div>
-                        {isAdministrator && !superAdmin && (isSchool ? renderNavLinks(adminNavLinks) : renderNavLinks(interestGroupAdminLinks))}
+                        {renderNavLinks(adminNavLinks)}
                          <Accordion type="single" collapsible className="w-full" defaultValue={pathname.includes('/dashboard/sprava-systemu') ? 'sprava-systemu' : undefined}>
                             <AccordionItem value="sprava-systemu" className="border-b-0">
                                 <AccordionTrigger className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary hover:no-underline [&[data-state=open]>svg]:rotate-180">

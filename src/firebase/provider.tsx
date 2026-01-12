@@ -23,9 +23,6 @@ export interface FirebaseContextState {
   user: User | null;
   isUserLoading: boolean; // True during initial auth check
   userError: Error | null;
-  // Multi-organization state
-  activeOrganizationId: string | null;
-  setActiveOrganizationId: (orgId: string | null) => void;
 }
 
 // Return type for useFirebase()
@@ -36,8 +33,6 @@ export interface FirebaseServicesAndUser {
   user: User | null;
   isUserLoading: boolean;
   userError: Error | null;
-  activeOrganizationId: string | null;
-  setActiveOrganizationId: (orgId: string | null) => void;
 }
 
 // Return type for useUser() - specific to user auth state
@@ -71,7 +66,6 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
     isUserLoading: true, // Start loading until first auth event
     userError: null,
   });
-  const [activeOrganizationId, setActiveOrganizationId] = useState<string | null>(null);
 
   // Effect to subscribe to Firebase auth state changes
   useEffect(() => {
@@ -106,10 +100,8 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       user: userAuthState.user,
       isUserLoading: userAuthState.isUserLoading,
       userError: userAuthState.userError,
-      activeOrganizationId,
-      setActiveOrganizationId,
     };
-  }, [firebaseApp, firestore, auth, userAuthState, activeOrganizationId]);
+  }, [firebaseApp, firestore, auth, userAuthState]);
 
   return (
     <FirebaseContext.Provider value={contextValue}>
@@ -141,8 +133,6 @@ export const useFirebase = (): FirebaseServicesAndUser => {
     user: context.user,
     isUserLoading: context.isUserLoading,
     userError: context.userError,
-    activeOrganizationId: context.activeOrganizationId,
-    setActiveOrganizationId: context.setActiveOrganizationId,
   };
 };
 
@@ -189,6 +179,8 @@ export const useUser = (): UserHookResult => {
  * Hook to access the currently active organization.
  */
 export const useActiveOrganization = () => {
-    const { activeOrganizationId, setActiveOrganizationId } = useFirebase();
-    return { activeOrganizationId, setActiveOrganizationId };
+    // This hook is now a placeholder and does not manage state.
+    // It's kept for compatibility to avoid breaking components that might still import it.
+    // In a real refactor, you would remove usages of this hook.
+    return { activeOrganizationId: null, setActiveOrganizationId: (id: string | null) => {} };
 }
