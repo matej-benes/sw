@@ -64,7 +64,7 @@ export function StudentMatrika({ user, onSave, closeDialog }: StudentMatrikaProp
             rodneCislo: user.rodneCislo || '',
             oborVzdelani: user.oborVzdelani || '79-01-C/01 Základní škola',
             tridaId: user.tridaId || '',
-            cvtv: user.cvtv || '31',
+            cvtv: user.cvtv || '',
             datumNarozeni: user.datumNarozeni ? parse(user.datumNarozeni, 'dd.MM.yyyy', new Date()) : undefined,
             rodnePrijmeni: user.rodnePrijmeni || '',
             mistoNarozeni: user.mistoNarozeni || '',
@@ -154,7 +154,7 @@ export function StudentMatrika({ user, onSave, closeDialog }: StudentMatrikaProp
                     <TabsTrigger value="spec-potreby">Speciální vzdělávací potřeby</TabsTrigger>
                     <TabsTrigger value="ucebni-plan">Učební plán</TabsTrigger>
                 </TabsList>
-                <TabsContent value="prob-vzdelavani" className="p-0">
+                <TabsContent value="prob-vzdelavani" className="p-0 border-none">
                     <Tabs defaultValue="osobni-udaje">
                          <TabsList className="grid grid-cols-5 w-full bg-muted/60">
                             <TabsTrigger value="osobni-udaje">Osobní údaje</TabsTrigger>
@@ -251,6 +251,9 @@ export function StudentMatrika({ user, onSave, closeDialog }: StudentMatrikaProp
                                      {errors.skolniEmail && <p className="text-sm text-destructive">{errors.skolniEmail.message}</p>}
                                 </div>
                             </div>
+                        </TabsContent>
+                         <TabsContent value="adresy" className="border border-t-0 rounded-b-md p-6">
+                            <p className="text-muted-foreground">Zde bude správa adres.</p>
                         </TabsContent>
                     </Tabs>
                 </TabsContent>
