@@ -27,7 +27,8 @@ export default function DashboardLayout({
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push('/');
+       // Since login page is removed, we don't redirect.
+       // The auth provider will handle showing a loading state.
     }
   }, [user, loading, router]);
   
