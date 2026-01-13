@@ -69,7 +69,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { MultiSelect } from '@/components/ui/multi-select';
 import { StudentMatrika } from '@/components/student-matrika';
 import { cn } from '@/lib/utils';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUser } from '@/ai/flows/create-user';
 
 
 const roleTranslations: { [key in Role]: string } = {
@@ -310,7 +310,7 @@ function UserRow({ user, onEdit, onDelete }: { user: User, onEdit: (user: User) 
 
 function AdminUserManagement() {
     const firestore = useFirestore();
-    const { user: adminUser, signIn } = useAuth();
+    const { user: adminUser } = useAuth();
     
     const usersCollection = useMemoFirebase(
       () => (firestore) ? collection(firestore, 'users') : null,
@@ -362,45 +362,33 @@ function AdminUserManagement() {
             throw new Error("Email, PIN a jméno jsou povinné pro vytvoření nového uživatele.");
           }
 
-          const auth = getAuth();
-          
-          // Store current admin credentials
-          const adminEmail = adminUser.email;
-          const adminPassword = prompt("Pro potvrzení zadejte své administrátorské heslo:");
-          if (!adminPassword) {
-            toast({ variant: 'destructive', title: 'Operace zrušena', description: 'Nebylo zadáno heslo.' });
-            return;
-          }
-
-          // Create the new user. This will sign in the new user automatically.
-          const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.pin);
-          const newUser = userCredential.user;
+          // Create user on the server via Genkit flow
+          const { uid } = await createUser({
+            email: formData.email,
+            password: formData.pin,
+            displayName: formData.name,
+          });
 
           const newUserForDb: Partial<User> = {
-            id: newUser.uid,
+            id: uid,
             name: formData.name,
             email: formData.email,
             roles: formData.roles || [],
-            avatarUrl: `https://picsum.photos/seed/${newUser.uid}/100/100`,
+            avatarUrl: `https://picsum.photos/seed/${uid}/100/100`,
             ...(formData.studentId && { studentId: formData.studentId }),
             ...(formData.tridaId && { tridaId: formData.tridaId }),
           };
           
           const cleanedData = removeUndefinedFields(newUserForDb);
-          await setDoc(doc(firestore, 'users', newUser.uid), cleanedData);
+          await setDoc(doc(firestore, 'users', uid), cleanedData);
           
-          // CRITICAL: Sign back in as the admin user
-          await signIn(adminEmail, adminPassword);
-
           toast({ title: 'Uživatel vytvořen' });
         }
       } catch (e: any) {
         console.error("Error saving user:", e);
         let description = 'Nepodařilo se uložit uživatele.';
-        if (e.code === 'auth/email-already-in-use' || e.message.includes('auth/email-already-exists')) {
+        if (e.message.includes('auth/email-already-exists')) {
           description = 'Tento e-mail je již používán jiným účtem.';
-        } else if (e.code === 'auth/wrong-password') {
-            description = 'Zadáno nesprávné administrátorské heslo. Uživatel byl vytvořen, ale vy jste byli odhlášeni.'
         }
         toast({ variant: 'destructive', title: 'Chyba', description });
       }
