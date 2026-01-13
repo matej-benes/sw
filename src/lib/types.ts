@@ -271,7 +271,7 @@ export interface PrijimaciRizeni {
     emailZastupce: string;
     telefonZastupce: string;
     datumPodani: string; // YYYY-MM-DD HH:MM
-    status: 'Podáno' | 'Přijato' | 'Nepřijato' | 'Odklad';
+    status: 'Podáno' | 'Přijato' | 'Nepřijato' | 'Odklad' | 'Převedeno do matriky';
 }
 
 export interface ZaznamSchuzky {

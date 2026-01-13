@@ -1,13 +1,13 @@
 'use client';
 import React, { useState, useMemo } from 'react';
-import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
-import { collection, query, doc } from 'firebase/firestore';
+import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
+import { collection, query, doc, writeBatch } from 'firebase/firestore';
 import type { PrijimaciRizeni } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileText, PlusCircle, Search, Download, UserCheck, CheckCircle, AlertCircle, Clock } from "lucide-react";
+import { FileText, PlusCircle, Search, Download, UserCheck, CheckCircle, AlertCircle, Clock, Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
@@ -55,6 +55,56 @@ export default function PrijimaciRizeniPage() {
         }
     };
     
+    const handleTransferToMatrika = async () => {
+        if (!firestore || !selectedApplication) return;
+
+        try {
+            const batch = writeBatch(firestore);
+
+            // 1. Create Student User
+            const studentPin = Math.floor(100000 + Math.random() * 900000).toString();
+            const studentUserRef = doc(collection(firestore, 'users'));
+            const studentEmail = `${selectedApplication.jmenoDitete.toLowerCase().replace(/\s/g, '.')}@skolaweb.cz`; // Temporary email
+            batch.set(studentUserRef, {
+                name: selectedApplication.jmenoDitete,
+                email: studentEmail,
+                datumNarozeni: selectedApplication.datumNarozeniDitete,
+                roles: ['ziak'],
+                pin: studentPin,
+            });
+
+            // 2. Create Parent User
+            const parentPin = Math.floor(100000 + Math.random() * 900000).toString();
+            const parentUserRef = doc(collection(firestore, 'users'));
+            batch.set(parentUserRef, {
+                name: selectedApplication.jmenoZastupce,
+                email: selectedApplication.emailZastupce,
+                roles: ['rodic'],
+                pin: parentPin,
+                studentId: studentUserRef.id,
+            });
+
+            // 3. Update application status
+            const appRef = doc(firestore, 'prijimaci-rizeni', selectedApplication.id);
+            batch.update(appRef, { status: 'Převedeno do matriky' });
+
+            await batch.commit();
+            
+            toast({
+                title: 'Dítě převedeno do matriky',
+                description: `${selectedApplication.jmenoDitete} a zákonný zástupce byli přidáni do systému.`,
+            });
+
+        } catch (error) {
+            console.error("Error transferring to matrika: ", error);
+            toast({
+                variant: 'destructive',
+                title: 'Chyba',
+                description: 'Nepodařilo se převést dítě do matriky.',
+            });
+        }
+    }
+
     const handleRowClick = (appId: string) => {
         setSelectedApplicationId(appId);
         setActiveTab('details');
@@ -111,9 +161,11 @@ export default function PrijimaciRizeniPage() {
                                                     <TableCell>
                                                         <Badge variant={
                                                             app.status === "Přijato" ? "default" :
-                                                            app.status === "Odklad" ? "secondary" : "outline"
-                                                        } className={app.status === "Přijato" ? "bg-green-500" : ""}>
+                                                            app.status === "Odklad" ? "secondary" : 
+                                                            app.status === "Převedeno do matriky" ? "default" : "outline"
+                                                        } className={app.status === "Přijato" ? "bg-green-500" : app.status === 'Převedeno do matriky' ? 'bg-blue-500' : ''}>
                                                             {app.status === 'Přijato' && <CheckCircle className="h-3 w-3 mr-1" />}
+                                                            {app.status === 'Převedeno do matriky' && <Send className="h-3 w-3 mr-1" />}
                                                             {app.status === 'Odklad' && <Clock className="h-3 w-3 mr-1" />}
                                                             {app.status === 'Podáno' && <FileText className="h-3 w-3 mr-1" />}
                                                             {app.status}
@@ -173,7 +225,7 @@ export default function PrijimaciRizeniPage() {
                             </div>
                         </CardContent>
                          <CardFooter className="flex justify-end">
-                            <Button disabled={selectedApplication.status !== 'Přijato'}>
+                            <Button onClick={handleTransferToMatrika} disabled={selectedApplication.status !== 'Přijato'}>
                                 <UserCheck className="mr-2 h-4 w-4"/>
                                 Převést přijaté dítě do školní matriky
                             </Button>
