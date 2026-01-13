@@ -6,7 +6,7 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import {getAuth} from 'firebase-admin/auth';
-import {initializeApp, getApps, cert} from 'firebase-admin/app';
+import {initializeApp, getApps} from 'firebase-admin/app';
 
 const CreateUserInputSchema = z.object({
   email: z.string().email(),
@@ -22,9 +22,7 @@ export type CreateUserOutput = z.infer<typeof CreateUserOutputSchema>;
 
 // Initialize Firebase Admin SDK if not already initialized
 if (!getApps().length) {
-  initializeApp({
-    credential: cert(JSON.parse(process.env.FIREBASE_ADMIN_SDK_CONFIG!)),
-  });
+  initializeApp();
 }
 
 export async function createUser(input: CreateUserInput): Promise<CreateUserOutput> {
