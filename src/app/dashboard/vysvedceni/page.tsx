@@ -1,15 +1,64 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BookCopy, Printer } from 'lucide-react';
+import { BookCopy, Printer, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, where } from 'firebase/firestore';
+import type { Grading, User } from '@/lib/types';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
+interface SubjectAverage {
+    subject: string;
+    average: string;
+}
 
 export default function VysvedceniPage() {
     const { user, hasRole } = useAuth();
+    const firestore = useFirestore();
     
+    const studentId = hasRole('ziak') ? user?.id : user?.studentId;
     const studentName = hasRole('ziak') ? user?.name : 'vašeho dítěte';
+
+    const gradesQuery = useMemoFirebase(() => {
+        if (!firestore || !studentId) return null;
+        return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
+    }, [firestore, studentId]);
+
+    const { data: grades, isLoading } = useCollection<Grading>(gradesQuery);
+
+    const finalGrades = useMemo(() => {
+        if (!grades) return [];
+
+        const gradesBySubject: { [key: string]: Grading[] } = {};
+        for (const grade of grades) {
+            if (!gradesBySubject[grade.predmet]) {
+                gradesBySubject[grade.predmet] = [];
+            }
+            gradesBySubject[grade.predmet].push(grade);
+        }
+
+        const averages: SubjectAverage[] = [];
+        for (const subject in gradesBySubject) {
+            const subjectGrades = gradesBySubject[subject];
+            const totalWeight = subjectGrades.reduce((sum, g) => sum + g.vaha, 0);
+            const weightedSum = subjectGrades.reduce((sum, g) => sum + g.znamka * g.vaha, 0);
+            
+            let finalGrade = 0;
+            if (totalWeight > 0) {
+                 finalGrade = Math.round(weightedSum / totalWeight);
+            } else if (subjectGrades.length > 0) {
+                finalGrade = Math.round(subjectGrades.reduce((sum, g) => sum + g.znamka, 0) / subjectGrades.length);
+            }
+            
+            if(finalGrade > 0) {
+                 averages.push({ subject, average: String(finalGrade) });
+            }
+        }
+        return averages.sort((a,b) => a.subject.localeCompare(b.subject));
+    }, [grades]);
 
     return (
         <div className="space-y-6">
@@ -23,33 +72,43 @@ export default function VysvedceniPage() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Vysvědčení pro {studentName}</CardTitle>
-                    <CardDescription>Školní rok 2023/2024</CardDescription>
+                    <CardTitle>Náhled vysvědčení pro {studentName}</CardTitle>
+                    <CardDescription>Školní rok 2023/2024 - 2. pololetí</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-center p-4 border rounded-lg">
-                            <div>
-                                <p className="font-semibold">Vysvědčení za 2. pololetí</p>
-                                <p className="text-sm text-muted-foreground">Datum vydání: 28. 6. 2024</p>
-                            </div>
-                            <Button variant="outline" onClick={() => window.print()}>
-                                <Printer className="mr-2 h-4 w-4" />
-                                Zobrazit a tisknout
-                            </Button>
+                    {isLoading ? (
+                        <div className="flex items-center justify-center h-40">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
                         </div>
-                        <div className="flex justify-between items-center p-4 border rounded-lg">
-                             <div>
-                                <p className="font-semibold">Vysvědčení za 1. pololetí</p>
-                                <p className="text-sm text-muted-foreground">Datum vydání: 31. 1. 2024</p>
-                            </div>
-                            <Button variant="outline" onClick={() => window.print()}>
-                                <Printer className="mr-2 h-4 w-4" />
-                                Zobrazit a tisknout
-                            </Button>
+                    ) : finalGrades.length > 0 ? (
+                        <div className="border rounded-lg">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Předmět</TableHead>
+                                        <TableHead className="text-right">Výsledná známka</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {finalGrades.map((item, index) => (
+                                        <TableRow key={index}>
+                                            <TableCell className="font-medium">{item.subject}</TableCell>
+                                            <TableCell className="text-right font-bold text-lg">{item.average}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
                         </div>
-                    </div>
+                    ) : (
+                        <p className="text-center text-muted-foreground py-10">Pro tohoto žáka nebyly nalezeny žádné uzavřené známky pro zobrazení na vysvědčení.</p>
+                    )}
                 </CardContent>
+                <CardFooter className="border-t pt-6">
+                     <Button variant="outline" onClick={() => window.print()} disabled={isLoading || finalGrades.length === 0}>
+                        <Printer className="mr-2 h-4 w-4" />
+                        Tisknout vysvědčení
+                    </Button>
+                </CardFooter>
             </Card>
         </div>
     );
