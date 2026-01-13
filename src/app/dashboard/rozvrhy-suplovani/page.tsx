@@ -783,7 +783,12 @@ function SchedulePreview() {
     const scheduleRef = useMemoFirebase(() => scheduleId ? doc(firestore, 'rozvrhy', scheduleId) : null, [scheduleId, firestore]);
     const { data: scheduleData, isLoading: scheduleLoading } = useDoc<Rozvrh>(scheduleRef);
 
-    const { data: events, isLoading: eventsLoading } = useCollection<Udalost>(useMemoFirebase(() => firestore ? collection(firestore, 'udalosti') : null, [firestore]));
+    const eventsQuery = useMemoFirebase(() => {
+        if (!firestore || !selectedClassId) return null;
+        return query(collection(firestore, 'udalosti'), where('tridyIds', 'array-contains', selectedClassId));
+    }, [firestore, selectedClassId]);
+
+    const { data: events, isLoading: eventsLoading } = useCollection<Udalost>(eventsQuery);
 
     const dailyEvents = useMemo(() => {
         if (!events || !selectedClassId) return [];
@@ -946,6 +951,8 @@ function SchedulePreview() {
 
 export default function RozvrhySuplovaniPage() {
     const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
+    const { hasRole } = useAuth();
+    const isAdministrator = hasRole('administrator');
     return (
         <div className="space-y-6">
             <div>
@@ -958,7 +965,7 @@ export default function RozvrhySuplovaniPage() {
                         <TabsTrigger value="rozvrhy">Šablony rozvrhů</TabsTrigger>
                          <TabsTrigger value="absence">Absence</TabsTrigger>
                         <TabsTrigger value="suplovani">Plánování suplování</TabsTrigger>
-                        <TabsTrigger value="nahled">Náhled a úpravy</TabsTrigger>
+                        {isAdministrator && <TabsTrigger value="nahled">Náhled a úpravy</TabsTrigger>}
                     </TabsList>
                     <div className="flex gap-2">
                         <Button onClick={() => setIsGeneratorOpen(true)}>
@@ -981,9 +988,11 @@ export default function RozvrhySuplovaniPage() {
                 <TabsContent value="suplovani" className="mt-4">
                     <SubstitutionPlanner />
                 </TabsContent>
-                <TabsContent value="nahled" className="mt-4">
-                    <SchedulePreview />
-                </TabsContent>
+                 {isAdministrator && (
+                    <TabsContent value="nahled" className="mt-4">
+                        <SchedulePreview />
+                    </TabsContent>
+                 )}
             </Tabs>
              <ScheduleGenerator 
                 isOpen={isGeneratorOpen}

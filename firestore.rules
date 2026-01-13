@@ -71,7 +71,7 @@ service cloud.firestore {
     
     match /rozvrhy/{rozvrhId} {
         allow get: if hasRole('administrator') || (isAuthenticated() && isMemberOfClass(resource.data.tridaId));
-        allow list: if hasAnyRole(['ucitel','administrator']);
+        allow list: if hasRole('administrator');
         allow write: if hasRole('administrator');
     }
     
@@ -102,7 +102,8 @@ service cloud.firestore {
     
     match /messages/{messageId} {
       allow get: if isAuthenticated() && (request.auth.uid == resource.data.senderId || request.auth.uid in resource.data.recipientIds);
-      allow list, create: if isAuthenticated();
+      allow list: if isAuthenticated();
+      allow create: if isAuthenticated();
       allow update: if isAuthenticated() && (request.auth.uid in resource.data.recipientIds);
       allow delete: if false; 
     }
@@ -135,5 +136,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
