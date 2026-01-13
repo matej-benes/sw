@@ -70,7 +70,8 @@ service cloud.firestore {
     }
     
     match /rozvrhy/{rozvrhId} {
-        allow read: if hasRole('administrator') || (isAuthenticated() && isMemberOfClass(resource.data.tridaId));
+        allow get: if hasRole('administrator') || (isAuthenticated() && isMemberOfClass(resource.data.tridaId));
+        allow list: if hasRole('administrator');
         allow write: if hasRole('administrator');
     }
     

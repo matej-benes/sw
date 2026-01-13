@@ -70,12 +70,28 @@ export function DesktopDashboard() {
   }, [firestore]);
   const { data: allStaff } = useCollection<User>(allStaffQuery);
 
-  const { data: schedulesData } = useCollection<Rozvrh>(
-    useMemoFirebase(
-      () => (firestore ? collection(firestore, 'rozvrhy') : null),
-      [firestore]
-    )
-  );
+  const studentRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    const studentId = hasRole('ziak') ? user.id : user.studentId;
+    if (!studentId) return null;
+    return doc(firestore, 'users', studentId);
+  }, [firestore, user, hasRole]);
+  const { data: studentData } = useDoc<User>(studentRef);
+
+  const targetClassId = useMemo(() => {
+    if (hasRole('ucitel')) return selectedClassId;
+    if (hasRole('ziak')) return user?.tridaId;
+    if (hasRole('rodic')) return studentData?.tridaId;
+    return undefined;
+  }, [hasRole, selectedClassId, user, studentData]);
+
+  const schedulesQuery = useMemoFirebase(() => {
+      if (!firestore || !targetClassId) return null;
+      return query(collection(firestore, 'rozvrhy'), where('tridaId', '==', targetClassId));
+  }, [firestore, targetClassId]);
+
+  const { data: schedulesData } = useCollection<Rozvrh>(schedulesQuery);
+
   const { data: eventsData } = useCollection<Udalost>(
     useMemoFirebase(
       () => (firestore ? collection(firestore, 'udalosti') : null),
@@ -109,14 +125,6 @@ export function DesktopDashboard() {
   const [viewMode, setViewMode] = useState('tridy');
   const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined);
   const [isFullWeekView, setIsFullWeekView] = useState(false);
-
-  const studentRef = useMemoFirebase(() => {
-      if (!firestore || !user) return null;
-      const studentId = hasRole('ziak') ? user.id : user.studentId;
-      if (!studentId) return null;
-      return doc(firestore, 'users', studentId);
-  }, [firestore, user, hasRole]);
-  const { data: studentData } = useDoc<User>(studentRef);
 
   const studentClassRef = useMemoFirebase(() => {
     if (!firestore || !studentData?.tridaId) return null;
@@ -163,12 +171,6 @@ export function DesktopDashboard() {
       }
   }, [tridy, selectedClassId, hasRole, user?.tridaId]);
 
-  const targetClassId = useMemo(() => {
-    if (hasRole('ucitel')) return selectedClassId;
-    if (hasRole('ziak')) return user?.tridaId;
-    if (hasRole('rodic')) return studentData?.tridaId;
-    return undefined;
-  }, [hasRole, selectedClassId, user, studentData]);
   
   useEffect(() => {
     const generateSchedulesForWeek = async () => {
