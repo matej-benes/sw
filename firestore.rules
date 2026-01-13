@@ -32,23 +32,10 @@ service cloud.firestore {
              // Is the user's child in the class? (Parent)
              (userDoc.roles.hasAny(['rodic']) && get(/databases/$(database)/documents/users/$(userDoc.studentId)).data.tridaId == classId);
     }
-    
-    // This function is intended for a get rule on a single document, not for listing.
-    function isRegisteringWithPin() {
-      return request.query.get("pin") == resource.data.pin;
-    }
-    
-    // New rule for querying during registration
-    function isPinVerificationQuery() {
-        return request.query.keys().hasAll(['where']) &&
-               'email' in request.query.where &&
-               'pin' in request.query.where;
-    }
 
     match /users/{userId} {
-      allow get: if isAuthenticated() || isRegisteringWithPin();
-      // Allow querying the collection if it's for PIN verification OR if the user is authenticated.
-      allow list: if isPinVerificationQuery() || isAuthenticated();
+      allow get: if isAuthenticated();
+      allow list: if isAuthenticated();
       allow create: if hasRole('administrator');
       // PIN should be cleared after registration, so this update is sensitive.
       allow update: if isOwner(userId) || hasRole('administrator');

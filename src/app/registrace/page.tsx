@@ -44,6 +44,7 @@ export default function RegistrationPage() {
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [verifiedUser, setVerifiedUser] = useState<AppUser | null>(null);
+  const [prelimUserId, setPrelimUserId] = useState<string | null>(null); // Store ID from pre-registration doc
   const router = useRouter();
   const { toast } = useToast();
   const firestore = useFirestore();
@@ -76,6 +77,7 @@ export default function RegistrationPage() {
         
         const userDoc = querySnapshot.docs[0];
         setVerifiedUser({ id: userDoc.id, ...userDoc.data() } as AppUser);
+        setPrelimUserId(userDoc.id); // Save the original document ID
         setStep(2);
 
     } catch (error) {
@@ -87,50 +89,29 @@ export default function RegistrationPage() {
   };
 
   const onPasswordSubmit = async (data: PasswordFormValues) => {
-    if (!verifiedUser || !verifiedUser.email) return;
+    if (!verifiedUser || !verifiedUser.email || !prelimUserId) return;
     setIsLoading(true);
 
     try {
-        // 1. Create user in Firebase Auth
         const userCredential = await createUserWithEmailAndPassword(auth, verifiedUser.email, data.password);
         const firebaseUser = userCredential.user;
 
-        // 2. Update the document in Firestore
-        const userDocRef = doc(firestore, 'users', verifiedUser.id);
-        
-        // We MUST re-fetch the document to ensure we are not overwriting new data
-        // and to make sure we are authorized to perform the write.
-        // For simplicity here, we assume the initial data is sufficient.
-        
-        // It's critical that the original user document created by the admin
-        // has a DIFFERENT ID than the final Firebase Auth UID.
-        // Let's assume the admin-created doc ID IS the user's intended final UID.
-        
-        // This is a complex operation. A robust way is to:
-        // a) Create a new document with the Auth UID.
-        // b) Copy data from the pre-registration doc.
-        // c) Delete the pre-registration doc.
-        // This should be done in a transaction.
-
         const batch = writeBatch(firestore);
 
-        // Reference to the new document that will have the UID as its ID
         const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
         
-        // Data from the verified document, but remove the pin
-        const { pin, ...userData } = verifiedUser;
+        // Data from the verified document, but remove the pin and id
+        const { pin, id, ...userData } = verifiedUser;
 
-        // Set data for the new document
         batch.set(newUserDocRef, { ...userData, id: firebaseUser.uid });
         
         // Delete the original pre-registration document
-        batch.delete(doc(firestore, 'users', verifiedUser.id));
+        batch.delete(doc(firestore, 'users', prelimUserId));
 
         await batch.commit();
 
         setStep(3);
         
-        // Automatically sign in the user after a short delay
         setTimeout(() => {
              router.replace('/');
         }, 3000);
