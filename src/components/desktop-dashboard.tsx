@@ -78,6 +78,11 @@ export function DesktopDashboard() {
   }, [firestore, user, hasRole]);
   const { data: studentData } = useDoc<User>(studentRef);
 
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState('tridy');
+  const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined);
+  const [isFullWeekView, setIsFullWeekView] = useState(false);
+
   const targetClassId = useMemo(() => {
     if (hasRole('ucitel')) return selectedClassId;
     if (hasRole('ziak')) return user?.tridaId;
@@ -120,11 +125,6 @@ export function DesktopDashboard() {
   }, [firestore, isClassTeacher, teacherClasses]);
 
   const { data: pendingExcuses } = useCollection<Omluvenka>(pendingExcusesQuery);
-
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState('tridy');
-  const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined);
-  const [isFullWeekView, setIsFullWeekView] = useState(false);
 
   const studentClassRef = useMemoFirebase(() => {
     if (!firestore || !studentData?.tridaId) return null;
