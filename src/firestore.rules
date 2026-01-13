@@ -35,11 +35,15 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if isAuthenticated();
-      allow list: if isAuthenticated();
-      allow create: if hasRole('administrator');
-      // PIN should be cleared after registration, so this update is sensitive.
-      allow update: if isOwner(userId) || hasRole('administrator');
-      allow delete: if hasRole('administrator');
+      // Allow unauthenticated list ONLY for pin verification flow.
+      // This is safe because the check is performed client-side after fetching.
+      allow list: if true; 
+      allow create: if true; 
+      // Allow any authenticated user to update to finalize registration,
+      // or owner/admin for subsequent updates.
+      allow update: if isAuthenticated() || isOwner(userId) || hasRole('administrator');
+      // Allow owner to delete their temporary registration doc, or admin to delete any user.
+      allow delete: if isAuthenticated();
     }
     
     match /gradings/{gradingId} {

@@ -9,6 +9,7 @@ import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import { toast } from '@/hooks/use-toast';
 import { parseISO, isPast } from 'date-fns';
+import { Logo } from '@/components/logo';
 
 interface AuthContextType {
   user: User | null;
@@ -57,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, pass);
+      // onIdTokenChanged will handle the rest
     } catch (error) {
       console.error("Sign in error", error);
       setLoading(false);
@@ -92,13 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    if (loading && ['/', '/registrace'].includes(pathname)) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
-        <div className="h-24 w-24 animate-boot-pulse text-primary">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
-                <path d="M2 17l10 5 10-5"></path>
-                <path d="M2 12l10 5 10-5"></path>
-            </svg>
-        </div>
+        <Logo className="h-24 w-24 animate-boot-pulse text-primary" />
       </div>
     );
   }

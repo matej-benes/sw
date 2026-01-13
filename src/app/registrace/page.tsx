@@ -23,7 +23,6 @@ import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { doc, writeBatch, setDoc, collection, updateDoc, deleteDoc, getDocs, query, where, getDoc } from 'firebase/firestore';
 import type { User as AppUser } from '@/lib/types';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
-import { updateDocumentNonBlocking } from '@/firebase';
 
 const pinSchema = z.object({
   pin: z.string().length(6, 'PIN musí mít 6 číslic.'),
@@ -49,12 +48,11 @@ export default function RegistrationPage() {
   const firestore = useFirestore();
   const auth = getAuth();
 
-  const usersQuery = useMemoFirebase(() => {
+  const pinQuery = useMemoFirebase(() => {
     if (!firestore || step !== 1) return null;
     return query(collection(firestore, 'users'), where('pin', '!=', null));
   }, [firestore, step]);
-
-  const { data: allUsers, isLoading: usersLoading } = useCollection<AppUser>(usersQuery);
+  const { data: usersWithPins, isLoading: usersLoading } = useCollection<AppUser>(pinQuery);
 
   const {
     register: registerPin,
@@ -71,13 +69,13 @@ export default function RegistrationPage() {
   const onPinSubmit = async (data: PinFormValues) => {
     setIsLoading(true);
 
-    if (!allUsers) {
+    if (!usersWithPins) {
       toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se načíst uživatelská data. Zkuste to prosím znovu.' });
       setIsLoading(false);
       return;
     }
     
-    const user = allUsers.find(u => u.pin === data.pin);
+    const user = usersWithPins.find(u => u.pin === data.pin);
     
     if (user) {
         setVerifiedUser(user);
@@ -97,33 +95,28 @@ export default function RegistrationPage() {
     setIsLoading(true);
 
     try {
+        // 1. Create the user in Firebase Auth
         const userCredential = await createUserWithEmailAndPassword(auth, verifiedUser.email, data.password);
         const firebaseUser = userCredential.user;
 
-        // Reference to the original document
-        const userDocRef = doc(firestore, 'users', verifiedUser.id);
-        
-        // Update the document: set the new UID from auth, and remove the PIN.
-        await updateDoc(userDocRef, {
-            id: firebaseUser.uid, // This might not be standard, usually the doc ID is the UID.
-            pin: null, // Or delete(field)
-        });
-
-        // The document ID itself should ideally BE the firebaseUser.uid.
-        // The most robust way is to create a new document with the correct ID and delete the old one.
-        const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
-        const oldUserDocRef = doc(firestore, 'users', verifiedUser.id);
-        
+        // 2. Prepare the final user data, removing the PIN
         const finalUserData = { ...verifiedUser };
         delete finalUserData.pin;
-        finalUserData.id = firebaseUser.uid;
+        finalUserData.id = firebaseUser.uid; // Set the ID to the new auth UID
 
+        // 3. Use a batch write to create the new document and delete the old one
         const batch = writeBatch(firestore);
-        batch.set(newUserDocRef, finalUserData);
-        batch.delete(oldUserDocRef);
         
-        await batch.commit();
+        // Reference to the new document with the correct UID
+        const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
+        batch.set(newUserDocRef, finalUserData);
+        
+        // Reference to the old temporary document
+        const oldUserDocRef = doc(firestore, 'users', verifiedUser.id);
+        batch.delete(oldUserDocRef);
 
+        // 4. Commit the batch
+        await batch.commit();
 
         setStep(3);
         
