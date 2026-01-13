@@ -19,20 +19,19 @@ export interface User {
   email: string;
   roles: Role[];
   avatarUrl?: string;
-  // Per-organization data that might need to be specific
   studentId?: string; 
   pin?: string | null;
   isSuperAdmin?: boolean;
 
   // Student-specific data (matrika)
   rodneCislo?: string;
-  datumNarozeni?: string;
+  datumNarozeni?: string; // YYYY-MM-DD
   rodnePrijmeni?: string;
   mistoNarozeni?: string;
   statNarozeni?: string;
   pohlavi?: 'Muž' | 'Žena';
   rodinnyStav?: 'Svobodný/Svobodná' | 'Ženatý/Vdaná' | 'Rozvedený/Rozvedená';
-  stav?: 'Aktivní' | 'Neaktivní';
+  stav?: 'Aktivní' | 'Neaktivní' | 'Přerušené' | 'Absolvent';
   okresNarozeni?: string;
   plnolety?: boolean;
   pocetDeti?: number;
@@ -43,6 +42,7 @@ export interface User {
   oborVzdelani?: string;
   cvtv?: string;
   tridaId?: string;
+  password?: string; // Only for form handling, should not be stored in Firestore
 }
 
 export interface Grading {
