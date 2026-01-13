@@ -243,7 +243,7 @@ function ApproveExcuseDialog({
         return eachDayOfInterval({ start: parseISO(omluvenka.datumOd), end: parseISO(omluvenka.datumDo) });
     }, [omluvenka]);
 
-    const rozvrhRefs = useMemoFirebase(() => {
+    const rozvrhRefs = useMemo(() => {
         if (!firestore || !student?.tridaId || dates.length === 0) return [];
         return dates.map(date => doc(firestore, 'rozvrhy', `${student.tridaId}-${format(date, 'yyyy-MM-dd')}`));
     }, [firestore, student?.tridaId, dates]);
@@ -481,4 +481,4 @@ export default function OmluvenkyPage() {
         </div>
     );
 }
-
+    
