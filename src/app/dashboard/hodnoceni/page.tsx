@@ -173,6 +173,7 @@ function TeacherView() {
                     ...data,
                     organizationId: activeOrganizationId,
                     predmetId: predmet.id,
+                    tridaId: student.tridaId,
                     studentIds: undefined, // remove from data
                     ziakId: student.id,
                     datum: format(new Date(), 'dd.MM.yyyy'),
@@ -190,11 +191,13 @@ function TeacherView() {
                     if (student) {
                         const newGradingDoc = doc(collection(firestore, 'gradings'));
                         const gradingData = {
-                            ...data,
                             organizationId: activeOrganizationId,
                             predmetId: predmet.id,
-                            studentIds: undefined,
+                            tridaId: student.tridaId,
                             ziakId: studentId,
+                            znamka: data.znamka,
+                            vaha: data.vaha,
+                            komentar: data.komentar,
                             datum: format(new Date(), 'dd.MM.yyyy'),
                             cas: format(new Date(), 'HH:mm'),
                             ziakJmeno: student.name,
@@ -424,6 +427,8 @@ function StudentParentView() {
     const [gradings, setGradings] = useState<Grading[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
+    const { data: teachers, isLoading: teachersLoading } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, 'users'), where('roles', 'array-contains', 'ucitel')) : null, [firestore]));
+
     useEffect(() => {
         if (!firestore || !studentId) {
             setIsLoading(false);
@@ -443,6 +448,10 @@ function StudentParentView() {
 
         return () => unsubscribe();
     }, [firestore, studentId]);
+
+    const getTeacherName = useCallback((teacherId: string) => {
+        return teachers?.find(t => t.id === teacherId)?.name || 'Neznámý';
+    }, [teachers]);
 
     const gradesBySubject = useMemo(() => {
         if (!gradings) return {};
@@ -470,7 +479,7 @@ function StudentParentView() {
         return averages;
     }, [gradesBySubject]);
 
-    if (isLoading) {
+    if (isLoading || teachersLoading) {
         return <div className="p-6 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto" /></div>;
     }
 
@@ -539,13 +548,14 @@ function StudentParentView() {
                                 <TableHead>Datum</TableHead>
                                 <TableHead>Předmět</TableHead>
                                 <TableHead>Známka (váha)</TableHead>
+                                <TableHead>Učitel</TableHead>
                                 <TableHead>Komentář</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {gradings.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="h-24 text-center">Nebyly nalezeny žádné známky.</TableCell>
+                                    <TableCell colSpan={5} className="h-24 text-center">Nebyly nalezeny žádné známky.</TableCell>
                                 </TableRow>
                             ) : (
                                 gradings.map(g => (
@@ -556,6 +566,7 @@ function StudentParentView() {
                                             <span className="font-bold text-lg mr-2">{g.znamka}</span>
                                             <Badge variant="outline">Váha: {g.vaha.toFixed(1)}</Badge>
                                         </TableCell>
+                                        <TableCell>{getTeacherName(g.ucitelId)}</TableCell>
                                         <TableCell className="max-w-xs truncate">{g.komentar}</TableCell>
                                     </TableRow>
                                 ))
