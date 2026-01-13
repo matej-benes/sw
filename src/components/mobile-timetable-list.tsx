@@ -111,7 +111,7 @@ export function MobileTimetableList({
     const { hodiny, timeSlots } = dailySchedule;
 
     const handleLessonClick = (lesson: LessonBlock, periodIndex: number) => {
-        if(isTeacher || !lesson.classId) return;
+        if(!lesson.classId) return;
 
         const slug = [
             format(day, 'yyyy-MM-dd'),
