@@ -6,15 +6,9 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import { getFirestore } from 'firebase-admin/firestore';
-import { initializeApp, getApps } from 'firebase-admin/app';
+import { getFirestore, collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { initializeFirebase } from '@/firebase';
 
-// Initialize Firebase Admin SDK if not already done
-if (!getApps().length) {
-  initializeApp();
-}
-
-const db = getFirestore();
 
 const VerifyPinInputSchema = z.object({
   email: z.string().email(),
@@ -39,12 +33,18 @@ const verifyPinFlow = ai.defineFlow(
   },
   async ({ email, pin }) => {
     try {
-      const usersRef = db.collection('users');
-      const snapshot = await usersRef
-        .where('email', '==', email)
-        .where('pin', '==', pin)
-        .limit(1)
-        .get();
+      // Use the client SDK initialization
+      const { firestore: db } = initializeFirebase();
+
+      const usersRef = collection(db, 'users');
+      const q = query(
+        usersRef,
+        where('email', '==', email),
+        where('pin', '==', pin),
+        limit(1)
+      );
+      
+      const snapshot = await getDocs(q);
 
       if (snapshot.empty) {
         return { user: null };
