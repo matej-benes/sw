@@ -20,7 +20,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { CalendarIcon, ChevronLeft, Info, Save } from 'lucide-react';
+import { CalendarIcon, ChevronLeft, Info, Save, CheckCircle, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +36,7 @@ import {
 import { format, parseISO } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { useAuth } from '@/hooks/use-auth';
+import { Checkbox } from '@/components/ui/checkbox';
 
 
 const attendanceCycle: AttendanceStatus[] = ['-', '/', 'O', 'N', 'S'];
@@ -70,6 +71,7 @@ export default function TridniKnihaZapisContent() {
   const [topic, setTopic] = useState('');
   const [note, setNote] = useState('');
   const [students, setStudents] = useState<StudentWithAttendance[]>([]);
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch existing entry if it exists
@@ -100,6 +102,8 @@ export default function TridniKnihaZapisContent() {
   }, [firestore, tridaId]);
   const { data: studentDocs, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
   
+  const isClassTeacher = teacherUser?.id === tridaData?.ucitelId;
+
   useEffect(() => {
     if (!studentsLoading && studentDocs) {
         if (existingZapis) {
@@ -184,6 +188,26 @@ export default function TridniKnihaZapisContent() {
         )
     );
   }
+
+  const handleSelectStudent = (studentId: string, isSelected: boolean) => {
+    setSelectedStudents(prev => 
+        isSelected ? [...prev, studentId] : prev.filter(id => id !== studentId)
+    );
+  }
+
+  const handleBulkUpdate = (status: AttendanceStatus) => {
+    if (selectedStudents.length === 0) {
+        toast({ variant: 'destructive', title: 'Není vybrán žádný žák' });
+        return;
+    }
+    // This is a client-side only update for the UI. The actual saving happens when 'handleSave' is called.
+    // In a real app, you might want to update all lesson entries for the day for these students.
+    // This example only updates the current lesson's view.
+    setStudents(prev => prev.map(s => 
+        selectedStudents.includes(s.id) ? { ...s, attendanceStatus: status } : s
+    ));
+    toast({ title: 'Docházka aktualizována', description: `U ${selectedStudents.length} žáků byla nastavena ${status === 'O' ? 'omluvená' : 'neomluvená'} absence.`})
+  }
   
   const getAttendanceCellClass = (status: AttendanceStatus) => {
     switch (status) {
@@ -264,13 +288,35 @@ export default function TridniKnihaZapisContent() {
 
           {/* Attendance Table */}
           <div>
-            <p className="text-sm text-muted-foreground mb-2">
-              Seznam dětí/žáků třídy (Přítomnost [-] nebo Nepřítomnost [/] se přepíná kliknutím v levé části pole):
-            </p>
+            <div className="flex justify-between items-center mb-2">
+                <p className="text-sm text-muted-foreground">
+                Seznam dětí/žáků třídy (Přítomnost [-] nebo Nepřítomnost [/] se přepíná kliknutím v levé části pole):
+                </p>
+                 {isClassTeacher && (
+                    <div className="flex items-center gap-2">
+                         <Button size="sm" onClick={() => handleBulkUpdate('O')} disabled={selectedStudents.length === 0}><CheckCircle className="mr-2 h-4 w-4"/>Omluvit celý den</Button>
+                         <Button size="sm" variant="destructive" onClick={() => handleBulkUpdate('N')} disabled={selectedStudents.length === 0}><XCircle className="mr-2 h-4 w-4"/>Neomluvit celý den</Button>
+                    </div>
+                 )}
+            </div>
             <div className="overflow-x-auto border rounded-lg">
                 <Table>
                     <TableHeader>
                         <TableRow>
+                            {isClassTeacher && (
+                                 <TableHead className="w-12">
+                                    <Checkbox 
+                                        checked={selectedStudents.length === students.length && students.length > 0}
+                                        onCheckedChange={(checked) => {
+                                            if (checked) {
+                                                setSelectedStudents(students.map(s => s.id));
+                                            } else {
+                                                setSelectedStudents([]);
+                                            }
+                                        }}
+                                    />
+                                </TableHead>
+                            )}
                             <TableHead className="min-w-[200px]">Příjmení a jméno (ČVTV)</TableHead>
                             <TableHead className="text-center w-12">{hodina}</TableHead>
                             <TableHead className="min-w-[150px]">Důvod absence</TableHead>
@@ -279,6 +325,14 @@ export default function TridniKnihaZapisContent() {
                     <TableBody>
                         {students.map((student) => (
                             <TableRow key={student.id}>
+                                {isClassTeacher && (
+                                    <TableCell>
+                                        <Checkbox 
+                                            checked={selectedStudents.includes(student.id)}
+                                            onCheckedChange={(checked) => handleSelectStudent(student.id, !!checked)}
+                                        />
+                                    </TableCell>
+                                )}
                                 <TableCell className="font-medium flex items-center gap-2">
                                     <span>{student.name}</span>
                                     <TooltipProvider>
