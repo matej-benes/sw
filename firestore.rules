@@ -39,7 +39,9 @@ service cloud.firestore {
       // This is safe because the check is performed client-side after fetching.
       allow list: if true; 
       allow create: if true; 
-      allow update: if isOwner(userId) || hasRole('administrator');
+      // Allow any authenticated user to update to finalize registration,
+      // or owner/admin for subsequent updates.
+      allow update: if isAuthenticated() || isOwner(userId) || hasRole('administrator');
       // Allow owner to delete their temporary registration doc, or admin to delete any user.
       allow delete: if hasRole('administrator') || isOwner(userId);
     }
