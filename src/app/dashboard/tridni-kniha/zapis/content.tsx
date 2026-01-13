@@ -56,7 +56,9 @@ export default function TridniKnihaZapisContent() {
   const searchParams = useSearchParams();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const { user: teacherUser } = useAuth();
+  const auth = useAuth();
+  const teacherUser = auth.user;
+  const activeOrganizationId = auth.activeOrganizationId;
 
   const tridaId = searchParams.get('tridaId');
   const datum = searchParams.get('datum');
@@ -73,7 +75,6 @@ export default function TridniKnihaZapisContent() {
   const [students, setStudents] = useState<StudentWithAttendance[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [organizationId, setOrganizationId] = useState<string | null>(null);
 
   // Fetch existing entry if it exists
   const zapisRef = useMemoFirebase(() => {
@@ -104,12 +105,6 @@ export default function TridniKnihaZapisContent() {
   const { data: studentDocs, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
   
   const isClassTeacher = teacherUser?.id === tridaData?.ucitelId;
-
-    useEffect(() => {
-        if(tridaData?.organizationId) {
-            setOrganizationId(tridaData.organizationId);
-        }
-  }, [tridaData]);
 
   useEffect(() => {
     if (!studentsLoading && studentDocs) {
@@ -142,8 +137,21 @@ export default function TridniKnihaZapisContent() {
 
 
   const handleSave = async (goBack: boolean) => {
-    if (!firestore || !teacherUser || !zapisId || !tridaId || !datum || !hodina || !predmetId || !organizationId) {
+    const currentTeacherId = auth.user?.id;
+    const currentOrgId = auth.activeOrganizationId;
+
+    if (!firestore || !currentTeacherId || !zapisId || !tridaId || !datum || !hodina || !predmetId || !currentOrgId) {
         toast({ variant: 'destructive', title: 'Chyba', description: 'Nekompletní data pro uložení.'});
+        console.error("Save failed due to missing data:", {
+          firestore: !!firestore,
+          currentTeacherId,
+          zapisId,
+          tridaId,
+          datum,
+          hodina,
+          predmetId,
+          currentOrgId
+        });
         return;
     }
     
@@ -153,10 +161,10 @@ export default function TridniKnihaZapisContent() {
         datum,
         hodina,
         predmetId,
-        ucitelId: teacherUser.id,
+        ucitelId: currentTeacherId,
         topic,
         note,
-        organizationId: organizationId,
+        organizationId: currentOrgId,
         attendance: students.map(s => ({
             studentId: s.id,
             status: s.attendanceStatus,
@@ -176,13 +184,13 @@ export default function TridniKnihaZapisContent() {
         const absenceId = `${student.id}-${datum}-${hodina}`;
         const absenceRef = doc(firestore, 'absences', absenceId);
         const absenceData: Omit<Absence, 'id'> = {
-          organizationId: organizationId,
+          organizationId: currentOrgId,
           studentId: student.id,
           tridaId,
           datum,
           hodina,
           predmetId,
-          ucitelId: teacherUser.id,
+          ucitelId: currentTeacherId,
           status: student.attendanceStatus,
         };
         batch.set(absenceRef, absenceData, { merge: true });
