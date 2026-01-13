@@ -46,7 +46,7 @@ const gradingSchema = z.object({
 type GradingFormData = z.infer<typeof gradingSchema>;
 
 function TeacherView() {
-    const { user } = useAuth();
+    const { user, activeOrganizationId } = useAuth();
     const firestore = useFirestore();
     const { toast } = useToast();
     const searchParams = useSearchParams();
@@ -77,15 +77,23 @@ function TeacherView() {
     }, [firestore, selectedClassId]);
     const { data: students, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
 
-    const { data: predmety, isLoading: predmetyLoading } = useCollection<Predmet>(useMemoFirebase(() => firestore ? collection(firestore, 'predmety') : null, [firestore]));
+    const predmetyQuery = useMemoFirebase(() => {
+        if (!firestore || !activeOrganizationId) return null;
+        return query(collection(firestore, 'predmety'), where('organizationId', '==', activeOrganizationId));
+    }, [firestore, activeOrganizationId]);
+    const { data: predmety, isLoading: predmetyLoading } = useCollection<Predmet>(predmetyQuery);
 
     const { register, handleSubmit, control, reset, setValue, watch, formState: { errors } } = useForm<GradingFormData>({
         resolver: zodResolver(gradingSchema),
         defaultValues: { studentIds: [], vaha: 1.0, znamka: 1 }
     });
     
-    // We need all students for the parent selector in edit mode
-    const { data: allStudents } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, 'users'), where('roles', 'array-contains', 'ziak')) : null, [firestore]));
+    const allStudentsQuery = useMemoFirebase(() => {
+        if (!firestore || !activeOrganizationId) return null;
+        return query(collection(firestore, 'users'), where('roles', 'array-contains', 'ziak'), where('organizationId', '==', activeOrganizationId));
+    }, [firestore, activeOrganizationId]);
+    const { data: allStudents } = useCollection<User>(allStudentsQuery);
+
 
     const handleOpenDialog = useCallback((grading: Grading | null) => {
         setEditingGrading(grading);
@@ -146,7 +154,10 @@ function TeacherView() {
     }, [user, firestore, toast]);
 
     const handleSaveGrading = async (data: GradingFormData) => {
-        if (!user || !firestore || !allStudents) return;
+        if (!user || !firestore || !allStudents || !activeOrganizationId) {
+            toast({ variant: 'destructive', title: 'Chyba', description: 'Nekompletní data pro uložení.' });
+            return;
+        }
         
         const predmet = predmety?.find(p => p.id === data.predmetId);
         if (!predmet) {
@@ -160,6 +171,7 @@ function TeacherView() {
                 if(!student) return;
                 const gradingData = {
                     ...data,
+                    organizationId: activeOrganizationId,
                     predmetId: predmet.id,
                     studentIds: undefined, // remove from data
                     ziakId: student.id,
@@ -179,6 +191,7 @@ function TeacherView() {
                         const newGradingDoc = doc(collection(firestore, 'gradings'));
                         const gradingData = {
                             ...data,
+                            organizationId: activeOrganizationId,
                             predmetId: predmet.id,
                             studentIds: undefined,
                             ziakId: studentId,
