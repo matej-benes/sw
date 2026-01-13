@@ -98,7 +98,7 @@ export function DesktopDashboard() {
   const { data: schedulesData } = useCollection<Rozvrh>(schedulesQuery);
 
   const eventsQuery = useMemoFirebase(() => {
-    if (!firestore || !targetClassId) return null; // FIX: Wait for targetClassId
+    if (!firestore || !targetClassId) return null; 
     return query(
       collection(firestore, 'udalosti'),
       where('tridyIds', 'array-contains', targetClassId)
@@ -173,68 +173,6 @@ export function DesktopDashboard() {
           setSelectedClassId(defaultId);
       }
   }, [tridy, selectedClassId, hasRole, user?.tridaId]);
-
-  
-  useEffect(() => {
-    const generateSchedulesForWeek = async () => {
-        if (!firestore || !targetClassId || !schedulesData) return;
-
-        const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-        const weekEnd = addDays(weekStart, 6);
-
-        const weekSchedulesExist = schedulesData.some(s => 
-            s.tridaId === targetClassId &&
-            isWithinInterval(parseISO(s.datum), { start: weekStart, end: weekEnd })
-        );
-
-        if (weekSchedulesExist) {
-            return;
-        }
-
-        const templateRef = doc(firestore, 'scheduleTemplates', targetClassId);
-        const templateSnap = await getDoc(templateRef);
-
-        if (!templateSnap.exists()) {
-            console.log(`No schedule template found for class ${targetClassId}`);
-            return;
-        }
-
-        const template = templateSnap.data() as ScheduleTemplate;
-        
-        console.log(`Generating schedules for class ${targetClassId} for week starting ${format(weekStart, 'yyyy-MM-dd')}`);
-
-        const batch = writeBatch(firestore);
-
-        for (let i = 0; i < 7; i++) {
-            const dayDate = addDays(weekStart, i);
-            const dayDateString = format(dayDate, 'yyyy-MM-dd');
-            const templateDay = template.days.find(d => d.dayIndex === i);
-            const dayLessons = templateDay ? templateDay.lessons : [];
-
-            const rozvrhId = `${targetClassId}-${dayDateString}`;
-            const rozvrhRef = doc(firestore, 'rozvrhy', rozvrhId);
-
-            const newRozvrh: Omit<Rozvrh, 'id'> = {
-                tridaId: targetClassId,
-                datum: dayDateString,
-                timeSlots: template.timeSlots,
-                hodiny: dayLessons,
-            };
-            batch.set(rozvrhRef, newRozvrh);
-        }
-
-        try {
-            await batch.commit();
-            console.log("Successfully generated weekly schedules.");
-        } catch (error) {
-            console.error("Error generating weekly schedules:", error);
-        }
-    };
-
-    if(targetClassId){
-      generateSchedulesForWeek();
-    }
-  }, [firestore, targetClassId, currentDate, schedulesData]);
 
   const handlePrevWeek = useCallback(() => {
     setCurrentDate((prev) => subWeeks(prev, 1));
