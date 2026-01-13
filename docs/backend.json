@@ -242,7 +242,24 @@
     "StorableDay": { "type": "object" },
     "Substitution": { "type": "object" },
     "Oznameni": { "type": "object" },
-    "Absence": { "type": "object" }
+    "Absence": {
+      "title": "Absence",
+      "type": "object",
+      "description": "Represents a single period of absence for a student.",
+      "properties": {
+        "id": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "tridaId": { "type": "string" },
+        "datum": { "type": "string", "format": "date" },
+        "hodina": { "type": "string" },
+        "predmetId": { "type": "string" },
+        "ucitelId": { "type": "string" },
+        "status": { "type": "string", "enum": ["/", "O", "N", "S"], "description": "Status: neurčená, omluvená, neomluvená, nezapočítávaná" },
+        "omluvenkaId": { "type": "string" }
+      },
+      "required": ["id", "organizationId", "studentId", "tridaId", "datum", "hodina", "predmetId", "status"]
+    }
   },
   "auth": {
     "providers": ["password", "anonymous"]
@@ -263,7 +280,10 @@
       { "path": "/omluvenky/{omluvenkaId}", "definition": { "schema": { "$ref": "#/backend/entities/Omluvenka" } } },
       { "path": "/ukoly/{ukolId}", "definition": { "schema": { "$ref": "#/backend/entities/DomaciUkol" } } },
       { "path": "/prijimaci-rizeni/{rizeniId}", "definition": { "schema": { "$ref": "#/backend/entities/PrijimaciRizeni" } } },
-      { "path": "/zaznamy-schuzek/{zaznamId}", "definition": { "schema": { "$ref": "#/backend/entities/ZaznamSchuzky" } } }
+      { "path": "/zaznamy-schuzek/{zaznamId}", "definition": { "schema": { "$ref": "#/backend/entities/ZaznamSchuzky" } } },
+      { "path": "/absences/{absenceId}", "definition": { "schema": { "$ref": "#/backend/entities/Absence" } } }
     ]
   }
 }
+
+    

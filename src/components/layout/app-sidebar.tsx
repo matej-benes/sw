@@ -24,6 +24,7 @@ import {
     UserCheck,
     Building,
     CalendarDays,
+    UserX,
 } from 'lucide-react';
 
 const mainNavLinks = [
@@ -33,6 +34,7 @@ const mainNavLinks = [
 const studentParentLinks = [
     { name: 'Domácí úkoly', href: '/dashboard/ukoly', icon: Backpack },
     { name: 'Omluvenky', href: '/dashboard/omluvenky', icon: ClipboardCheck },
+    { name: 'Absence', href: '/dashboard/absence', icon: UserX },
     { name: 'Klasifikace', href: '/dashboard/hodnoceni', icon: PencilRuler },
 ];
 
@@ -40,6 +42,7 @@ const teacherNavLinks = [
     { name: "Rozvrhy a suplování", href: "/dashboard/rozvrhy-suplovani", icon: Replace },
     { name: 'Domácí úkoly', href: '/dashboard/ukoly', icon: Backpack },
     { name: 'Omluvenky', href: '/dashboard/omluvenky', icon: ClipboardCheck },
+    { name: 'Absence', href: '/dashboard/absence', icon: UserX },
     { name: 'Klasifikace', href: '/dashboard/hodnoceni', icon: PencilRuler },
 ]
 
@@ -160,3 +163,5 @@ export function AppSidebar() {
     </div>
   );
 }
+
+    

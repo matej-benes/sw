@@ -24,9 +24,9 @@ import { CalendarIcon, ChevronLeft, Info, Save, CheckCircle, XCircle } from 'luc
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { useFirestore, useDoc, useCollection, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
-import { collection, doc, query, where } from 'firebase/firestore';
-import type { User, Trida, Predmet, AttendanceStatus, ZapisHodiny } from '@/lib/types';
+import { useFirestore, useDoc, useCollection, useMemoFirebase, setDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
+import { collection, doc, query, where, writeBatch } from 'firebase/firestore';
+import type { User, Trida, Predmet, AttendanceStatus, ZapisHodiny, Absence } from '@/lib/types';
 import {
   Tooltip,
   TooltipContent,
@@ -56,7 +56,7 @@ export default function TridniKnihaZapisContent() {
   const searchParams = useSearchParams();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const { user: teacherUser } = useAuth();
+  const { user: teacherUser, activeOrganizationId } = useAuth();
 
   const tridaId = searchParams.get('tridaId');
   const datum = searchParams.get('datum');
@@ -134,8 +134,8 @@ export default function TridniKnihaZapisContent() {
   }, [tridaLoading, predmetLoading, studentsLoading, zapisLoading]);
 
 
-  const handleSave = (goBack: boolean) => {
-    if (!firestore || !teacherUser || !zapisId || !tridaId || !datum || !hodina || !predmetId) {
+  const handleSave = async (goBack: boolean) => {
+    if (!firestore || !teacherUser || !zapisId || !tridaId || !datum || !hodina || !predmetId || !activeOrganizationId) {
         toast({ variant: 'destructive', title: 'Chyba', description: 'Nekompletní data pro uložení.'});
         return;
     }
@@ -149,6 +149,7 @@ export default function TridniKnihaZapisContent() {
         ucitelId: teacherUser.id,
         topic,
         note,
+        organizationId: activeOrganizationId,
         attendance: students.map(s => ({
             studentId: s.id,
             status: s.attendanceStatus,
@@ -156,14 +157,42 @@ export default function TridniKnihaZapisContent() {
         })),
     };
     
-    setDocumentNonBlocking(doc(firestore, 'zapisyHodin', zapisId), zapisData, { merge: true });
+    try {
+      const batch = writeBatch(firestore);
 
-    toast({
-      title: 'Uloženo',
-      description: 'Zápis do třídní knihy byl úspěšně uložen.',
-    });
-    if (goBack) {
-      router.back();
+      // 1. Save the class book entry
+      batch.set(doc(firestore, 'zapisyHodin', zapisId), zapisData, { merge: true });
+
+      // 2. Create absence records for absent students
+      const absentStudents = students.filter(s => s.attendanceStatus !== '-');
+      for (const student of absentStudents) {
+        const absenceId = `${student.id}-${datum}-${hodina}`;
+        const absenceRef = doc(firestore, 'absences', absenceId);
+        const absenceData: Omit<Absence, 'id'> = {
+          organizationId: activeOrganizationId,
+          studentId: student.id,
+          tridaId,
+          datum,
+          hodina,
+          predmetId,
+          ucitelId: teacherUser.id,
+          status: student.attendanceStatus,
+        };
+        batch.set(absenceRef, absenceData, { merge: true });
+      }
+
+      await batch.commit();
+
+      toast({
+        title: 'Uloženo',
+        description: 'Zápis do třídní knihy a záznamy o absenci byly úspěšně uloženy.',
+      });
+      if (goBack) {
+        router.back();
+      }
+    } catch(e) {
+      console.error("Error saving class book entry and absences:", e);
+      toast({ variant: 'destructive', title: 'Chyba ukládání', description: 'Nepodařilo se uložit data.'});
     }
   };
 
@@ -407,3 +436,5 @@ export default function TridniKnihaZapisContent() {
     </div>
   );
 }
+
+    

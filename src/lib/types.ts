@@ -228,11 +228,16 @@ export interface ZapisHodiny {
 export interface Absence {
     id: string;
     organizationId: string;
-    teacherId: string;
-    startDate: string; // YYYY-MM-DD
-    endDate: string; // YYYY-MM-DD
-    reason?: string;
+    studentId: string;
+    tridaId: string;
+    datum: string; // YYYY-MM-DD
+    hodina: string; // period number
+    predmetId: string;
+    ucitelId: string;
+    status: AttendanceStatus;
+    omluvenkaId?: string;
 }
+
 
 export interface Omluvenka {
     id: string;
@@ -284,3 +289,5 @@ export interface ZaznamSchuzky {
     createdBy: string;
     createdAt: Timestamp;
 }
+
+    
