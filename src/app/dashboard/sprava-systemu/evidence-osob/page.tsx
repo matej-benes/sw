@@ -335,71 +335,34 @@ function AdminUserManagement() {
         if (editingUser) {
           const userRef = doc(firestore, 'users', editingUser.id);
           const dataToUpdate: Partial<User> = {
-            name: formData.name,
-            email: formData.email,
-            roles: formData.roles || [],
-            tridaId: formData.tridaId,
-            studentId: formData.studentId,
-            datumNarozeni: formData.datumNarozeni,
-            rodnePrijmeni: formData.rodnePrijmeni,
-            mistoNarozeni: formData.mistoNarozeni,
-            statNarozeni: formData.statNarozeni,
-            pohlavi: formData.pohlavi,
-            rodinnyStav: formData.rodinnyStav,
-            stav: formData.stav,
-            plnolety: formData.plnolety,
-            cisloOP: formData.cisloOP,
-            cisloPasu: formData.cisloPasu,
-            osobniEmail: formData.osobniEmail,
-            skolniEmail: formData.skolniEmail,
+            ...formData,
+            pin: pin || editingUser.pin,
           };
           const cleanedData = removeUndefinedFields(dataToUpdate);
           await updateDoc(userRef, cleanedData);
           toast({ title: 'Uživatel aktualizován' });
 
         } else {
+          // This path is now for PRE-REGISTERING a user in Firestore.
+          // The actual Firebase Auth user is created in the /registrace flow.
           if (!formData.email || !pin || !formData.name) {
             throw new Error("Email, PIN a jméno jsou povinné pro vytvoření nového uživatele.");
           }
-          
-          const adminEmail = adminUser.email;
-          
-          const userCredential = await createUserWithEmailAndPassword(getAuth(), formData.email, pin);
-          const newUser = userCredential.user;
-          
-          // Re-authenticate as admin
-          const adminPassword = prompt("Pro potvrzení zadejte prosím znovu své administrátorské heslo:");
-          if (!adminPassword) {
-              toast({ variant: 'destructive', title: 'Operace přerušena', description: 'Novému uživateli byl vytvořen účet, ale vy jste byli odhlášeni. Přihlaste se prosím znovu.' });
-              await getAuth().signOut();
-              return;
-          }
-          await signIn(adminEmail, adminPassword);
 
-
-          const newUserForDb: Partial<User> = {
-            id: newUser.uid,
-            name: formData.name,
-            email: formData.email,
-            roles: formData.roles || [],
-            avatarUrl: `https://picsum.photos/seed/${newUser.uid}/100/100`,
-            ...(formData.studentId && { studentId: formData.studentId }),
-            ...(formData.tridaId && { tridaId: formData.tridaId }),
+          const preRegUserForDb: Partial<User> = {
+            ...formData,
+            pin: pin,
+            avatarUrl: `https://picsum.photos/seed/${formData.email}/100/100`, // Use email for seed
           };
+
+          const cleanedData = removeUndefinedFields(preRegUserForDb);
+          await addDocumentNonBlocking(collection(firestore, 'users'), cleanedData);
           
-          const cleanedData = removeUndefinedFields(newUserForDb);
-          await setDoc(doc(firestore, 'users', newUser.uid), cleanedData);
-          
-          toast({ title: 'Uživatel vytvořen' });
+          toast({ title: 'Uživatel před-registrován', description: 'Uživatel nyní může dokončit registraci pomocí svého e-mailu a PINu.' });
         }
       } catch (e: any) {
         console.error("Error saving user:", e);
         let description = 'Nepodařilo se uložit uživatele.';
-        if (e.code === 'auth/email-already-in-use') {
-          description = 'Tento e-mail je již používán jiným účtem.';
-        } else if (e.code === 'auth/wrong-password') {
-            description = 'Bylo zadáno nesprávné administrátorské heslo. Uživatel byl vytvořen, ale vy jste byli odhlášeni.';
-        }
         toast({ variant: 'destructive', title: 'Chyba', description });
       }
 
