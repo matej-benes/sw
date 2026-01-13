@@ -71,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const hasRole = useCallback((role: Role) => {
+    // Super Admins have all roles
     if (user?.isSuperAdmin) return true;
     return user?.roles?.includes(role) ?? false;
   }, [user]);
@@ -88,10 +89,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isSuperAdmin, 
   };
 
-   if (loading) {
+   if (loading && ['/', '/registrace'].includes(pathname)) {
     return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <div className="h-16 w-16 animate-spin rounded-full border-4 border-dashed border-primary"></div>
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <div className="h-24 w-24 animate-boot-pulse text-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                <path d="M2 17l10 5 10-5"></path>
+                <path d="M2 12l10 5 10-5"></path>
+            </svg>
+        </div>
       </div>
     );
   }
