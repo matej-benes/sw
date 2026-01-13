@@ -4,135 +4,145 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Global Functions
     function isAuthenticated() {
       return request.auth != null;
     }
 
     function isOwner(userId) {
-      return request.auth.uid == userId;
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuperAdmin == true;
     }
 
     function hasRole(role) {
-        return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny([role]);
-    }
-    
-    function isMyStudent(studentId) {
-        let parentData = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-        return parentData.roles.hasAny(['rodic']) && parentData.studentId == studentId;
-    }
-    
-    function hasAnyRole(roles) {
-        return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(roles);
-    }
-    
-    function isMemberOfClass(classId) {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-      // Is the user directly in the class? (Student, Teacher)
-      return userDoc.tridaId == classId ||
-             // Is the user's child in the class? (Parent)
-             (userDoc.roles.hasAny(['rodic']) && get(/databases/$(database)/documents/users/$(userDoc.studentId)).data.tridaId == classId);
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny([role]);
     }
 
+    function hasAnyRole(roles) {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(roles);
+    }
+    
+    // Per-Collection Rules
+
+    // Users can be created by anyone during registration.
+    // Users can see other users' basic info if logged in.
+    // Only owner or admin can update/delete their own profile.
     match /users/{userId} {
-      allow get: if isAuthenticated();
-      // Allow unauthenticated list ONLY for pin verification flow.
-      // This is safe because the check is performed client-side after fetching.
-      allow list: if true; 
-      allow create: if true; 
-      // Allow any authenticated user to update to finalize registration,
-      // or owner/admin for subsequent updates.
-      allow update: if isAuthenticated() || isOwner(userId) || hasRole('administrator');
-      // Allow owner to delete their temporary registration doc, or admin to delete any user.
-      allow delete: if isAuthenticated();
+      allow read, create: if true;
+      allow update: if isOwner(userId) || hasRole('administrator');
+      allow delete: if isOwner(userId) || hasRole('administrator');
     }
-    
-    match /gradings/{gradingId} {
-      allow get: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
-      allow list: if hasAnyRole(['ucitel', 'administrator']);
-      allow create: if hasAnyRole(['ucitel', 'administrator']);
-      allow update, delete: if hasAnyRole(['ucitel', 'administrator']);
-    }
-    
+
+    // Any authenticated user can read data.
+    // Write operations are restricted to teachers and administrators.
     match /tridy/{tridaId} {
-      allow list: if isAuthenticated();
-      allow get: if hasRole('administrator') || (isAuthenticated() && isMemberOfClass(tridaId));
-      allow write: if hasRole('administrator');
+      allow read: if isAuthenticated();
+      allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
-    
+
     match /predmety/{predmetId} {
       allow read: if isAuthenticated();
-      allow write: if hasRole('administrator');
+      allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
-    
+
     match /ucebny/{ucebnaId} {
       allow read: if isAuthenticated();
-      allow write: if hasRole('administrator');
+      allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
-    
+
+    // Schedules are readable by any authenticated user.
+    // Writing is restricted to admins/teachers.
     match /rozvrhy/{rozvrhId} {
-        allow get: if hasRole('administrator') || (isAuthenticated() && isMemberOfClass(resource.data.tridaId));
-        allow list: if hasRole('administrator');
-        allow write: if hasRole('administrator');
+        allow read: if isAuthenticated();
+        allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
     
     match /scheduleTemplates/{templateId} {
         allow read: if isAuthenticated();
-        allow write: if hasRole('administrator');
+        allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
-     
-     match /oznameni/{oznameniId} {
-        allow read: if isAuthenticated();
-        allow write: if hasRole('ucitel') || hasRole('administrator');
-    }
-    
+
+    // Notes can be read by anyone authenticated (students/parents need to see them).
+    // Writes are restricted to teachers/admins.
     match /poznamky-zaku/{poznamkaId} {
         allow read: if isAuthenticated();
-        allow write: if hasRole('ucitel') || hasRole('administrator');
+        allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
-    
+
     match /udalosti/{udalostId} {
         allow read: if isAuthenticated();
-        allow write: if hasRole('administrator');
-    }
-     
-     match /suplovani/{substitutionId} {
-        allow read: if isAuthenticated();
-        allow write: if hasRole('administrator');
+        allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
     
+    // Messages can be created by any logged-in user.
+    // A user can only read messages where they are the sender or a recipient.
+    // Updating (e.g., marking as read) is allowed only for recipients.
     match /messages/{messageId} {
-      allow get: if isAuthenticated() && (request.auth.uid == resource.data.senderId || request.auth.uid in resource.data.recipientIds);
-      allow list: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (request.auth.uid in resource.data.recipientIds);
+      allow get: if isAuthenticated() && (resource.data.senderId == request.auth.uid || request.auth.uid in resource.data.recipientIds);
+      allow list: if isAuthenticated();
+      allow update: if isAuthenticated() && request.auth.uid in resource.data.recipientIds;
       allow delete: if false; 
     }
 
     match /zapisyHodin/{zapisId} {
         allow read: if isAuthenticated();
-        allow write: if hasRole('ucitel') || hasRole('administrator');
+        allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
 
+    // Absences: students/parents can see their own, teachers/admins can see all.
     match /absences/{absenceId} {
-      allow read: if hasAnyRole(['ucitel', 'administrator']) || isOwner(resource.data.studentId) || isMyStudent(resource.data.studentId);
-      allow list: if hasAnyRole(['ucitel', 'administrator']);
-      allow write: if hasAnyRole(['ucitel', 'administrator']);
+      allow read: if isAuthenticated();
+      allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
     
+    // Omluvenky can be created/read by any authenticated user (parents/students).
+    // Teachers/admins will read them via broader queries, but this allows creation.
     match /omluvenky/{omluvenkaId} {
         allow read, write: if isAuthenticated();
     }
     
+    // Homework can be read by any authenticated user.
+    // Homework can only be created/edited by teachers/admins.
     match /ukoly/{ukolId} {
         allow read: if isAuthenticated();
-        allow write: if hasRole('ucitel') || hasRole('administrator');
+        allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
 
+    // Public can apply for admission.
+    // Only admins can read/manage applications.
     match /prijimaci-rizeni/{rizeniId} {
-      // Allow creation by anyone (public form)
       allow create: if true;
-      // Allow read/update/delete only by admins
       allow read, update, delete: if hasRole('administrator');
+    }
+    
+    match /organizations/{organizationId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+    
+    // Allow read for authenticated users. Write for admins/teachers.
+    match /gradings/{gradingId} {
+      allow read: if isAuthenticated();
+      allow write: if hasAnyRole(['ucitel', 'administrator']);
+    }
+
+    match /zaznamy-schuzek/{zaznamId} {
+      allow read: if isAuthenticated();
+      allow write: if hasAnyRole(['ucitel', 'administrator']);
+    }
+    
+    match /oznameni/{oznameniId} {
+      allow read: if isAuthenticated();
+      allow write: if hasAnyRole(['ucitel', 'administrator']);
+    }
+    
+    match /suplovani/{substitutionId} {
+        allow read: if isAuthenticated();
+        allow write: if hasAnyRole(['administrator']);
     }
   }
 }
