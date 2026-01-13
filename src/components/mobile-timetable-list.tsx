@@ -1,27 +1,110 @@
-
 'use client';
-import React from 'react';
+import React, { useState } from 'react';
 import { cn } from "@/lib/utils";
 import type { LessonBlock, Udalost, Rozvrh, Substitution, ZapisHodiny } from "@/lib/types";
 import { useRouter } from 'next/navigation';
-import { format, getDay, parseISO, isSameDay } from 'date-fns';
-import { BookOpen, Info, XCircle, ChevronRight } from 'lucide-react';
+import { format, parseISO, isSameDay } from 'date-fns';
+import { BookOpen, Info, XCircle, ChevronRight, PencilRuler, Pencil, StickyNote } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
 
-const dayNames = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'];
+function LessonActionSheet({ lesson, period, time, day, isOpen, onOpenChange, isTeacher }: { lesson: LessonBlock | null, period: number, time: string, day: Date, isOpen: boolean, onOpenChange: (isOpen: boolean) => void, isTeacher: boolean }) {
+    const router = useRouter();
+
+    if (!lesson) return null;
+
+    const handleNavigation = (path: string, params: Record<string, string>) => {
+        const query = new URLSearchParams(params).toString();
+        router.push(`${path}?${query}`);
+        onOpenChange(false);
+    }
+    
+    const navigateToDetail = () => {
+         if (!lesson.classId) return;
+        const slug = [
+            format(day, 'yyyy-MM-dd'),
+            (period - 1).toString(),
+            lesson.classId,
+            lesson.id
+        ];
+        router.push(`/dashboard/hodina/${slug.join('/')}`);
+        onOpenChange(false);
+    }
+
+    return (
+        <Sheet open={isOpen} onOpenChange={onOpenChange}>
+            <SheetContent side="bottom" className="rounded-t-lg">
+                <SheetHeader className="text-left">
+                    <SheetTitle className="text-2xl">{lesson.subjectName}</SheetTitle>
+                    <SheetDescription>
+                        {period}. hodina ({time}) | {lesson.className} | {lesson.ucebnaName || 'N/A'}
+                    </SheetDescription>
+                </SheetHeader>
+                <div className="py-6 grid grid-cols-1 gap-3">
+                     {isTeacher && (
+                        <>
+                            <Button
+                                onClick={() => handleNavigation('/dashboard/tridni-kniha/zapis', {
+                                    tridaId: lesson.classId,
+                                    datum: format(day, 'yyyy-MM-dd'),
+                                    hodina: period.toString(),
+                                    predmetId: lesson.subjectId,
+                                })}
+                                className="w-full justify-start h-14 text-base"
+                                variant="outline"
+                            >
+                                <Pencil className="mr-3 h-5 w-5" />
+                                Zapsat do třídní knihy
+                            </Button>
+                             <Button
+                                onClick={() => handleNavigation('/dashboard/hodnoceni', {
+                                    tridaId: lesson.classId,
+                                    predmetId: lesson.subjectId,
+                                })}
+                                className="w-full justify-start h-14 text-base"
+                                variant="outline"
+                            >
+                                <PencilRuler className="mr-3 h-5 w-5" />
+                                Zadat nové hodnocení
+                            </Button>
+                             <Button
+                                onClick={() => router.push('/dashboard/poznamky-zaka')}
+                                className="w-full justify-start h-14 text-base"
+                                variant="outline"
+                            >
+                                <StickyNote className="mr-3 h-5 w-5" />
+                                Přidat poznámku (chování)
+                            </Button>
+                            <Separator className="my-2" />
+                        </>
+                    )}
+                     <Button
+                        onClick={navigateToDetail}
+                        className="w-full justify-start h-14 text-base"
+                        variant="ghost"
+                    >
+                        <Info className="mr-3 h-5 w-5" />
+                        Zobrazit detail hodiny
+                    </Button>
+                </div>
+            </SheetContent>
+        </Sheet>
+    )
+}
+
 
 function LessonListItem({
     lesson,
     period,
     time,
     topic,
-    day,
     onClick,
 }: {
     lesson: LessonBlock;
     period: number;
     time: string;
     topic?: string;
-    day: Date;
     onClick: () => void;
 }) {
 
@@ -101,6 +184,7 @@ export function MobileTimetableList({
     day: Date;
 }) {
     const router = useRouter();
+    const [selectedLesson, setSelectedLesson] = useState<{ lesson: LessonBlock, period: number, time: string } | null>(null);
 
     const dailySchedule = schedules.find(s => isSameDay(parseISO(s.datum), day));
     
@@ -111,15 +195,23 @@ export function MobileTimetableList({
     const { hodiny, timeSlots } = dailySchedule;
 
     const handleLessonClick = (lesson: LessonBlock, periodIndex: number) => {
-        if(!lesson.classId) return;
+        if (!lesson.classId) return;
 
-        const slug = [
-            format(day, 'yyyy-MM-dd'),
-            periodIndex.toString(),
-            lesson.classId,
-            lesson.id
-        ];
-        router.push(`/dashboard/hodina/${slug.join('/')}`);
+        if (isTeacher) {
+            setSelectedLesson({
+                lesson: lesson,
+                period: periodIndex + 1,
+                time: timeSlots[periodIndex]
+            });
+        } else {
+            const slug = [
+                format(day, 'yyyy-MM-dd'),
+                periodIndex.toString(),
+                lesson.classId,
+                lesson.id
+            ];
+            router.push(`/dashboard/hodina/${slug.join('/')}`);
+        }
     };
     
     const items = hodiny.map((lesson, index) => {
@@ -160,15 +252,27 @@ export function MobileTimetableList({
                 period={period} 
                 time={time}
                 topic={zapis?.topic}
-                day={day}
                 onClick={() => handleLessonClick(finalLesson, index)}
             />
         );
     });
 
     return (
-        <div className="space-y-3">
-            {items.filter(Boolean).length > 0 ? items : <p className="text-center text-muted-foreground py-8">Dnes není žádná výuka.</p>}
-        </div>
+        <>
+            <div className="space-y-3">
+                {items.filter(Boolean).length > 0 ? items : <p className="text-center text-muted-foreground py-8">Dnes není žádná výuka.</p>}
+            </div>
+            <LessonActionSheet 
+                lesson={selectedLesson?.lesson || null}
+                period={selectedLesson?.period || 0}
+                time={selectedLesson?.time || ''}
+                day={day}
+                isOpen={!!selectedLesson}
+                onOpenChange={(isOpen) => {
+                    if(!isOpen) setSelectedLesson(null);
+                }}
+                isTeacher={isTeacher}
+            />
+        </>
     );
 }
