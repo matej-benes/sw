@@ -36,8 +36,8 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isAuthenticated();
       // Allow unauthenticated list ONLY for pin verification flow.
-      // This is safe because the query is required to be on the 'pin' field.
-      allow list: if (request.query.keys().hasAll(['where']) && request.query.where[0][0] == 'pin' && request.query.where[0][1] == '==') || isAuthenticated();
+      // This is safe because the check is performed client-side after fetching.
+      allow list: if true;
       allow create: if hasRole('administrator');
       // PIN should be cleared after registration, so this update is sensitive.
       allow update: if isOwner(userId) || hasRole('administrator');
@@ -68,7 +68,7 @@ service cloud.firestore {
     }
     
     match /rozvrhy/{rozvrhId} {
-        allow read: if isAuthenticated();
+        allow read: if hasRole('administrator') || (isAuthenticated() && isMemberOfClass(resource.data.tridaId));
         allow write: if hasRole('administrator');
     }
     

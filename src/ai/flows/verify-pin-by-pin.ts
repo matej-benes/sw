@@ -21,6 +21,8 @@ const VerifyPinOutputSchema = z.object({
 export async function verifyPinByPin(
   input: z.infer<typeof VerifyPinInputSchema>
 ): Promise<z.infer<typeof VerifyPinOutputSchema>> {
+  // This is a wrapper, the actual implementation is in the flow.
+  // We are keeping this structure for consistency.
   return verifyPinFlow(input);
 }
 
@@ -58,6 +60,7 @@ const verifyPinFlow = ai.defineFlow(
       };
     } catch (error: any) {
       console.error('Error verifying PIN:', error);
+      // In case of any error (including permissions), return null.
       return { user: null };
     }
   }

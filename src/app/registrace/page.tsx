@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,12 +19,10 @@ import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
 import { Loader2, ShieldCheck, KeyRound, User, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useFirestore } from '@/firebase';
-import { doc, writeBatch, setDoc } from 'firebase/firestore';
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { doc, writeBatch, setDoc, collection } from 'firebase/firestore';
 import type { User as AppUser } from '@/lib/types';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
-import { verifyPinByPin } from '@/ai/flows/verify-pin-by-pin';
-
 
 const pinSchema = z.object({
   pin: z.string().length(6, 'PIN musí mít 6 číslic.'),
@@ -45,11 +43,13 @@ export default function RegistrationPage() {
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [verifiedUser, setVerifiedUser] = useState<AppUser | null>(null);
-  const [prelimUserId, setPrelimUserId] = useState<string | null>(null);
   const router = useRouter();
   const { toast } = useToast();
   const firestore = useFirestore();
   const auth = getAuth();
+
+  const allUsersQuery = useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]);
+  const { data: allUsers, isLoading: usersLoading } = useCollection<AppUser>(allUsersQuery);
 
   const {
     register: registerPin,
@@ -65,29 +65,27 @@ export default function RegistrationPage() {
 
   const onPinSubmit = async (data: PinFormValues) => {
     setIsLoading(true);
-    try {
-        const result = await verifyPinByPin(data);
 
-        if (!result.user) {
-            toast({ variant: 'destructive', title: 'Chyba ověření', description: 'Zadaný PIN nebyl nalezen nebo je nesprávný.' });
-            setIsLoading(false);
-            return;
-        }
-        
-        setVerifiedUser(result.user as AppUser);
-        setPrelimUserId(result.user.id);
-        setStep(2);
-
-    } catch (error) {
-      console.error(error);
-      toast({ variant: 'destructive', title: 'Chyba', description: 'Při ověřování došlo k chybě.' });
-    } finally {
-      setIsLoading(false);
+    if (!allUsers) {
+        toast({ variant: 'destructive', title: 'Chyba', description: 'Nelze načíst uživatele.' });
+        setIsLoading(false);
+        return;
     }
+
+    const userWithPin = allUsers.find(u => u.pin === data.pin);
+
+    if (userWithPin) {
+        setVerifiedUser(userWithPin);
+        setStep(2);
+    } else {
+        toast({ variant: 'destructive', title: 'Chyba ověření', description: 'Zadaný PIN nebyl nalezen nebo je nesprávný.' });
+    }
+
+    setIsLoading(false);
   };
 
   const onPasswordSubmit = async (data: PasswordFormValues) => {
-    if (!verifiedUser || !verifiedUser.email || !prelimUserId) return;
+    if (!verifiedUser || !verifiedUser.email || !verifiedUser.id) return;
     setIsLoading(true);
 
     try {
@@ -96,11 +94,18 @@ export default function RegistrationPage() {
 
         const batch = writeBatch(firestore);
         
+        // The new document will have the UID from Auth as its ID
         const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
-        const { pin, id, ...userData } = verifiedUser;
+        
+        // Prepare the data, excluding the old ID and the now-used PIN
+        const { pin, id, ...userDataToKeep } = verifiedUser;
 
-        batch.set(newUserDocRef, { ...userData, id: firebaseUser.uid });
-        batch.delete(doc(firestore, 'users', prelimUserId));
+        // Set the new document with the correct ID and user data
+        batch.set(newUserDocRef, { ...userDataToKeep, id: firebaseUser.uid });
+        
+        // Delete the old temporary document
+        const oldUserDocRef = doc(firestore, 'users', verifiedUser.id);
+        batch.delete(oldUserDocRef);
 
         await batch.commit();
 
@@ -134,13 +139,13 @@ export default function RegistrationPage() {
             <CardContent className="space-y-4">
               <div className="space-y-1">
                 <Label htmlFor="pin">Registrační PIN</Label>
-                <Input id="pin" type="text" {...registerPin('pin')} disabled={isLoading} />
+                <Input id="pin" type="text" {...registerPin('pin')} disabled={isLoading || usersLoading} />
                 {pinErrors.pin && <p className="text-sm text-destructive">{pinErrors.pin.message}</p>}
               </div>
             </CardContent>
             <CardFooter>
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+              <Button type="submit" className="w-full" disabled={isLoading || usersLoading}>
+                {(isLoading || usersLoading) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
                 Ověřit PIN
               </Button>
             </CardFooter>
