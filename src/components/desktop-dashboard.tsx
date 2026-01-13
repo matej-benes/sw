@@ -97,12 +97,15 @@ export function DesktopDashboard() {
 
   const { data: schedulesData } = useCollection<Rozvrh>(schedulesQuery);
 
-  const { data: eventsData } = useCollection<Udalost>(
-    useMemoFirebase(
-      () => (firestore ? collection(firestore, 'udalosti') : null),
-      [firestore]
-    )
-  );
+  const eventsQuery = useMemoFirebase(() => {
+    if (!firestore || !targetClassId) return null; // FIX: Wait for targetClassId
+    return query(
+      collection(firestore, 'udalosti'),
+      where('tridyIds', 'array-contains', targetClassId)
+    );
+  }, [firestore, targetClassId]);
+  const { data: eventsData } = useCollection<Udalost>(eventsQuery);
+
   const { data: substitutionsData } = useCollection<Substitution>(
     useMemoFirebase(
       () => (firestore ? collection(firestore, 'suplovani') : null),
