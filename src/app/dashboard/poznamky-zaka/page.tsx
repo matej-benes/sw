@@ -35,7 +35,9 @@ export default function PoznamkaZakaPage() {
   const { data: students, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
   
   const notesQuery = useMemoFirebase(() => {
-    if (!firestore || !selectedStudent) return null;
+    if (!firestore || !selectedStudent) {
+      return null;
+    }
     
     let q = query(collection(firestore, 'poznamky-zaku'), where('studentId', '==', selectedStudent));
     if (dateFrom) {
@@ -161,7 +163,7 @@ export default function PoznamkaZakaPage() {
                         {!notesLoading && notes?.length === 0 && (
                             <TableRow>
                                 <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                                    Žádné záznamy k zobrazení.
+                                    {!selectedStudent ? "Pro zobrazení poznámek vyberte třídu a žáka." : "Žádné záznamy k zobrazení."}
                                 </TableCell>
                             </TableRow>
                         )}
