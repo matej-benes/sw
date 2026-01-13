@@ -22,6 +22,8 @@ const VerifyPinOutputSchema = z.object({
 export async function verifyPin(
   input: z.infer<typeof VerifyPinInputSchema>
 ): Promise<z.infer<typeof VerifyPinOutputSchema>> {
+  // This is a wrapper function that can be called from client components.
+  // It invokes the actual Genkit flow.
   return verifyPinFlow(input);
 }
 

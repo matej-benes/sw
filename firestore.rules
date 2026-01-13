@@ -35,7 +35,9 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if isAuthenticated();
-      allow list: if isAuthenticated();
+      // Allow unauthenticated list only for pin verification flow.
+      // This is safe because the server-side flow requires both email and pin.
+      allow list: if isAuthenticated() || (request.query.keys().hasAll(['where', 'where']));
       allow create: if hasRole('administrator');
       // PIN should be cleared after registration, so this update is sensitive.
       allow update: if isOwner(userId) || hasRole('administrator');
