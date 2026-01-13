@@ -64,7 +64,7 @@ service cloud.firestore {
     }
     
     match /rozvrhy/{rozvrhId} {
-        allow read: if isAuthenticated();
+        allow read: if hasRole('administrator') || (isAuthenticated() && isMemberOfClass(resource.data.tridaId));
         allow write: if hasRole('administrator');
     }
     
@@ -119,7 +119,10 @@ service cloud.firestore {
     }
 
     match /prijimaci-rizeni/{rizeniId} {
-      allow read, write: if hasRole('administrator');
+      // Allow creation by anyone (public form)
+      allow create: if true;
+      // Allow read/update/delete only by admins
+      allow read, update, delete: if hasRole('administrator');
     }
   }
 }

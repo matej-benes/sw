@@ -10,10 +10,12 @@ import type { Rozvrh, LessonBlock, User as AppUser, Trida, ZapisHodiny } from '@
 import { isSameDay, parseISO } from 'date-fns';
 import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
+import { useAuth } from '@/hooks/use-auth';
 
 export default function LessonDetailPage() {
     const router = useRouter();
     const params = useParams();
+    const { user } = useAuth();
     const slug = Array.isArray(params.slug) ? params.slug : [params.slug];
     const [dateStr, periodStr, classId, lessonId] = slug;
 
