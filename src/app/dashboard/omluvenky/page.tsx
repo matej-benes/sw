@@ -1,17 +1,17 @@
 'use client';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
+import { useFirestore, useCollection, useDoc, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
 import { collection, query, where, doc, Timestamp } from 'firebase/firestore';
-import type { Omluvenka, User, Trida } from '@/lib/types';
+import type { Omluvenka, User, Trida, Rozvrh, LessonBlock } from '@/lib/types';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { format, parse, differenceInYears } from 'date-fns';
+import { format, parse, differenceInYears, eachDayOfInterval, parseISO } from 'date-fns';
 import { cs } from 'date-fns/locale';
-import { CalendarIcon, PlusCircle, Check, X, AlertTriangle } from 'lucide-react';
+import { CalendarIcon, PlusCircle, Check, X, AlertTriangle, BookOpen } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,6 +20,8 @@ import { DateRange } from 'react-day-picker';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
 
 const omluvenkaSchema = z.object({
   datum: z.object({ from: z.date(), to: z.date() }),
@@ -217,11 +219,113 @@ function StudentExcuseForm() {
     );
 }
 
+function ApproveExcuseDialog({
+    omluvenka,
+    student,
+    onOpenChange,
+    onApprove
+} : {
+    omluvenka: Omluvenka | null;
+    student: User | undefined;
+    onOpenChange: (open: boolean) => void;
+    onApprove: (id: string) => void;
+}) {
+    const firestore = useFirestore();
+
+    const dates = useMemo(() => {
+        if (!omluvenka) return [];
+        return eachDayOfInterval({ start: parseISO(omluvenka.datumOd), end: parseISO(omluvenka.datumDo) });
+    }, [omluvenka]);
+
+    const rozvrhRefs = useMemoFirebase(() => {
+        if (!firestore || !student?.tridaId || dates.length === 0) return [];
+        return dates.map(date => doc(firestore, 'rozvrhy', `${student.tridaId}-${format(date, 'yyyy-MM-dd')}`));
+    }, [firestore, student?.tridaId, dates]);
+    
+    // This is not ideal, but `useCollection` doesn't work with an array of document refs.
+    // In a real app, you might fetch these sequentially or use a more complex query strategy.
+    const [schedules, setSchedules] = useState<(Rozvrh | null)[]>([]);
+    const [loadingSchedules, setLoadingSchedules] = useState(true);
+
+    useEffect(() => {
+        async function fetchSchedules() {
+            if (!rozvrhRefs || rozvrhRefs.length === 0) {
+                setLoadingSchedules(false);
+                return;
+            };
+            setLoadingSchedules(true);
+            const schedulePromises = rozvrhRefs.map(ref => getDoc(ref));
+            const scheduleSnaps = await Promise.all(schedulePromises);
+            const fetchedSchedules = scheduleSnaps.map(snap => snap.exists() ? snap.data() as Rozvrh : null);
+            setSchedules(fetchedSchedules);
+            setLoadingSchedules(false);
+        }
+        fetchSchedules();
+    }, [rozvrhRefs]);
+
+    const handleConfirm = () => {
+        if (omluvenka) {
+            onApprove(omluvenka.id);
+            onOpenChange(false);
+        }
+    }
+    
+    if (!omluvenka) return null;
+
+    return (
+         <Dialog open={!!omluvenka} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>Schválení omluvenky pro: {student?.name}</DialogTitle>
+                    <DialogDescription>
+                        Zkontrolujte rozvrh studenta pro omluvené dny.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+                    <p><strong>Období:</strong> {format(parseISO(omluvenka.datumOd), 'd.M.y')} - {format(parseISO(omluvenka.datumDo), 'd.M.y')}</p>
+                    <p><strong>Důvod:</strong> {omluvenka.duvod}</p>
+                    <Separator />
+
+                    {loadingSchedules ? <p>Načítání rozvrhu...</p> : (
+                        <div className="space-y-4">
+                            {dates.map((date, index) => (
+                                <div key={date.toISOString()}>
+                                    <h4 className="font-semibold text-lg mb-2">{format(date, 'EEEE, d.M.yyyy', {locale: cs})}</h4>
+                                    {schedules[index] ? (
+                                        <ul className="list-disc pl-5 space-y-1 text-sm">
+                                            {schedules[index]?.hodiny.map((lesson, lessonIndex) => (
+                                                lesson && (
+                                                    <li key={lessonIndex}>
+                                                        <span className="font-semibold">{schedules[index]?.timeSlots[lessonIndex]}:</span> {lesson.subjectName}
+                                                    </li>
+                                                )
+                                            ))}
+                                            {schedules[index]?.hodiny.every(l => l === null) && <li className="text-muted-foreground">Žádné hodiny v tento den.</li>}
+                                        </ul>
+                                    ) : <p className="text-sm text-muted-foreground">Pro tento den nebyl nalezen rozvrh.</p>}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <DialogFooter>
+                    <DialogClose asChild><Button variant="outline">Zrušit</Button></DialogClose>
+                    <Button onClick={handleConfirm}>
+                        <Check className="mr-2 h-4 w-4" /> Potvrdit schválení
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 function TeacherExcuseManagement() {
     const { user } = useAuth();
     const firestore = useFirestore();
     const { toast } = useToast();
     
+    const [approvingExcuse, setApprovingExcuse] = useState<Omluvenka | null>(null);
+
     const teacherClassesQuery = useMemoFirebase(() => {
         if (!firestore || !user) return null;
         return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
@@ -236,17 +340,22 @@ function TeacherExcuseManagement() {
     const { data: omluvenky, isLoading: omluvenkyLoading } = useCollection<Omluvenka>(omluvenkyQuery);
 
     const { data: studentsData, isLoading: studentsLoading } = useCollection<User>(useMemoFirebase(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, 'users'), where('roles', 'array-contains', 'ziak'));
-    }, [firestore]));
+        if (!firestore || teacherClassIds.length === 0) return null;
+        return query(collection(firestore, 'users'), where('tridaId', 'in', teacherClassIds));
+    }, [firestore, teacherClassIds]));
 
     const handleUpdateStatus = async (id: string, status: 'approved' | 'rejected') => {
         if (!firestore) return;
         await updateDocumentNonBlocking(doc(firestore, 'omluvenky', id), { status });
         toast({ title: `Omluvenka ${status === 'approved' ? 'schválena' : 'zamítnuta'}.` });
     };
+
+    const handleApproveClick = (omluvenka: Omluvenka) => {
+        setApprovingExcuse(omluvenka);
+    }
     
     const getStudentName = (id: string) => studentsData?.find(s => s.id === id)?.name || 'Neznámý žák';
+    const getStudent = (id: string) => studentsData?.find(s => s.id === id);
 
     const pendingOmluvenky = useMemo(() => omluvenky?.filter(o => o.status === 'pending') || [], [omluvenky]);
     const processedOmluvenky = useMemo(() => omluvenky?.filter(o => o.status !== 'pending') || [], [omluvenky]);
@@ -291,11 +400,14 @@ function TeacherExcuseManagement() {
                                         <TableCell>{format(new Date(o.datumOd), 'd.M.y')} - {format(new Date(o.datumDo), 'd.M.y')}</TableCell>
                                         <TableCell className="max-w-xs truncate">{o.duvod}</TableCell>
                                         <TableCell className="text-right">
-                                            <Button size="icon" variant="ghost" onClick={() => handleUpdateStatus(o.id, 'approved')} className="text-green-600"><Check className="h-4 w-4" /></Button>
+                                            <Button size="icon" variant="ghost" onClick={() => handleApproveClick(o)} className="text-green-600"><Check className="h-4 w-4" /></Button>
                                             <Button size="icon" variant="ghost" onClick={() => handleUpdateStatus(o.id, 'rejected')} className="text-red-600"><X className="h-4 w-4" /></Button>
                                         </TableCell>
                                     </TableRow>
                                 ))}
+                                 {!isLoading && pendingOmluvenky.length === 0 && (
+                                     <TableRow><TableCell colSpan={4} className="text-center h-24">Žádné nové žádosti.</TableCell></TableRow>
+                                 )}
                             </TableBody>
                         </Table>
                     </TabsContent>
@@ -316,11 +428,22 @@ function TeacherExcuseManagement() {
                                         <TableCell>{statusBadge(o.status)}</TableCell>
                                     </TableRow>
                                 ))}
+                                {!isLoading && processedOmluvenky.length === 0 && (
+                                     <TableRow><TableCell colSpan={3} className="text-center h-24">Žádné vyřízené žádosti.</TableCell></TableRow>
+                                 )}
                             </TableBody>
                         </Table>
                     </TabsContent>
                 </Tabs>
             </CardContent>
+             {approvingExcuse && (
+                <ApproveExcuseDialog 
+                    omluvenka={approvingExcuse}
+                    student={getStudent(approvingExcuse.studentId)}
+                    onOpenChange={(isOpen) => !isOpen && setApprovingExcuse(null)}
+                    onApprove={(id) => handleUpdateStatus(id, 'approved')}
+                />
+             )}
         </Card>
     )
 }
