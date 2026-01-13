@@ -20,6 +20,8 @@ import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import Link from 'next/link';
+import { Separator } from '@/components/ui/separator';
 
 const loginSchema = z.object({
   email: z.string().email('Neplatný formát e-mailu'),
@@ -112,10 +114,14 @@ export default function LoginPage() {
               )}
             </div>
           </CardContent>
-          <CardFooter>
+          <CardFooter className="flex-col gap-4">
             <Button type="submit" className="w-full" disabled={isSigningIn}>
               {isSigningIn && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Přihlásit se
+            </Button>
+            <Separator />
+            <Button variant="link" asChild className="w-full">
+                <Link href="/registrace">První přihlášení / Registrace</Link>
             </Button>
           </CardFooter>
         </form>

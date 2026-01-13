@@ -32,10 +32,18 @@ service cloud.firestore {
              // Is the user's child in the class? (Parent)
              (userDoc.roles.hasAny(['rodic']) && get(/databases/$(database)/documents/users/$(userDoc.studentId)).data.tridaId == classId);
     }
+    
+    // Allow reading user data during registration if the correct PIN is provided.
+    // This is a temporary read, as the PIN should be cleared after registration.
+    function isRegisteringWithPin() {
+      return request.query.get("pin") == resource.data.pin;
+    }
 
     match /users/{userId} {
-      allow get, list: if isAuthenticated();
+      allow get: if isAuthenticated() || isRegisteringWithPin();
+      allow list: if isAuthenticated();
       allow create: if hasRole('administrator');
+      // PIN should be cleared after registration, so this update is sensitive.
       allow update: if isOwner(userId) || hasRole('administrator');
       allow delete: if hasRole('administrator');
     }
@@ -64,7 +72,7 @@ service cloud.firestore {
     }
     
     match /rozvrhy/{rozvrhId} {
-        allow read: if hasRole('administrator') || (isAuthenticated() && isMemberOfClass(resource.data.tridaId));
+        allow read: if isAuthenticated();
         allow write: if hasRole('administrator');
     }
     
@@ -101,7 +109,7 @@ service cloud.firestore {
     }
 
     match /zapisyHodin/{zapisId} {
-        allow read: if hasRole('administrator') || (isAuthenticated() && isMemberOfClass(resource.data.tridaId));
+        allow read: if isAuthenticated();
         allow write: if hasRole('ucitel') || hasRole('administrator');
     }
 
