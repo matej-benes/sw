@@ -69,7 +69,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { MultiSelect } from '@/components/ui/multi-select';
 import { StudentMatrika } from '@/components/student-matrika';
 import { cn } from '@/lib/utils';
-import { createUser } from '@/ai/flows/create-user';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 
 
 const roleTranslations: { [key in Role]: string } = {
@@ -245,15 +245,15 @@ function UserForm({
 
 
        <div className="space-y-2">
-        <Label htmlFor="pin">Registrační PIN</Label>
+        <Label htmlFor="pin">Registrační PIN (Heslo)</Label>
         <div className="flex items-center gap-2">
-          <Input id="pin" {...register('pin')} readOnly placeholder="PIN není vygenerován" />
+          <Input id="pin" {...register('pin')} placeholder="PIN není vygenerován" />
           <Button type="button" variant="outline" onClick={generatePin}>
             <ShieldCheck className="mr-2 h-4 w-4" />
             Generovat
           </Button>
         </div>
-        {currentPin && <p className="text-xs text-muted-foreground">Tento PIN slouží pro první registraci uživatele.</p>}
+        {currentPin && <p className="text-xs text-muted-foreground">Tento PIN slouží pro první registraci uživatele a jako jeho heslo.</p>}
       </div>
 
       <DialogFooter>
@@ -310,6 +310,7 @@ function UserRow({ user, onEdit, onDelete }: { user: User, onEdit: (user: User) 
 
 function AdminUserManagement() {
     const firestore = useFirestore();
+    const { user: adminUser, signIn } = useAuth();
     
     const usersCollection = useMemoFirebase(
       () => (firestore) ? collection(firestore, 'users') : null,
@@ -323,22 +324,22 @@ function AdminUserManagement() {
     const [deletingUser, setDeletingUser] = useState<User | null>(null);
     const { toast } = useToast();
 
-    // Helper to remove undefined fields from an object
     const removeUndefinedFields = (obj: any) => {
         return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
     };
 
     const handleSaveUser = async (formData: Partial<User>) => {
-      if (!firestore) return;
+      if (!firestore || !adminUser?.email) return;
 
       try {
         if (editingUser) {
-          // --- UPDATE ---
           const userRef = doc(firestore, 'users', editingUser.id);
           const dataToUpdate: Partial<User> = {
             name: formData.name,
             email: formData.email,
             roles: formData.roles || [],
+            tridaId: formData.tridaId,
+            studentId: formData.studentId,
             datumNarozeni: formData.datumNarozeni,
             rodnePrijmeni: formData.rodnePrijmeni,
             mistoNarozeni: formData.mistoNarozeni,
@@ -352,42 +353,54 @@ function AdminUserManagement() {
             osobniEmail: formData.osobniEmail,
             skolniEmail: formData.skolniEmail,
           };
-
           const cleanedData = removeUndefinedFields(dataToUpdate);
           await updateDoc(userRef, cleanedData);
           toast({ title: 'Uživatel aktualizován' });
 
         } else {
-          // --- CREATE ---
           if (!formData.email || !formData.pin || !formData.name) {
-            throw new Error("Email, PIN and name are required to create a new user.");
+            throw new Error("Email, PIN a jméno jsou povinné pro vytvoření nového uživatele.");
           }
 
-          const { uid } = await createUser({
-            email: formData.email,
-            password: formData.pin,
-            displayName: formData.name,
-          });
+          const auth = getAuth();
+          
+          // Store current admin credentials
+          const adminEmail = adminUser.email;
+          const adminPassword = prompt("Pro potvrzení zadejte své administrátorské heslo:");
+          if (!adminPassword) {
+            toast({ variant: 'destructive', title: 'Operace zrušena', description: 'Nebylo zadáno heslo.' });
+            return;
+          }
+
+          // Create the new user. This will sign in the new user automatically.
+          const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.pin);
+          const newUser = userCredential.user;
 
           const newUserForDb: Partial<User> = {
-            id: uid,
+            id: newUser.uid,
             name: formData.name,
             email: formData.email,
             roles: formData.roles || [],
-            avatarUrl: `https://picsum.photos/seed/${uid}/100/100`,
+            avatarUrl: `https://picsum.photos/seed/${newUser.uid}/100/100`,
             ...(formData.studentId && { studentId: formData.studentId }),
             ...(formData.tridaId && { tridaId: formData.tridaId }),
           };
           
           const cleanedData = removeUndefinedFields(newUserForDb);
-          await setDoc(doc(firestore, 'users', uid), cleanedData);
+          await setDoc(doc(firestore, 'users', newUser.uid), cleanedData);
+          
+          // CRITICAL: Sign back in as the admin user
+          await signIn(adminEmail, adminPassword);
+
           toast({ title: 'Uživatel vytvořen' });
         }
       } catch (e: any) {
         console.error("Error saving user:", e);
         let description = 'Nepodařilo se uložit uživatele.';
-        if (e.message.includes('auth/email-already-exists')) {
+        if (e.code === 'auth/email-already-in-use' || e.message.includes('auth/email-already-exists')) {
           description = 'Tento e-mail je již používán jiným účtem.';
+        } else if (e.code === 'auth/wrong-password') {
+            description = 'Zadáno nesprávné administrátorské heslo. Uživatel byl vytvořen, ale vy jste byli odhlášeni.'
         }
         toast({ variant: 'destructive', title: 'Chyba', description });
       }
@@ -409,7 +422,7 @@ function AdminUserManagement() {
             
             toast({
               title: 'Uživatel smazán',
-              description: 'Uživatel byl úspěšně odstraněn ze systému.',
+              description: 'Uživatel byl úspěšně odstraněn ze systému. Pro úplné smazání (včetně autentizace) je nutné provést akci ve Firebase konzoli.',
             });
         } catch(e) {
             console.error("Error deleting user:", e);
@@ -495,7 +508,7 @@ function AdminUserManagement() {
                   Opravdu chcete smazat uživatele?
                 </AlertDialogTitle>
                 <AlertDialogDescription>
-                  Tato akce je nevratná a trvale smaže uživatele "{deletingUser?.name}".
+                  Tato akce trvale smaže uživatelský záznam "{deletingUser?.name}" z databáze. Pro kompletní odstranění z autentizace je třeba zásah ve Firebase konzoli.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
