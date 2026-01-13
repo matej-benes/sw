@@ -71,7 +71,7 @@ service cloud.firestore {
     
     match /rozvrhy/{rozvrhId} {
         allow get: if hasRole('administrator') || (isAuthenticated() && isMemberOfClass(resource.data.tridaId));
-        allow list: if hasRole('administrator');
+        allow list: if hasAnyRole(['ucitel','administrator']);
         allow write: if hasRole('administrator');
     }
     
@@ -113,7 +113,9 @@ service cloud.firestore {
     }
 
     match /absences/{absenceId} {
-        allow read, write: if hasRole('administrator');
+      allow read: if hasAnyRole(['ucitel', 'administrator']) || isOwner(resource.data.studentId) || isMyStudent(resource.data.studentId);
+      allow list: if hasAnyRole(['ucitel', 'administrator']);
+      allow write: if hasAnyRole(['ucitel', 'administrator']);
     }
     
     match /omluvenky/{omluvenkaId} {

@@ -38,6 +38,7 @@ import { DateRange } from "react-day-picker";
 import { addDays } from "date-fns";
 import { Table, TableBody, TableCell, TableHeader, TableRow, TableHead } from "@/components/ui/table";
 import { ScheduleGenerator } from "@/components/schedule-generator";
+import { useAuth } from "@/hooks/use-auth";
 
 
 const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
@@ -230,12 +231,16 @@ function LessonEditDialog({
 function ScheduleEditor() {
     const firestore = useFirestore();
     const { toast } = useToast();
+    const { activeOrganizationId } = useAuth();
 
     const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
     const [timeSlots, setTimeSlots] = useState<string[]>(defaultTimeSlots);
 
     // Data fetching
-    const tridyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]);
+    const tridyCollection = useMemoFirebase(() => {
+      if (!firestore || !activeOrganizationId) return null;
+      return query(collection(firestore, 'tridy'), where('organizationId', '==', activeOrganizationId))
+    }, [firestore, activeOrganizationId]);
     const { data: classes, isLoading: classesLoading } = useCollection<Trida>(tridyCollection);
     
     const scheduleTemplateRef = useMemoFirebase(() => {
@@ -246,15 +251,21 @@ function ScheduleEditor() {
 
 
     const uciteleQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, "users"), where("roles", "array-contains", "ucitel"));
-    }, [firestore]);
+        if (!firestore || !activeOrganizationId) return null;
+        return query(collection(firestore, "users"), where("organizationId", "==", activeOrganizationId), where("roles", "array-contains", "ucitel"));
+    }, [firestore, activeOrganizationId]);
     const { data: teachers, isLoading: teachersLoading } = useCollection<User>(uciteleQuery);
 
-    const predmetyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'predmety') : null, [firestore]);
+    const predmetyCollection = useMemoFirebase(() => {
+      if (!firestore || !activeOrganizationId) return null;
+      return query(collection(firestore, 'predmety'), where('organizationId', '==', activeOrganizationId))
+    }, [firestore, activeOrganizationId]);
     const { data: subjects, isLoading: subjectsLoading } = useCollection<Predmet>(predmetyCollection);
 
-    const ucebnyCollection = useMemoFirebase(() => firestore ? collection(firestore, 'ucebny') : null, [firestore]);
+    const ucebnyCollection = useMemoFirebase(() => {
+      if (!firestore || !activeOrganizationId) return null;
+      return query(collection(firestore, 'ucebny'), where('organizationId', '==', activeOrganizationId))
+    }, [firestore, activeOrganizationId]);
     const { data: classrooms, isLoading: classroomsLoading } = useCollection<Ucebna>(ucebnyCollection);
 
 
@@ -292,8 +303,8 @@ function ScheduleEditor() {
 
 
     const handleSave = async () => {
-        if (!selectedClassId || !firestore) {
-            toast({ variant: "destructive", title: "Chyba", description: "Není vybrána žádná třída." });
+        if (!selectedClassId || !firestore || !activeOrganizationId) {
+            toast({ variant: "destructive", title: "Chyba", description: "Není vybrána žádná třída nebo chybí ID organizace." });
             return;
         }
         setIsSaving(true);
@@ -325,8 +336,9 @@ function ScheduleEditor() {
                 lessons: (dayLessons || []).map(lesson => sanitizeObject(lesson))
             })).filter(day => day.lessons.some(l => l !== null));
 
-            const templateData = {
+            const templateData: ScheduleTemplate = {
                 id: selectedClassId,
+                organizationId: activeOrganizationId,
                 tridaId: selectedClassId,
                 timeSlots: timeSlots,
                 days: storableDays,
@@ -499,6 +511,7 @@ function ScheduleEditor() {
 function AbsencePlanner() {
     const firestore = useFirestore();
     const { toast } = useToast();
+    const { activeOrganizationId } = useAuth();
 
     const [teacherId, setTeacherId] = useState<string>('');
     const [date, setDate] = useState<DateRange | undefined>({ from: new Date(), to: addDays(new Date(), 1) });
@@ -506,10 +519,16 @@ function AbsencePlanner() {
     const [isSaving, setIsSaving] = useState(false);
     
     const { data: teachers, isLoading: teachersLoading } = useCollection<User>(
-        useMemoFirebase(() => firestore ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore])
+        useMemoFirebase(() => {
+            if (!firestore || !activeOrganizationId) return null;
+            return query(collection(firestore, "users"), where("organizationId", "==", activeOrganizationId), where("roles", "array-contains", "ucitel"));
+        }, [firestore, activeOrganizationId])
     );
     const { data: absences, isLoading: absencesLoading } = useCollection<Absence>(
-        useMemoFirebase(() => firestore ? collection(firestore, 'absences') : null, [firestore])
+        useMemoFirebase(() => {
+            if (!firestore || !activeOrganizationId) return null;
+            return query(collection(firestore, 'absences'), where('organizationId', '==', activeOrganizationId));
+        }, [firestore, activeOrganizationId])
     );
     
     const handleDelete = async (absenceId: string) => {
@@ -519,13 +538,14 @@ function AbsencePlanner() {
     }
 
     const handleSave = async () => {
-        if (!firestore || !teacherId || !date?.from || !date?.to) {
+        if (!firestore || !teacherId || !date?.from || !date?.to || !activeOrganizationId) {
             toast({ variant: "destructive", title: "Chybějící údaje", description: "Vyberte učitele a rozsah data." });
             return;
         }
         setIsSaving(true);
         try {
             await addDocumentNonBlocking(collection(firestore, 'absences'), {
+                organizationId: activeOrganizationId,
                 teacherId,
                 startDate: format(date.from, 'yyyy-MM-dd'),
                 endDate: format(date.to, 'yyyy-MM-dd'),
