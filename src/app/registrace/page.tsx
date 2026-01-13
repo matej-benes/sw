@@ -20,7 +20,7 @@ import { Logo } from '@/components/logo';
 import { Loader2, ShieldCheck, KeyRound, User, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { doc, writeBatch, setDoc, collection, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, writeBatch, setDoc, collection, updateDoc, deleteDoc, getDocs, query, where } from 'firebase/firestore';
 import type { User as AppUser } from '@/lib/types';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 
@@ -95,22 +95,23 @@ export default function RegistrationPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, verifiedUser.email, data.password);
         const firebaseUser = userCredential.user;
 
-        const batch = writeBatch(firestore);
-
-        // Reference to the new, final user document with the correct ID (from Auth)
-        const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
-        
-        // Data for the new document (excluding PIN)
-        const finalUserData = { ...verifiedUser };
-        delete (finalUserData as any).pin; // Ensure PIN is not copied
-        finalUserData.id = firebaseUser.uid; // Set the correct ID
-
-        batch.set(newUserDocRef, finalUserData);
-
-        // Reference to the old, temporary document with the random ID
+        // The user to be deleted has the old random ID
         const oldUserDocRef = doc(firestore, 'users', verifiedUser.id);
-        batch.delete(oldUserDocRef); // Delete the temporary document
+        
+        // The new user document will have the UID from Auth as its ID
+        const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
 
+        // Create a new object for the final user data, excluding the PIN
+        const finalUserData: Omit<AppUser, 'pin'> = {
+            ...verifiedUser,
+            id: firebaseUser.uid, // Set the correct ID
+        };
+        delete (finalUserData as any).pin;
+
+
+        const batch = writeBatch(firestore);
+        batch.set(newUserDocRef, finalUserData); // Create the new document
+        batch.delete(oldUserDocRef); // Delete the old temporary document
         await batch.commit();
 
         setStep(3);
