@@ -20,9 +20,11 @@ import { Logo } from '@/components/logo';
 import { Loader2, ShieldCheck, KeyRound, User, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, getDocs, doc, writeBatch, updateDoc, setDoc } from 'firebase/firestore';
+import { doc, writeBatch, setDoc } from 'firebase/firestore';
 import type { User as AppUser } from '@/lib/types';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { verifyPin } from '@/ai/flows/verify-pin';
+
 
 const pinSchema = z.object({
   email: z.string().email('Neplatný formát e-mailu.'),
@@ -44,7 +46,7 @@ export default function RegistrationPage() {
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [verifiedUser, setVerifiedUser] = useState<AppUser | null>(null);
-  const [prelimUserId, setPrelimUserId] = useState<string | null>(null); // Store ID from pre-registration doc
+  const [prelimUserId, setPrelimUserId] = useState<string | null>(null);
   const router = useRouter();
   const { toast } = useToast();
   const firestore = useFirestore();
@@ -65,19 +67,16 @@ export default function RegistrationPage() {
   const onPinSubmit = async (data: PinFormValues) => {
     setIsLoading(true);
     try {
-        const usersRef = collection(firestore, 'users');
-        const q = query(usersRef, where("email", "==", data.email), where("pin", "==", data.pin));
-        const querySnapshot = await getDocs(q);
+        const result = await verifyPin(data);
 
-        if (querySnapshot.empty) {
-            toast({ variant: 'destructive', title: 'Chyba ověření', description: 'Kombinace e-mailu a PINu nebyla nalezena.' });
+        if (!result.user) {
+            toast({ variant: 'destructive', title: 'Chyba ověření', description: 'Kombinace e-mailu a PINu nebyla nalezena nebo je nesprávná.' });
             setIsLoading(false);
             return;
         }
         
-        const userDoc = querySnapshot.docs[0];
-        setVerifiedUser({ id: userDoc.id, ...userDoc.data() } as AppUser);
-        setPrelimUserId(userDoc.id); // Save the original document ID
+        setVerifiedUser(result.user as AppUser);
+        setPrelimUserId(result.user.id);
         setStep(2);
 
     } catch (error) {
@@ -97,15 +96,11 @@ export default function RegistrationPage() {
         const firebaseUser = userCredential.user;
 
         const batch = writeBatch(firestore);
-
-        const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
         
-        // Data from the verified document, but remove the pin and id
+        const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
         const { pin, id, ...userData } = verifiedUser;
 
         batch.set(newUserDocRef, { ...userData, id: firebaseUser.uid });
-        
-        // Delete the original pre-registration document
         batch.delete(doc(firestore, 'users', prelimUserId));
 
         await batch.commit();
@@ -115,7 +110,6 @@ export default function RegistrationPage() {
         setTimeout(() => {
              router.replace('/');
         }, 3000);
-
 
     } catch (error: any) {
         let description = 'Při vytváření účtu došlo k chybě.';
