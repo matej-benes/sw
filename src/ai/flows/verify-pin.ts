@@ -5,7 +5,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 import { getFirestore } from 'firebase-admin/firestore';
 import { initializeApp, getApps } from 'firebase-admin/app';
 
@@ -16,12 +16,12 @@ if (!getApps().length) {
 
 const db = getFirestore();
 
-export const VerifyPinInputSchema = z.object({
+const VerifyPinInputSchema = z.object({
   email: z.string().email(),
   pin: z.string(),
 });
 
-export const VerifyPinOutputSchema = z.object({
+const VerifyPinOutputSchema = z.object({
   user: z.any().nullable(),
 });
 
@@ -31,7 +31,7 @@ export async function verifyPin(
   return verifyPinFlow(input);
 }
 
-export const verifyPinFlow = ai.defineFlow(
+const verifyPinFlow = ai.defineFlow(
   {
     name: 'verifyPinFlow',
     inputSchema: VerifyPinInputSchema,
