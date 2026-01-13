@@ -20,6 +20,8 @@ import { cn } from '@/lib/utils';
 import { DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { doc } from 'firebase/firestore';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Separator } from './ui/separator';
 
 
 const matriSchema = z.object({
@@ -99,163 +101,141 @@ export function StudentMatrika({ user, onSave, closeDialog }: StudentMatrikaProp
 
     return (
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            {/* Top Header Section */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 p-4 border rounded-lg">
+            {/* Header Section */}
+             <div className="flex items-center gap-6 p-4 border rounded-lg bg-muted/20">
                 <div className="flex flex-col items-center justify-start space-y-2">
                     <Avatar className="w-24 h-24">
                         <AvatarImage src={user.avatarUrl} />
                         <AvatarFallback className="text-3xl">{getInitials(user.name)}</AvatarFallback>
                     </Avatar>
-                    <Button variant="link">Vložit fotografii</Button>
+                    <Button variant="link">Změnit fotografii</Button>
                 </div>
-                <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-                    <div className="space-y-1">
-                        <Label htmlFor="prijmeni">Příjmení</Label>
-                        <Input id="prijmeni" {...register('prijmeni')} />
-                    </div>
-                    <div className="space-y-1">
-                        <Label htmlFor="name">Jméno</Label>
-                        <Input id="name" {...register('name')} />
-                    </div>
-                     <div className="space-y-1">
-                        <Label htmlFor="rodneCislo">Rodné číslo</Label>
-                        <Input id="rodneCislo" {...register('rodneCislo')} />
-                    </div>
-                    <div>
-                        <p className="text-sm font-medium text-muted-foreground">Uživatelské jméno: <span className="text-foreground font-normal">nevytvořeno</span></p>
-                        <Button variant="link" className="p-0 h-auto">Založit účet</Button>
-                    </div>
-                     <div className="space-y-1 sm:col-span-2">
-                        <Label>Škola</Label>
-                        <Input value="Soukromá zábavná a základní škola, Bukovany" readOnly />
-                     </div>
-                     <div className="space-y-1">
-                        <Label>Obor vzdělání</Label>
-                        <Input {...register('oborVzdelani')} readOnly />
-                    </div>
-                    <div className="flex items-end gap-2">
-                        <div className="space-y-1 flex-grow">
-                            <Label>Třída</Label>
-                            <Input value={classData?.nazev || 'Nepřiřazeno'} readOnly />
+                <div className="flex-grow space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <Label htmlFor="prijmeni">Příjmení</Label>
+                            <Input id="prijmeni" {...register('prijmeni')} />
                         </div>
-                         <div className="space-y-1 w-20">
-                            <Label>ČVTV</Label>
-                            <Input {...register('cvtv')} />
+                        <div className="space-y-1">
+                            <Label htmlFor="name">Jméno</Label>
+                            <Input id="name" {...register('name')} />
                         </div>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                        <p><strong>Škola:</strong> Soukromá zábavná a základní škola, Bukovany</p>
+                        <p><strong>Třída:</strong> {classData?.nazev || 'Nepřiřazeno'}</p>
                     </div>
                 </div>
             </div>
 
-            {/* Tabs Section */}
-             <Tabs defaultValue="prob-vzdelavani">
+            {/* Main Content */}
+            <Tabs defaultValue="osobni-udaje">
                 <TabsList className="grid grid-cols-4 w-full">
-                    <TabsTrigger value="prob-vzdelavani">Probíhající vzdělávání</TabsTrigger>
-                    <TabsTrigger value="dalsi-vzdelavani">Další vzdělávání</TabsTrigger>
-                    <TabsTrigger value="spec-potreby">Speciální vzdělávací potřeby</TabsTrigger>
-                    <TabsTrigger value="ucebni-plan">Učební plán</TabsTrigger>
+                    <TabsTrigger value="osobni-udaje">Osobní údaje</TabsTrigger>
+                    <TabsTrigger value="studium">Studium</TabsTrigger>
+                    <TabsTrigger value="adresy">Adresy</TabsTrigger>
+                    <TabsTrigger value="zakonni-zastupci">Zákonní zástupci</TabsTrigger>
                 </TabsList>
-                <TabsContent value="prob-vzdelavani" className="p-0 border-none">
-                    <Tabs defaultValue="osobni-udaje">
-                         <TabsList className="grid grid-cols-5 w-full bg-muted/60">
-                            <TabsTrigger value="osobni-udaje">Osobní údaje</TabsTrigger>
-                            <TabsTrigger value="adresy">Adresy</TabsTrigger>
-                            <TabsTrigger value="bankovni-ucet">Bankovní účet</TabsTrigger>
-                            <TabsTrigger value="zastupci">Zákonní zástupci</TabsTrigger>
-                            <TabsTrigger value="predchozi-vzdelavani">Předchozí vzdělávání</TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="osobni-udaje" className="border border-t-0 rounded-b-md p-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
-                                <div className="space-y-1">
-                                    <Label>Datum narození</Label>
-                                    <Controller
-                                        name="datumNarozeni"
-                                        control={control}
-                                        render={({ field }) => (
-                                        <Popover>
-                                            <PopoverTrigger asChild>
-                                                <Button
-                                                    variant={"outline"}
-                                                    className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}
-                                                >
-                                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                                    {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Vyberte datum</span>}
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="w-auto p-0">
-                                                <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus locale={cs} />
-                                            </PopoverContent>
-                                        </Popover>
-                                        )}
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label>Pohlaví</Label>
-                                     <Controller name="pohlavi" control={control} render={({ field }) => (
-                                        <Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="Muž">Muž</SelectItem><SelectItem value="Žena">Žena</SelectItem></SelectContent></Select>
-                                     )}/>
-                                </div>
-                                 <div className="flex items-center space-x-2 pt-6">
-                                     <Controller name="plnolety" control={control} render={({ field }) => (<Checkbox id="plnolety" checked={field.value} onCheckedChange={field.onChange} />)}/>
-                                     <Label htmlFor="plnolety">Plnoletý</Label>
-                                </div>
-                                <div className="space-y-1">
-                                    <Label>Rodné příjmení</Label>
-                                    <Input {...register('rodnePrijmeni')}/>
-                                </div>
-                                <div className="space-y-1">
-                                    <Label>Stav</Label>
-                                     <Controller name="stav" control={control} render={({ field }) => (
-                                        <Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="Aktivní">Aktivní</SelectItem><SelectItem value="Neaktivní">Neaktivní</SelectItem></SelectContent></Select>
-                                     )}/>
-                                </div>
-                                <div className="space-y-1">
-                                    <Label>Místo narození</Label>
-                                    <Input {...register('mistoNarozeni')}/>
-                                </div>
-                                 <div className="space-y-1">
-                                    <Label>Okres narození</Label>
-                                    <Input {...register('okresNarozeni')}/>
-                                </div>
-                                <div className="space-y-1">
-                                    <Label>Stát narození</Label>
-                                     <Controller name="statNarozeni" control={control} render={({ field }) => (
-                                        <Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="Česká republika">Česká republika</SelectItem><SelectItem value="Slovenská republika">Slovenská republika</SelectItem></SelectContent></Select>
-                                     )}/>
-                                </div>
-                                 <div className="space-y-1">
-                                    <Label>Rodinný stav</Label>
-                                    <Controller name="rodinnyStav" control={control} render={({ field }) => (
-                                        <Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="Svobodný/Svobodná">Svobodný/Svobodná</SelectItem><SelectItem value="Ženatý/Vdaná">Ženatý/Vdaná</SelectItem><SelectItem value="Rozvedený/Rozvedená">Rozvedený/Rozvedená</SelectItem></SelectContent></Select>
-                                    )}/>
-                                </div>
-                                 <div className="space-y-1">
-                                    <Label>Počet dětí</Label>
-                                    <Input type="number" {...register('pocetDeti', { valueAsNumber: true })}/>
-                                </div>
-                                 <div className="space-y-1">
-                                    <Label>Číslo OP</Label>
-                                    <Input {...register('cisloOP')}/>
-                                </div>
-                                 <div className="space-y-1">
-                                    <Label>Číslo pasu</Label>
-                                    <Input {...register('cisloPasu')}/>
-                                </div>
-                                <div className="space-y-1">
-                                    <Label>Osobní e-mail</Label>
-                                    <Input {...register('osobniEmail')}/>
-                                     {errors.osobniEmail && <p className="text-sm text-destructive">{errors.osobniEmail.message}</p>}
-                                </div>
-                                <div className="space-y-1">
-                                    <Label>Školní e-mail</Label>
-                                    <Input {...register('skolniEmail')}/>
-                                     {errors.skolniEmail && <p className="text-sm text-destructive">{errors.skolniEmail.message}</p>}
-                                </div>
+                
+                <TabsContent value="osobni-udaje" className="mt-4">
+                    <Card>
+                        <CardHeader><CardTitle>Základní údaje</CardTitle></CardHeader>
+                        <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                             <div className="space-y-1">
+                                <Label>Datum narození</Label>
+                                <Controller
+                                    name="datumNarozeni"
+                                    control={control}
+                                    render={({ field }) => (
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                {field.value ? format(field.value, 'dd.MM.yyyy') : <span>Vyberte datum</span>}
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus locale={cs} /></PopoverContent>
+                                    </Popover>
+                                    )}
+                                />
                             </div>
-                        </TabsContent>
-                         <TabsContent value="adresy" className="border border-t-0 rounded-b-md p-6">
-                            <p className="text-muted-foreground">Zde bude správa adres.</p>
-                        </TabsContent>
-                    </Tabs>
+                             <div className="space-y-1">
+                                <Label>Rodné číslo</Label>
+                                <Input {...register('rodneCislo')} />
+                            </div>
+                            <div className="space-y-1">
+                                <Label>Rodné příjmení</Label>
+                                <Input {...register('rodnePrijmeni')}/>
+                            </div>
+                             <div className="space-y-1">
+                                <Label>Místo narození</Label>
+                                <Input {...register('mistoNarozeni')}/>
+                            </div>
+                            <div className="space-y-1">
+                                <Label>Okres narození</Label>
+                                <Input {...register('okresNarozeni')}/>
+                            </div>
+                             <div className="space-y-1">
+                                <Label>Stát narození</Label>
+                                 <Controller name="statNarozeni" control={control} render={({ field }) => (
+                                    <Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="Česká republika">Česká republika</SelectItem><SelectItem value="Slovenská republika">Slovenská republika</SelectItem></SelectContent></Select>
+                                 )}/>
+                            </div>
+                        </CardContent>
+                    </Card>
+                    <Card className="mt-6">
+                        <CardHeader><CardTitle>Kontaktní údaje</CardTitle></CardHeader>
+                        <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                             <div className="space-y-1">
+                                <Label>Osobní e-mail</Label>
+                                <Input {...register('osobniEmail')}/>
+                                 {errors.osobniEmail && <p className="text-sm text-destructive">{errors.osobniEmail.message}</p>}
+                            </div>
+                            <div className="space-y-1">
+                                <Label>Školní e-mail</Label>
+                                <Input value={user.email} readOnly/>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                 <TabsContent value="studium" className="mt-4">
+                     <Card>
+                        <CardHeader><CardTitle>Informace o studiu</CardTitle></CardHeader>
+                        <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <div className="space-y-1">
+                                <Label>Stav</Label>
+                                <Controller name="stav" control={control} render={({ field }) => (
+                                    <Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="Aktivní">Aktivní</SelectItem><SelectItem value="Neaktivní">Neaktivní</SelectItem></SelectContent></Select>
+                                )}/>
+                            </div>
+                            <div className="space-y-1">
+                                <Label>Obor vzdělání</Label>
+                                <Input {...register('oborVzdelani')} readOnly />
+                            </div>
+                            <div className="space-y-1">
+                                <Label>ČVTV</Label>
+                                <Input {...register('cvtv')} />
+                            </div>
+                        </CardContent>
+                     </Card>
+                </TabsContent>
+                
+                 <TabsContent value="adresy" className="mt-4">
+                    <Card>
+                        <CardHeader><CardTitle>Adresy</CardTitle></CardHeader>
+                         <CardContent>
+                            <p className="text-muted-foreground">Zde bude správa adres (Trvalá, Kontaktní).</p>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                 <TabsContent value="zakonni-zastupci" className="mt-4">
+                    <Card>
+                        <CardHeader><CardTitle>Zákonní zástupci</CardTitle></CardHeader>
+                         <CardContent>
+                            <p className="text-muted-foreground">Zde bude správa zákonných zástupců žáka.</p>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
             </Tabs>
              <DialogFooter>
