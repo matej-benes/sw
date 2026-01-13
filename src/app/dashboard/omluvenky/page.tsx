@@ -37,22 +37,27 @@ function ParentExcuseForm() {
         resolver: zodResolver(omluvenkaSchema),
     });
 
+    const studentRef = useMemoFirebase(() => {
+        if (!firestore || !user?.studentId) return null;
+        return doc(firestore, 'users', user.studentId);
+    }, [firestore, user]);
+    const {data: studentData} = useDoc<User>(studentRef);
+
     const onSubmit = async (data: OmluvenkaFormData) => {
-        if (!user || !user.studentId || !user.tridaId) {
-            toast({ variant: 'destructive', title: 'Chyba', description: 'Nelze odeslat omluvenku, chybí údaje o studentovi.' });
+        if (!user || !user.studentId || !studentData?.tridaId) {
+            toast({ variant: 'destructive', title: 'Chyba', description: 'Nelze odeslat omluvenku, chybí údaje o studentovi nebo jeho třídě.' });
             return;
         }
         
         const newOmluvenka: Omit<Omluvenka, 'id'> = {
             studentId: user.studentId,
             parentId: user.id,
-            tridaId: user.tridaId,
+            tridaId: studentData.tridaId,
             datumOd: format(data.datum.from, 'yyyy-MM-dd'),
             datumDo: format(data.datum.to, 'yyyy-MM-dd'),
             duvod: data.duvod,
             status: 'pending',
             datumPodani: Timestamp.now(),
-            organizationId: 'default', // Placeholder
         };
 
         await addDocumentNonBlocking(collection(firestore, 'omluvenky'), newOmluvenka);
@@ -146,7 +151,6 @@ function StudentExcuseForm() {
             duvod: data.duvod,
             status: 'pending',
             datumPodani: Timestamp.now(),
-            organizationId: 'default', // Placeholder
         };
 
         await addDocumentNonBlocking(collection(firestore, 'omluvenky'), newOmluvenka);
@@ -244,8 +248,6 @@ function ApproveExcuseDialog({
         return dates.map(date => doc(firestore, 'rozvrhy', `${student.tridaId}-${format(date, 'yyyy-MM-dd')}`));
     }, [firestore, student?.tridaId, dates]);
     
-    // This is not ideal, but `useCollection` doesn't work with an array of document refs.
-    // In a real app, you might fetch these sequentially or use a more complex query strategy.
     const [schedules, setSchedules] = useState<(Rozvrh | null)[]>([]);
     const [loadingSchedules, setLoadingSchedules] = useState(true);
 
@@ -253,14 +255,21 @@ function ApproveExcuseDialog({
         async function fetchSchedules() {
             if (!rozvrhRefs || rozvrhRefs.length === 0) {
                 setLoadingSchedules(false);
+                setSchedules([]);
                 return;
             };
             setLoadingSchedules(true);
-            const schedulePromises = rozvrhRefs.map(ref => getDoc(ref));
-            const scheduleSnaps = await Promise.all(schedulePromises);
-            const fetchedSchedules = scheduleSnaps.map(snap => snap.exists() ? snap.data() as Rozvrh : null);
-            setSchedules(fetchedSchedules);
-            setLoadingSchedules(false);
+            try {
+                const schedulePromises = rozvrhRefs.map(ref => getDoc(ref));
+                const scheduleSnaps = await Promise.all(schedulePromises);
+                const fetchedSchedules = scheduleSnaps.map(snap => snap.exists() ? snap.data() as Rozvrh : null);
+                setSchedules(fetchedSchedules);
+            } catch (error) {
+                console.error("Error fetching schedules for dialog:", error);
+                setSchedules([]);
+            } finally {
+                setLoadingSchedules(false);
+            }
         }
         fetchSchedules();
     }, [rozvrhRefs]);
@@ -472,3 +481,4 @@ export default function OmluvenkyPage() {
         </div>
     );
 }
+
