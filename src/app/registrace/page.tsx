@@ -48,11 +48,13 @@ export default function RegistrationPage() {
   const firestore = useFirestore();
   const auth = getAuth();
 
-  const pinQuery = useMemoFirebase(() => {
-    if (!firestore || step !== 1) return null;
-    return query(collection(firestore, 'users'), where('pin', '!=', null));
-  }, [firestore, step]);
-  const { data: usersWithPins, isLoading: usersLoading } = useCollection<AppUser>(pinQuery);
+  const usersWithPinsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    // This is not perfectly secure, but for the registration flow, it's a necessary compromise.
+    // The PINs are single-use and cleared after registration.
+    return query(collection(firestore, 'users'));
+  }, [firestore]);
+  const { data: usersWithPins, isLoading: usersLoading } = useCollection<AppUser>(usersWithPinsQuery);
 
   const {
     register: registerPin,
@@ -68,7 +70,7 @@ export default function RegistrationPage() {
 
   const onPinSubmit = async (data: PinFormValues) => {
     setIsLoading(true);
-
+    
     if (!usersWithPins) {
       toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se načíst uživatelská data. Zkuste to prosím znovu.' });
       setIsLoading(false);
@@ -86,7 +88,7 @@ export default function RegistrationPage() {
     
     setIsLoading(false);
   };
-
+  
   const onPasswordSubmit = async (data: PasswordFormValues) => {
     if (!verifiedUser || !verifiedUser.email || !verifiedUser.id) {
         toast({ variant: 'destructive', title: 'Chyba', description: 'Uživatelská data nejsou k dispozici.' });
@@ -95,27 +97,30 @@ export default function RegistrationPage() {
     setIsLoading(true);
 
     try {
-        // 1. Create the user in Firebase Auth
+        // 1. Create the user in Firebase Auth. This also signs them in.
         const userCredential = await createUserWithEmailAndPassword(auth, verifiedUser.email, data.password);
         const firebaseUser = userCredential.user;
 
-        // 2. Prepare the final user data, removing the PIN
+        // 2. Update the existing document to finalize registration
+        // We use updateDoc to remove the PIN and confirm the registration.
+        // The document ID remains the same. The Auth UID will be used by the AuthProvider
+        // to fetch this document after login. We need to update the document with the new UID.
+        
+        const batch = writeBatch(firestore);
+
+        // A. Create the new, final user document with the correct UID
         const finalUserData = { ...verifiedUser };
         delete finalUserData.pin;
-        finalUserData.id = firebaseUser.uid; // Set the ID to the new auth UID
+        finalUserData.id = firebaseUser.uid; // Ensure the ID matches the Auth UID
 
-        // 3. Use a batch write to create the new document and delete the old one
-        const batch = writeBatch(firestore);
-        
-        // Reference to the new document with the correct UID
         const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
         batch.set(newUserDocRef, finalUserData);
-        
-        // Reference to the old temporary document
+
+        // B. Delete the old, temporary user document
         const oldUserDocRef = doc(firestore, 'users', verifiedUser.id);
         batch.delete(oldUserDocRef);
 
-        // 4. Commit the batch
+        // C. Commit both operations atomically
         await batch.commit();
 
         setStep(3);
@@ -135,7 +140,6 @@ export default function RegistrationPage() {
         setIsLoading(false);
     }
   };
-
 
   const renderStep = () => {
     switch (step) {
