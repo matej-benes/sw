@@ -53,16 +53,6 @@ export function MobileDashboard() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined);
 
-  // Fetch classes for teacher selector if the user is a teacher
-  const teacherClassesQuery = useMemoFirebase(() => {
-    if (!firestore || !user || !hasRole('ucitel')) return null;
-    return query(
-      collection(firestore, 'tridy'),
-      where('ucitelId', '==', user.id)
-    );
-  }, [firestore, user, hasRole]);
-  const { data: teacherClasses, isLoading: teacherClassesLoading } = useCollection<Trida>(teacherClassesQuery);
-  
   // Determine the target class ID based on role
   const targetClassId = useMemo(() => {
     if (hasRole('ucitel')) {
@@ -76,7 +66,7 @@ export function MobileDashboard() {
     if (hasRole('ucitel') && teacherClasses && teacherClasses.length > 0 && !selectedClassId) {
       setSelectedClassId(teacherClasses[0].id);
     }
-  }, [hasRole, teacherClasses, selectedClassId]);
+  }, [hasRole, selectedClassId]);
 
   // Set class for non-teachers
   useEffect(() => {
@@ -85,10 +75,18 @@ export function MobileDashboard() {
     }
   }, [hasRole, user?.tridaId]);
 
-  const schedulesQuery = useMemoFirebase(() => {
+  const dailySchedule = useDoc<Rozvrh>(useMemoFirebase(() => {
     if (!firestore || !targetClassId) return null;
-    return query(collection(firestore, 'rozvrhy'), where('tridaId', '==', targetClassId));
-  }, [firestore, targetClassId]);
+    const scheduleId = `${targetClassId}-${format(currentDate, 'yyyy-MM-dd')}`;
+    return doc(firestore, 'rozvrhy', scheduleId);
+  }, [firestore, targetClassId, currentDate]));
+
+  const teacherClassesQuery = useMemoFirebase(() => {
+    if (!firestore || !user || !hasRole('ucitel')) return null;
+    return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
+  }, [firestore, user, hasRole]);
+  const { data: teacherClasses, isLoading: teacherClassesLoading } = useCollection<Trida>(teacherClassesQuery);
+
 
   const eventsQuery = useMemoFirebase(() => {
     if (!firestore || !targetClassId) return null;
@@ -105,16 +103,15 @@ export function MobileDashboard() {
     return query(collection(firestore, 'zapisyHodin'), where('tridaId', '==', targetClassId));
   }, [firestore, targetClassId]);
 
-  const { data: schedulesData } = useCollection<Rozvrh>(schedulesQuery);
-  const { data: eventsData } = useCollection<Udalost>(eventsQuery);
-  const { data: substitutionsData } = useCollection<Substitution>(substitutionsQuery);
-  const { data: zapisyData } = useCollection<ZapisHodiny>(zapisyQuery);
+  const { data: eventsData, isLoading: eventsLoading } = useCollection<Udalost>(eventsQuery);
+  const { data: substitutionsData, isLoading: subsLoading } = useCollection<Substitution>(substitutionsQuery);
+  const { data: zapisyData, isLoading: zapisyLoading } = useCollection<ZapisHodiny>(zapisyQuery);
 
   const handlePrevDay = () => setCurrentDate(prev => subDays(prev, 1));
   const handleNextDay = () => setCurrentDate(prev => addDays(prev, 1));
   const handleSetToday = () => setCurrentDate(new Date());
 
-  const isDataLoading = !schedulesData || !eventsData || !substitutionsData || isUserLoading || (hasRole('ucitel') && teacherClassesLoading);
+  const isDataLoading = dailySchedule.isLoading || eventsLoading || subsLoading || zapisyLoading || isUserLoading || (hasRole('ucitel') && teacherClassesLoading);
 
   if (isDataLoading) {
     return <div className="flex h-full w-full items-center justify-center">Načítání...</div>;
@@ -160,7 +157,7 @@ export function MobileDashboard() {
           )}
 
           <MobileTimetableList
-            schedules={schedulesData || []}
+            dailySchedule={dailySchedule.data}
             eventsData={eventsData || []}
             substitutionsData={substitutionsData || []}
             zapisyData={zapisyData || []}

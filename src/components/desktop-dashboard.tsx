@@ -89,6 +89,15 @@ export function DesktopDashboard() {
     if (hasRole('rodic')) return studentData?.tridaId;
     return undefined;
   }, [hasRole, user, studentData, selectedClassId]);
+  
+  useEffect(() => {
+    if (hasRole('ucitel') && tridy && tridy.length > 0 && !selectedClassId) {
+      setSelectedClassId(tridy[0].id);
+    } else if (!hasRole('ucitel')) {
+      setSelectedClassId(user?.tridaId || studentData?.tridaId);
+    }
+  }, [tridy, selectedClassId, hasRole, user?.tridaId, studentData?.tridaId]);
+
 
   const schedulesQuery = useMemoFirebase(() => {
       if (!firestore || !targetClassId) return null;
@@ -166,13 +175,6 @@ export function DesktopDashboard() {
       tridy?.map((t) => ({ value: t.id, label: t.nazev })) || [],
     [tridy]
   );
-    
-  useEffect(() => {
-      if (tridy && !selectedClassId) {
-          const defaultId = hasRole('ucitel') ? tridy[0]?.id : user?.tridaId;
-          setSelectedClassId(defaultId);
-      }
-  }, [tridy, selectedClassId, hasRole, user?.tridaId]);
 
   const handlePrevWeek = useCallback(() => {
     setCurrentDate((prev) => subWeeks(prev, 1));
@@ -189,11 +191,6 @@ export function DesktopDashboard() {
    const handleClassChange = useCallback((value: string) => {
     setSelectedClassId(value);
   }, []);
-
-  const filteredSchedules = useMemo(() => {
-    if (!schedulesData || !targetClassId) return [];
-    return schedulesData.filter((s) => s.tridaId === targetClassId);
-  }, [schedulesData, targetClassId]);
   
   const classInfo = useMemo(() => {
     if (!studentClassData || !allStaff) {
@@ -319,15 +316,19 @@ export function DesktopDashboard() {
             </div>
           </CardHeader>
           <CardContent>
-               <TimetableWidget
-                  schedules={filteredSchedules}
+            {weekDays.map(day => (
+              <div key={day.toISOString()}>
+                <TimetableWidget
+                  dailySchedule={schedulesData?.find(s => isSameDay(parseISO(s.datum), day))}
                   eventsData={eventsData || []}
                   substitutionsData={substitutionsData || []}
                   isTeacher={hasRole('ucitel')}
                   userId={user.id}
                   userClassId={targetClassId}
-                  days={weekDays}
-              />
+                  day={day}
+                />
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>

@@ -165,7 +165,7 @@ function CancelledLessonItem({ substitution, period, time }: { substitution: Sub
 }
 
 export function MobileTimetableList({
-    schedules,
+    dailySchedule,
     eventsData,
     substitutionsData,
     zapisyData,
@@ -174,7 +174,7 @@ export function MobileTimetableList({
     userClassId,
     day,
 }: {
-    schedules: Rozvrh[];
+    dailySchedule: Rozvrh | null;
     eventsData: Udalost[];
     substitutionsData: Substitution[];
     zapisyData: ZapisHodiny[];
@@ -186,8 +186,6 @@ export function MobileTimetableList({
     const router = useRouter();
     const [selectedLesson, setSelectedLesson] = useState<{ lesson: LessonBlock, period: number, time: string } | null>(null);
 
-    const dailySchedule = schedules.find(s => isSameDay(parseISO(s.datum), day));
-    
     if (!dailySchedule) {
         return <p className="text-center text-muted-foreground py-8">Pro tento den není dostupný žádný rozvrh.</p>;
     }
