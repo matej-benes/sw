@@ -20,7 +20,7 @@ import {
   ChevronRight,
   Calendar as CalendarIcon,
 } from 'lucide-react';
-import { TimetableWidget } from '@/components/timetable-widget';
+import { MobileTimetableList } from '@/components/mobile-timetable-list';
 import {
   startOfWeek,
   addDays,
@@ -42,6 +42,7 @@ import type {
   Udalost,
   Substitution,
   ScheduleTemplate,
+  ZapisHodiny,
 } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -98,10 +99,16 @@ export function MobileDashboard() {
     if (!firestore || !targetClassId) return null;
      return query(collection(firestore, 'suplovani'), where('originalLesson.classId', '==', targetClassId));
   }, [firestore, targetClassId]);
+  
+  const zapisyQuery = useMemoFirebase(() => {
+    if (!firestore || !targetClassId) return null;
+    return query(collection(firestore, 'zapisyHodin'), where('tridaId', '==', targetClassId));
+  }, [firestore, targetClassId]);
 
   const { data: schedulesData } = useCollection<Rozvrh>(schedulesQuery);
   const { data: eventsData } = useCollection<Udalost>(eventsQuery);
   const { data: substitutionsData } = useCollection<Substitution>(substitutionsQuery);
+  const { data: zapisyData } = useCollection<ZapisHodiny>(zapisyQuery);
 
   useEffect(() => {
     const generateSchedulesForWeek = async () => {
@@ -201,14 +208,15 @@ export function MobileDashboard() {
             </div>
           )}
 
-          <TimetableWidget
+          <MobileTimetableList
             schedules={schedulesData || []}
             eventsData={eventsData || []}
             substitutionsData={substitutionsData || []}
+            zapisyData={zapisyData || []}
             isTeacher={hasRole('ucitel')}
             userId={user.id}
             userClassId={targetClassId}
-            days={[currentDate]}
+            day={currentDate}
           />
         </CardContent>
       </Card>

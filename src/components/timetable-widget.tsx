@@ -1,7 +1,7 @@
 'use client';
 import React from 'react';
 import { cn } from "@/lib/utils";
-import type { LessonBlock, Udalost, Rozvrh, Substitution } from "@/lib/types";
+import type { LessonBlock, Udalost, Rozvrh, Substitution, ZapisHodiny } from "@/lib/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -226,7 +226,7 @@ function CancelledLessonBlock({ substitution }: { substitution: Substitution }) 
     )
 }
 
-export function TimetableWidget({ schedules, eventsData, substitutionsData, isTeacher, userId, userClassId, days }: { schedules: Rozvrh[], eventsData: Udalost[], substitutionsData: Substitution[], isTeacher: boolean, userId: string, userClassId?: string, days: Date[] }) {
+export function TimetableWidget({ schedules, eventsData, substitutionsData, zapisyData, isTeacher, userId, userClassId, days }: { schedules: Rozvrh[], eventsData: Udalost[], substitutionsData: Substitution[], zapisyData: ZapisHodiny[], isTeacher: boolean, userId: string, userClassId?: string, days: Date[] }) {
     const router = useRouter();
     
     const timeSlots = schedules[0]?.timeSlots || defaultTimeSlots;
