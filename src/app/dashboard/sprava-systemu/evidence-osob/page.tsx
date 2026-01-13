@@ -324,6 +324,11 @@ function AdminUserManagement() {
     const [deletingUser, setDeletingUser] = useState<User | null>(null);
     const { toast } = useToast();
 
+    // Helper to remove undefined fields from an object
+    const removeUndefinedFields = (obj: any) => {
+        return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
+    };
+
     const handleSaveUser = async (formData: Partial<User>) => {
       if (!firestore) return;
 
@@ -335,21 +340,22 @@ function AdminUserManagement() {
             name: formData.name,
             email: formData.email,
             roles: formData.roles || [],
-            ...(formData.datumNarozeni && { datumNarozeni: formData.datumNarozeni }),
-            ...(formData.rodnePrijmeni && { rodnePrijmeni: formData.rodnePrijmeni }),
-            ...(formData.mistoNarozeni && { mistoNarozeni: formData.mistoNarozeni }),
-            ...(formData.statNarozeni && { statNarozeni: formData.statNarozeni }),
-            ...(formData.pohlavi && { pohlavi: formData.pohlavi }),
-            ...(formData.rodinnyStav && { rodinnyStav: formData.rodinnyStav }),
-            ...(formData.stav && { stav: formData.stav }),
-            ...(formData.plnolety && { plnolety: formData.plnolety }),
-            ...(formData.cisloOP && { cisloOP: formData.cisloOP }),
-            ...(formData.cisloPasu && { cisloPasu: formData.cisloPasu }),
-            ...(formData.osobniEmail && { osobniEmail: formData.osobniEmail }),
-            ...(formData.skolniEmail && { skolniEmail: formData.skolniEmail }),
+            datumNarozeni: formData.datumNarozeni,
+            rodnePrijmeni: formData.rodnePrijmeni,
+            mistoNarozeni: formData.mistoNarozeni,
+            statNarozeni: formData.statNarozeni,
+            pohlavi: formData.pohlavi,
+            rodinnyStav: formData.rodinnyStav,
+            stav: formData.stav,
+            plnolety: formData.plnolety,
+            cisloOP: formData.cisloOP,
+            cisloPasu: formData.cisloPasu,
+            osobniEmail: formData.osobniEmail,
+            skolniEmail: formData.skolniEmail,
           };
 
-          await updateDoc(userRef, dataToUpdate);
+          const cleanedData = removeUndefinedFields(dataToUpdate);
+          await updateDoc(userRef, cleanedData);
           toast({ title: 'Uživatel aktualizován' });
 
         } else {
@@ -370,8 +376,9 @@ function AdminUserManagement() {
             ...(formData.studentId && { studentId: formData.studentId }),
             ...(formData.tridaId && { tridaId: formData.tridaId }),
           };
-
-          await setDoc(doc(firestore, 'users', newFirebaseUser.uid), newUserForDb);
+          
+          const cleanedData = removeUndefinedFields(newUserForDb);
+          await setDoc(doc(firestore, 'users', newFirebaseUser.uid), cleanedData);
           toast({ title: 'Uživatel vytvořen' });
         }
       } catch (e: any) {
