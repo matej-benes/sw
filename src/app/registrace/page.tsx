@@ -20,7 +20,7 @@ import { Logo } from '@/components/logo';
 import { Loader2, ShieldCheck, KeyRound, User, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { doc, writeBatch, setDoc, collection, updateDoc, deleteDoc, getDocs, query, where } from 'firebase/firestore';
+import { doc, writeBatch, setDoc, collection, updateDoc, deleteDoc, getDocs, query, where, getDoc } from 'firebase/firestore';
 import type { User as AppUser } from '@/lib/types';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 
@@ -74,7 +74,7 @@ export default function RegistrationPage() {
       setIsLoading(false);
       return;
     }
-
+    
     const user = allUsers.find(u => u.pin === data.pin);
     
     if (user) {
@@ -95,23 +95,25 @@ export default function RegistrationPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, verifiedUser.email, data.password);
         const firebaseUser = userCredential.user;
 
-        // The user to be deleted has the old random ID
+        // The pre-registered user doc to be deleted
         const oldUserDocRef = doc(firestore, 'users', verifiedUser.id);
         
         // The new user document will have the UID from Auth as its ID
         const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
 
-        // Create a new object for the final user data, excluding the PIN
-        const finalUserData: Omit<AppUser, 'pin'> = {
-            ...verifiedUser,
-            id: firebaseUser.uid, // Set the correct ID
-        };
-        delete (finalUserData as any).pin;
-
+        // Create a new object for the final user data, excluding the PIN and setting the correct ID
+        const finalUserData: Partial<AppUser> = { ...verifiedUser };
+        delete finalUserData.pin;
+        finalUserData.id = firebaseUser.uid;
 
         const batch = writeBatch(firestore);
-        batch.set(newUserDocRef, finalUserData); // Create the new document
-        batch.delete(oldUserDocRef); // Delete the old temporary document
+        
+        // Set the new document with the final user data.
+        batch.set(newUserDocRef, finalUserData);
+        
+        // Delete the old pre-registration document.
+        batch.delete(oldUserDocRef);
+        
         await batch.commit();
 
         setStep(3);
