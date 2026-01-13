@@ -11,104 +11,118 @@ service cloud.firestore {
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
-    
-    function getUserData(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data;
-    }
-    
-    function isSuperAdmin() {
-      // Super admin is identified by a specific claim or a field in their user document.
-      // For this implementation, we check a field in their user document.
-      return isAuthenticated() && getUserData(request.auth.uid).isSuperAdmin == true;
-    }
 
-    // Membership and Roles Functions
-    function isMember(organizationId) {
-      return isAuthenticated() && getUserData(request.auth.uid).memberships.exists(m, m.organizationId == organizationId);
+    function hasRole(role) {
+        return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny([role]);
     }
     
-    function getMembership(organizationId) {
-        return getUserData(request.auth.uid).memberships.filter(m, m.organizationId == organizationId)[0];
+    function isMyStudent(studentId) {
+        let parentData = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+        return parentData.roles.hasAny(['rodic']) && parentData.studentId == studentId;
     }
     
-    function hasRole(organizationId, role) {
-       return isMember(organizationId) && getMembership(organizationId).roles.hasAny([role]);
+    function hasAnyRole(roles) {
+        return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(roles);
     }
     
-    function hasAnyRole(organizationId, roles) {
-       return isMember(organizationId) && getMembership(organizationId).roles.hasAny(roles);
-    }
-    
-    function isOrganizationOwner(organizationId) {
-        // This function checks the OWNER of the organization document in Firestore, NOT the incoming request.
-        // It's used for rules where an existing owner needs to be verified.
-        let orgDoc = get(/databases/$(database)/documents/organizations/$(organizationId));
-        return isAuthenticated() && orgDoc.data.ownerId == request.auth.uid;
-    }
-
-    // Rules for specific top-level collections
-    match /organizations/{organizationId} {
-      // ANYONE can read organization data to verify registration PINs.
-      allow read: if true; 
-      // Only Super Admins can create or delete organizations.
-      allow create, delete: if isSuperAdmin();
-      // An update is allowed by a Super Admin OR by a user who is becoming the new owner.
-      // `request.resource.data.ownerId` refers to the state of the document AFTER the update.
-      allow update: if isSuperAdmin() || (isAuthenticated() && request.resource.data.ownerId == request.auth.uid);
+    function isMemberOfClass(classId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      // Is the user directly in the class? (Student, Teacher)
+      return userDoc.tridaId == classId ||
+             // Is the user's child in the class? (Parent)
+             (userDoc.roles.hasAny(['rodic']) && get(/databases/$(database)/documents/users/$(userDoc.studentId)).data.tridaId == classId);
     }
 
     match /users/{userId} {
-      // ANYONE can list/read user data to verify PINs for registration.
-      // This is safe because sensitive data should not be in the user doc itself.
-      allow read: if true; 
-      // ANYONE can create a user document (as part of registration).
-      allow create: if true;
-      // ANYONE can delete a user document (the placeholder during registration).
-      allow delete: if true;
-      // Only the owner or a super admin can update a user document.
-      allow update: if isOwner(userId) || isSuperAdmin();
+      allow get, list: if isAuthenticated();
+      allow create: if hasRole('administrator');
+      allow update: if isOwner(userId) || hasRole('administrator');
+      allow delete: if hasRole('administrator');
     }
     
-    // Specific override for applications
-    match /prijimaci-rizeni/{rizeniId} {
-      // Anyone can create an application (public form)
-      allow create: if true;
-      // Only admins can read/update/delete applications
-      allow read, update, delete: if hasRole(resource.data.organizationId, 'administrator');
+    match /gradings/{gradingId} {
+      allow get: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
+      allow list: if hasAnyRole(['ucitel', 'administrator']);
+      allow create: if hasAnyRole(['ucitel', 'administrator']);
+      allow update, delete: if hasAnyRole(['ucitel', 'administrator']);
     }
     
-    // Default rules for collections within an organization
-    match /{collection}/{docId} {
-       // This rule applies to any document that has an 'organizationId' field.
-       // It's a broad rule for documents inside an organization's scope.
-       
-       // Allow READ access if:
-       // 1. The document has an organizationId field.
-       // 2. The requesting user is a member of that organization.
-       allow read: if resource.data.keys().hasAny(['organizationId']) &&
-                    isMember(resource.data.organizationId);
-
-       // Allow WRITE access if:
-       // 1. The document has an organizationId field.
-       // 2. The user is the owner of the organization OR has an 'administrator' or 'ucitel' role.
-       allow write: if resource.data.keys().hasAny(['organizationId']) &&
-                    (isOrganizationOwner(resource.data.organizationId) ||
-                     hasAnyRole(resource.data.organizationId, ['administrator', 'ucitel']));
-
-       // Fallback for list queries where 'resource' is not available.
-       // This allows any authenticated user to list documents, but the 'read' rule above
-       // will still protect the actual content of each document.
-       allow list: if isAuthenticated();
+    match /tridy/{tridaId} {
+      allow list: if isAuthenticated();
+      allow get: if hasRole('administrator') || (isAuthenticated() && isMemberOfClass(tridaId));
+      allow write: if hasRole('administrator');
     }
     
-    // Specific override for messages
+    match /predmety/{predmetId} {
+      allow read: if isAuthenticated();
+      allow write: if hasRole('administrator');
+    }
+    
+    match /ucebny/{ucebnaId} {
+      allow read: if isAuthenticated();
+      allow write: if hasRole('administrator');
+    }
+    
+    match /rozvrhy/{rozvrhId} {
+        allow read: if hasRole('administrator') || (isAuthenticated() && isMemberOfClass(resource.data.tridaId));
+        allow write: if hasRole('administrator');
+    }
+    
+    match /scheduleTemplates/{templateId} {
+        allow read: if isAuthenticated();
+        allow write: if hasRole('administrator');
+    }
+     
+     match /oznameni/{oznameniId} {
+        allow read: if isAuthenticated();
+        allow write: if hasRole('ucitel') || hasRole('administrator');
+    }
+    
+    match /poznamky-zaku/{poznamkaId} {
+        allow read: if isAuthenticated();
+        allow write: if hasRole('ucitel') || hasRole('administrator');
+    }
+    
+    match /udalosti/{udalostId} {
+        allow read: if isAuthenticated();
+        allow write: if hasRole('administrator');
+    }
+     
+     match /suplovani/{substitutionId} {
+        allow read: if isAuthenticated();
+        allow write: if hasRole('administrator');
+    }
+    
     match /messages/{messageId} {
-      allow get: if isAuthenticated() && (resource.data.senderId == request.auth.uid || request.auth.uid in resource.data.recipientIds);
-      // Any member of an org can create a message within that org's context.
-      allow create: if isAuthenticated() && isMember(request.resource.data.organizationId);
-      // Only recipients can "update" a message (e.g., mark as read).
-      allow update: if isAuthenticated() && request.auth.uid in resource.data.recipientIds;
-      allow delete: if false; // Disallow deleting messages.
+      allow get: if isAuthenticated() && (request.auth.uid == resource.data.senderId || request.auth.uid in resource.data.recipientIds);
+      allow list, create: if isAuthenticated();
+      allow update: if isAuthenticated() && (request.auth.uid in resource.data.recipientIds);
+      allow delete: if false; 
+    }
+
+    match /zapisyHodin/{zapisId} {
+        allow read: if hasRole('administrator') || (isAuthenticated() && isMemberOfClass(resource.data.tridaId));
+        allow write: if hasRole('ucitel') || hasRole('administrator');
+    }
+
+    match /absences/{absenceId} {
+        allow read, write: if hasRole('administrator');
+    }
+    
+    match /omluvenky/{omluvenkaId} {
+        allow read, write: if isAuthenticated();
+    }
+    
+    match /ukoly/{ukolId} {
+        allow read: if isAuthenticated();
+        allow write: if hasRole('ucitel') || hasRole('administrator');
+    }
+
+    match /prijimaci-rizeni/{rizeniId} {
+      // Allow creation by anyone (public form)
+      allow create: if true;
+      // Allow read/update/delete only by admins
+      allow read, update, delete: if hasRole('administrator');
     }
   }
 }
