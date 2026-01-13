@@ -67,9 +67,9 @@ import type { User } from '@/lib/types';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { StudentMatrika } from '@/components/student-matrika';
 import { cn } from '@/lib/utils';
+import { createUser } from '@/ai/flows/create-user';
 
 
 const roleTranslations: { [key in Role]: string } = {
@@ -310,7 +310,6 @@ function UserRow({ user, onEdit, onDelete }: { user: User, onEdit: (user: User) 
 
 function AdminUserManagement() {
     const firestore = useFirestore();
-    const auth = getAuth();
     
     const usersCollection = useMemoFirebase(
       () => (firestore) ? collection(firestore, 'users') : null,
@@ -360,31 +359,34 @@ function AdminUserManagement() {
 
         } else {
           // --- CREATE ---
-          if (!formData.email || !formData.pin) {
-            throw new Error("Email and PIN are required to create a new user.");
+          if (!formData.email || !formData.pin || !formData.name) {
+            throw new Error("Email, PIN and name are required to create a new user.");
           }
 
-          const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.pin);
-          const newFirebaseUser = userCredential.user;
+          const { uid } = await createUser({
+            email: formData.email,
+            password: formData.pin,
+            displayName: formData.name,
+          });
 
           const newUserForDb: Partial<User> = {
-            id: newFirebaseUser.uid,
+            id: uid,
             name: formData.name,
             email: formData.email,
             roles: formData.roles || [],
-            avatarUrl: `https://picsum.photos/seed/${newFirebaseUser.uid}/100/100`,
+            avatarUrl: `https://picsum.photos/seed/${uid}/100/100`,
             ...(formData.studentId && { studentId: formData.studentId }),
             ...(formData.tridaId && { tridaId: formData.tridaId }),
           };
           
           const cleanedData = removeUndefinedFields(newUserForDb);
-          await setDoc(doc(firestore, 'users', newFirebaseUser.uid), cleanedData);
+          await setDoc(doc(firestore, 'users', uid), cleanedData);
           toast({ title: 'Uživatel vytvořen' });
         }
       } catch (e: any) {
         console.error("Error saving user:", e);
         let description = 'Nepodařilo se uložit uživatele.';
-        if (e.code === 'auth/email-already-in-use') {
+        if (e.message.includes('auth/email-already-exists')) {
           description = 'Tento e-mail je již používán jiným účtem.';
         }
         toast({ variant: 'destructive', title: 'Chyba', description });
