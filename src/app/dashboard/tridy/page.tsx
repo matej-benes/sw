@@ -1,164 +1,95 @@
 'use client';
 
-import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { mockStudents, getStudentById } from '@/lib/mock-data';
-import type { Grade, Student } from '@/lib/types';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/hooks/use-toast';
-import { PlusCircle } from 'lucide-react';
-
-const mockClasses = [
-  { id: 'trida-1', name: '1.A', studentCount: 25, teacher: 'Matěj Mikolášek' },
-  { id: 'trida-4', name: '4.C', studentCount: 22, teacher: 'Robert Bartošek' },
-  { id: 'trida-2', name: '2.B', studentCount: 28, teacher: 'Jana Nováková' },
-];
-
-const subjects = ["Matematika", "Český jazyk", "Anglický jazyk", "Dějepis", "Fyzika", "Chemie"];
-
-function AddGradeModal() {
-    const { toast } = useToast();
-    const [selectedStudentId, setSelectedStudentId] = useState('');
-    const [subject, setSubject] = useState('');
-    const [grade, setGrade] = useState('');
-
-    const handleAddGrade = () => {
-        if (!selectedStudentId || !subject || !grade) {
-             toast({
-                variant: "destructive",
-                title: "Chyba",
-                description: "Všechna pole jsou povinná.",
-            });
-            return;
-        }
-        
-        toast({
-            title: "Známka přidána",
-            description: `Známka ${grade} z předmětu ${subject} byla přidána studentovi.`,
-        });
-        // Here you would typically call a function to add the grade to the database
-        console.log({ studentId: selectedStudentId, subject, grade });
-    }
-
-    return (
-         <Dialog>
-            <DialogTrigger asChild>
-                <Button>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Přidat známku
-                </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                <DialogTitle>Přidat novou známku</DialogTitle>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="student" className="text-right">Žák</Label>
-                         <Select onValueChange={setSelectedStudentId}>
-                            <SelectTrigger className="col-span-3">
-                                <SelectValue placeholder="Vyberte žáka" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {mockStudents.map((student) => (
-                                    <SelectItem key={student.id} value={student.id}>{student.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="subject" className="text-right">Předmět</Label>
-                        <Select onValueChange={setSubject}>
-                            <SelectTrigger className="col-span-3">
-                                <SelectValue placeholder="Vyberte předmět" />
-                            </SelectTrigger>
-                            <SelectContent>
-                               {subjects.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="grade" className="text-right">Známka</Label>
-                        <Input id="grade" type="number" min="1" max="5" value={grade} onChange={(e) => setGrade(e.target.value)} className="col-span-3" />
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button type="submit" onClick={handleAddGrade}>Uložit známku</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    )
-}
-
+import { useState, useMemo } from 'react';
+import { useAuth } from '@/hooks/use-auth';
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, where } from 'firebase/firestore';
+import type { Trida, User } from '@/lib/types';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2, Users } from 'lucide-react';
 
 export default function TridyPage() {
-    const [selectedClass, setSelectedClass] = useState(mockClasses[0]);
-    const [grades, setGrades] = useState(mockStudents.flatMap(s => s.grades.map(g => ({...g, studentName: s.name}))));
+    const { user, hasRole, loading: userLoading } = useAuth();
+    const firestore = useFirestore();
+
+    const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+
+    const classesQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        if (hasRole('ucitel') && user) {
+            // Teacher sees classes they teach
+            return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
+        }
+        if (hasRole('administrator')) {
+            // Admin sees all classes
+            return collection(firestore, 'tridy');
+        }
+        // Students and parents don't need a list of all classes, they are in one.
+        if ((hasRole('ziak') || hasRole('rodic')) && user?.tridaId) {
+             return query(collection(firestore, 'tridy'), where('id', '==', user.tridaId));
+        }
+        return null;
+    }, [firestore, user, hasRole]);
+
+    const { data: classes, isLoading: classesLoading } = useCollection<Trida>(classesQuery);
+    
+    const { data: classTeacher, isLoading: teacherLoading } = useCollection<User>(useMemoFirebase(() => {
+        if (!firestore || !selectedClassId) return null;
+        const selectedClass = classes?.find(c => c.id === selectedClassId);
+        if (!selectedClass?.ucitelId) return null;
+        return query(collection(firestore, 'users'), where('id', '==', selectedClass.ucitelId));
+    }, [firestore, selectedClassId, classes]));
+
+
+    const handleSelectClass = (classId: string) => {
+        setSelectedClassId(classId);
+    };
+    
+    const isLoading = userLoading || classesLoading;
+    
+    if(isLoading) {
+        return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>
+    }
 
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-3xl font-bold tracking-tight">Třídní kniha</h1>
-                <p className="text-muted-foreground">Správa tříd a hodnocení žáků.</p>
+                <h1 className="text-3xl font-bold tracking-tight">Třídy</h1>
+                <p className="text-muted-foreground">Přehled tříd a jejich žáků.</p>
             </div>
 
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {mockClasses.map((cls) => (
-                    <Card key={cls.id} className={`cursor-pointer transition-all ${selectedClass.id === cls.id ? 'border-primary ring-2 ring-primary' : 'hover:border-muted-foreground/50'}`} onClick={() => setSelectedClass(cls)}>
+                {classes?.map((cls) => (
+                    <Card key={cls.id} className={`cursor-pointer transition-all ${selectedClassId === cls.id ? 'border-primary ring-2 ring-primary' : 'hover:border-muted-foreground/50'}`} onClick={() => handleSelectClass(cls.id)}>
                         <CardHeader>
-                            <CardTitle>{cls.name}</CardTitle>
-                            <CardDescription>{cls.teacher}</CardDescription>
+                            <CardTitle className="flex items-center justify-between">
+                                <span>{cls.nazev}</span>
+                                <div className="flex items-center text-sm text-muted-foreground">
+                                    <Users className="h-4 w-4 mr-1"/>
+                                    {cls.ziaciIds?.length || 0}
+                                </div>
+                            </CardTitle>
+                            <CardDescription>
+                                {teacherLoading && selectedClassId === cls.id ? 'Načítání...' : (classTeacher?.[0]?.name || 'Třídní učitel nepřiřazen')}
+                            </CardDescription>
                         </CardHeader>
-                        <CardContent>
-                            <p className="text-2xl font-bold">{cls.studentCount}</p>
-                            <p className="text-xs text-muted-foreground">Počet žáků</p>
-                        </CardContent>
                     </Card>
                 ))}
             </div>
 
              <Card>
-                <CardHeader className="flex-row items-center justify-between">
-                    <div>
-                        <CardTitle>Nedávné hodnocení pro třídu {selectedClass.name}</CardTitle>
-                        <CardDescription>Zde je real-time přehled posledních přidaných známek.</CardDescription>
-                    </div>
-                   <AddGradeModal />
+                <CardHeader>
+                    <CardTitle>Detail třídy</CardTitle>
+                     <CardDescription>
+                        {selectedClassId ? `Informace o třídě ${classes?.find(c => c.id === selectedClassId)?.nazev}` : 'Vyberte třídu pro zobrazení detailů.'}
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Žák</TableHead>
-                                <TableHead>Předmět</TableHead>
-                                <TableHead className="text-center">Známka</TableHead>
-                                <TableHead>Datum</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {grades.length > 0 ? (
-                                grades.slice(0, 5).map((grade) => (
-                                    <TableRow key={grade.id}>
-                                        <TableCell className="font-medium">{grade.studentName}</TableCell>
-                                        <TableCell>{grade.subject}</TableCell>
-                                        <TableCell className="text-center font-bold">{grade.grade}</TableCell>
-                                        <TableCell>{new Date(grade.date).toLocaleDateString('cs-CZ')}</TableCell>
-                                    </TableRow>
-                                ))
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={4} className="h-24 text-center">
-                                        Žádné známky k zobrazení.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
+                   {selectedClassId ? (
+                       <div>Zde bude zobrazen seznam žáků a další informace o třídě.</div>
+                   ) : (
+                       <p className="text-center text-muted-foreground py-10">Pro zobrazení informací vyberte jednu z karet tříd výše.</p>
+                   )}
                 </CardContent>
             </Card>
 
