@@ -110,55 +110,6 @@ export function MobileDashboard() {
   const { data: substitutionsData } = useCollection<Substitution>(substitutionsQuery);
   const { data: zapisyData } = useCollection<ZapisHodiny>(zapisyQuery);
 
-  useEffect(() => {
-    const generateSchedulesForWeek = async () => {
-        if (!firestore || !targetClassId || !schedulesData) return;
-
-        const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-        const weekEnd = addDays(weekStart, 6);
-
-        const weekSchedulesExist = schedulesData.some(s => 
-            s.tridaId === targetClassId &&
-            isWithinInterval(parseISO(s.datum), { start: weekStart, end: weekEnd })
-        );
-
-        if (weekSchedulesExist) {
-            return;
-        }
-
-        const templateRef = doc(firestore, 'scheduleTemplates', targetClassId);
-        const templateSnap = await getDoc(templateRef);
-
-        if (!templateSnap.exists()) return;
-
-        const template = templateSnap.data() as ScheduleTemplate;
-        const batch = writeBatch(firestore);
-
-        for (let i = 0; i < 7; i++) {
-            const dayDate = addDays(weekStart, i);
-            const dayDateString = format(dayDate, 'yyyy-MM-dd');
-            const templateDay = template.days.find(d => d.dayIndex === i);
-            const dayLessons = templateDay ? templateDay.lessons : [];
-
-            const rozvrhId = `${targetClassId}-${dayDateString}`;
-            const rozvrhRef = doc(firestore, 'rozvrhy', rozvrhId);
-
-            const newRozvrh: Omit<Rozvrh, 'id'> = {
-                tridaId: targetClassId,
-                datum: dayDateString,
-                timeSlots: template.timeSlots,
-                hodiny: dayLessons,
-            };
-            batch.set(rozvrhRef, newRozvrh);
-        }
-        await batch.commit();
-    };
-
-    if(targetClassId){
-      generateSchedulesForWeek();
-    }
-  }, [firestore, targetClassId, currentDate, schedulesData]);
-
   const handlePrevDay = () => setCurrentDate(prev => subDays(prev, 1));
   const handleNextDay = () => setCurrentDate(prev => addDays(prev, 1));
   const handleSetToday = () => setCurrentDate(new Date());
