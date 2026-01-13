@@ -88,7 +88,7 @@ export function DesktopDashboard() {
     if (hasRole('ziak')) return user?.tridaId;
     if (hasRole('rodic')) return studentData?.tridaId;
     return undefined;
-  }, [hasRole, selectedClassId, user, studentData]);
+  }, [hasRole, user, studentData, selectedClassId]);
 
   const schedulesQuery = useMemoFirebase(() => {
       if (!firestore || !targetClassId) return null;
