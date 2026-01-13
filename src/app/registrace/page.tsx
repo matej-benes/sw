@@ -20,9 +20,10 @@ import { Logo } from '@/components/logo';
 import { Loader2, ShieldCheck, KeyRound, User, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { doc, writeBatch, setDoc, collection } from 'firebase/firestore';
+import { doc, writeBatch, setDoc, collection, updateDoc } from 'firebase/firestore';
 import type { User as AppUser } from '@/lib/types';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { verifyPinByPin } from '@/ai/flows/verify-pin-by-pin';
 
 const pinSchema = z.object({
   pin: z.string().length(6, 'PIN musí mít 6 číslic.'),
@@ -48,9 +49,6 @@ export default function RegistrationPage() {
   const firestore = useFirestore();
   const auth = getAuth();
 
-  const allUsersQuery = useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]);
-  const { data: allUsers, isLoading: usersLoading } = useCollection<AppUser>(allUsersQuery);
-
   const {
     register: registerPin,
     handleSubmit: handleSubmitPin,
@@ -66,21 +64,19 @@ export default function RegistrationPage() {
   const onPinSubmit = async (data: PinFormValues) => {
     setIsLoading(true);
 
-    if (!allUsers) {
-        toast({ variant: 'destructive', title: 'Chyba', description: 'Nelze načíst uživatele.' });
-        setIsLoading(false);
-        return;
+    try {
+        const { user } = await verifyPinByPin({ pin: data.pin });
+        if (user) {
+            setVerifiedUser(user);
+            setStep(2);
+        } else {
+            toast({ variant: 'destructive', title: 'Chyba ověření', description: 'Zadaný PIN nebyl nalezen nebo je nesprávný.' });
+        }
+    } catch(e) {
+        console.error(e);
+        toast({ variant: 'destructive', title: 'Chyba serveru', description: 'Při ověřování PINu došlo k chybě.' });
     }
-
-    const userWithPin = allUsers.find(u => u.pin === data.pin);
-
-    if (userWithPin) {
-        setVerifiedUser(userWithPin);
-        setStep(2);
-    } else {
-        toast({ variant: 'destructive', title: 'Chyba ověření', description: 'Zadaný PIN nebyl nalezen nebo je nesprávný.' });
-    }
-
+    
     setIsLoading(false);
   };
 
@@ -92,22 +88,12 @@ export default function RegistrationPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, verifiedUser.email, data.password);
         const firebaseUser = userCredential.user;
 
-        const batch = writeBatch(firestore);
+        const userDocRef = doc(firestore, 'users', verifiedUser.id);
         
-        // The new document will have the UID from Auth as its ID
-        const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
-        
-        // Prepare the data, excluding the old ID and the now-used PIN
-        const { pin, id, ...userDataToKeep } = verifiedUser;
-
-        // Set the new document with the correct ID and user data
-        batch.set(newUserDocRef, { ...userDataToKeep, id: firebaseUser.uid });
-        
-        // Delete the old temporary document
-        const oldUserDocRef = doc(firestore, 'users', verifiedUser.id);
-        batch.delete(oldUserDocRef);
-
-        await batch.commit();
+        await updateDoc(userDocRef, {
+            id: firebaseUser.uid,
+            pin: null, // Remove the PIN
+        });
 
         setStep(3);
         
@@ -139,13 +125,13 @@ export default function RegistrationPage() {
             <CardContent className="space-y-4">
               <div className="space-y-1">
                 <Label htmlFor="pin">Registrační PIN</Label>
-                <Input id="pin" type="text" {...registerPin('pin')} disabled={isLoading || usersLoading} />
+                <Input id="pin" type="text" {...registerPin('pin')} disabled={isLoading} />
                 {pinErrors.pin && <p className="text-sm text-destructive">{pinErrors.pin.message}</p>}
               </div>
             </CardContent>
             <CardFooter>
-              <Button type="submit" className="w-full" disabled={isLoading || usersLoading}>
-                {(isLoading || usersLoading) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
                 Ověřit PIN
               </Button>
             </CardFooter>
