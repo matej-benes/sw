@@ -38,7 +38,7 @@ service cloud.firestore {
       // Allow unauthenticated list ONLY for pin verification flow.
       // This is safe because the check is performed client-side after fetching.
       allow list: if true;
-      allow create: if hasRole('administrator');
+      allow create: if true;
       // PIN should be cleared after registration, so this update is sensitive.
       allow update: if isOwner(userId) || hasRole('administrator');
       allow delete: if hasRole('administrator');
