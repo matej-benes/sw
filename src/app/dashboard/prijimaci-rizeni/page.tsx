@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useMemo } from 'react';
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
-import { collection, query } from 'firebase/firestore';
+import { collection, query, doc } from 'firebase/firestore';
 import type { PrijimaciRizeni } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,8 @@ export default function PrijimaciRizeniPage() {
         if (!firestore || !selectedApplication) return;
         
         try {
-            await updateDocumentNonBlocking(`prijimaci-rizeni/${selectedApplication.id}`, { status: newStatus });
+            const docRef = doc(firestore, 'prijimaci-rizeni', selectedApplication.id);
+            await updateDocumentNonBlocking(docRef, { status: newStatus });
             toast({
                 title: 'Stav aktualizován',
                 description: `Stav přihlášky pro ${selectedApplication.jmenoDitete} byl změněn na "${newStatus}".`,
