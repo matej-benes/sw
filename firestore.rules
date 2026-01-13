@@ -37,8 +37,7 @@ service cloud.firestore {
       allow get: if isAuthenticated();
       // Allow unauthenticated list ONLY for pin verification flow.
       // This is safe because the check is performed client-side after fetching.
-      allow list: if true;
-      // Allow anyone to create their own user document during registration
+      allow list: if true; 
       allow create: if true; 
       allow update: if isOwner(userId) || hasRole('administrator');
       // Allow owner to delete their temporary registration doc, or admin to delete any user.

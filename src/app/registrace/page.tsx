@@ -23,6 +23,7 @@ import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { doc, writeBatch, setDoc, collection, updateDoc, deleteDoc, getDocs, query, where, getDoc } from 'firebase/firestore';
 import type { User as AppUser } from '@/lib/types';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { updateDocumentNonBlocking } from '@/firebase';
 
 const pinSchema = z.object({
   pin: z.string().length(6, 'PIN musí mít 6 číslic.'),
@@ -50,8 +51,9 @@ export default function RegistrationPage() {
 
   const usersQuery = useMemoFirebase(() => {
     if (!firestore || step !== 1) return null;
-    return collection(firestore, 'users');
+    return query(collection(firestore, 'users'), where('pin', '!=', null));
   }, [firestore, step]);
+
   const { data: allUsers, isLoading: usersLoading } = useCollection<AppUser>(usersQuery);
 
   const {
@@ -88,33 +90,40 @@ export default function RegistrationPage() {
   };
 
   const onPasswordSubmit = async (data: PasswordFormValues) => {
-    if (!verifiedUser || !verifiedUser.email || !verifiedUser.id) return;
+    if (!verifiedUser || !verifiedUser.email || !verifiedUser.id) {
+        toast({ variant: 'destructive', title: 'Chyba', description: 'Uživatelská data nejsou k dispozici.' });
+        return;
+    };
     setIsLoading(true);
 
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, verifiedUser.email, data.password);
         const firebaseUser = userCredential.user;
 
-        // The pre-registered user doc to be deleted
+        // Reference to the original document
+        const userDocRef = doc(firestore, 'users', verifiedUser.id);
+        
+        // Update the document: set the new UID from auth, and remove the PIN.
+        await updateDoc(userDocRef, {
+            id: firebaseUser.uid, // This might not be standard, usually the doc ID is the UID.
+            pin: null, // Or delete(field)
+        });
+
+        // The document ID itself should ideally BE the firebaseUser.uid.
+        // The most robust way is to create a new document with the correct ID and delete the old one.
+        const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
         const oldUserDocRef = doc(firestore, 'users', verifiedUser.id);
         
-        // The new user document will have the UID from Auth as its ID
-        const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
-
-        // Create a new object for the final user data, excluding the PIN and setting the correct ID
-        const finalUserData: Partial<AppUser> = { ...verifiedUser };
+        const finalUserData = { ...verifiedUser };
         delete finalUserData.pin;
         finalUserData.id = firebaseUser.uid;
 
         const batch = writeBatch(firestore);
-        
-        // Set the new document with the final user data.
         batch.set(newUserDocRef, finalUserData);
-        
-        // Delete the old pre-registration document.
         batch.delete(oldUserDocRef);
         
         await batch.commit();
+
 
         setStep(3);
         
@@ -129,9 +138,11 @@ export default function RegistrationPage() {
         }
         console.error(error);
         toast({ variant: 'destructive', title: 'Chyba registrace', description });
+    } finally {
         setIsLoading(false);
     }
   };
+
 
   const renderStep = () => {
     switch (step) {
