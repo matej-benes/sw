@@ -141,9 +141,7 @@ function UserForm({
   
   const onSubmit = (data: UserFormData) => {
     const pin = data.pin || null;
-    const userData = { ...data };
-    delete (userData as any).pin;
-    onSave(userData, pin);
+    onSave(data, pin);
     closeDialog();
   };
 
@@ -245,7 +243,7 @@ function UserForm({
 
 
        <div className="space-y-2">
-        <Label htmlFor="pin">Registrační PIN (Heslo)</Label>
+        <Label htmlFor="pin">Registrační PIN</Label>
         <div className="flex items-center gap-2">
           <Input id="pin" {...register('pin')} placeholder="PIN není vygenerován" />
           <Button type="button" variant="outline" onClick={generatePin}>
@@ -253,7 +251,7 @@ function UserForm({
             Generovat
           </Button>
         </div>
-        {currentPin && <p className="text-xs text-muted-foreground">Tento PIN slouží pro první registraci uživatele a jako jeho heslo.</p>}
+        {currentPin && <p className="text-xs text-muted-foreground">Tento PIN slouží pro první registraci uživatele.</p>}
       </div>
 
       <DialogFooter>
@@ -325,20 +323,25 @@ function AdminUserManagement() {
     const { toast } = useToast();
 
     const removeUndefinedFields = (obj: any) => {
-        return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
+        return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined && v !== null));
     };
 
     const handleSaveUser = async (formData: Partial<User>, pin: string | null) => {
       if (!firestore || !adminUser?.email) return;
 
       try {
+        const dataToSave: Partial<User> = {
+            name: formData.name,
+            email: formData.email,
+            roles: formData.roles,
+            tridaId: formData.tridaId,
+            studentId: formData.studentId,
+            pin: pin,
+        };
+        const cleanedData = removeUndefinedFields(dataToSave);
+
         if (editingUser) {
           const userRef = doc(firestore, 'users', editingUser.id);
-          const dataToUpdate: Partial<User> = {
-            ...formData,
-            pin: pin || editingUser.pin,
-          };
-          const cleanedData = removeUndefinedFields(dataToUpdate);
           await updateDoc(userRef, cleanedData);
           toast({ title: 'Uživatel aktualizován' });
 
@@ -352,14 +355,11 @@ function AdminUserManagement() {
           const newUserDocRef = doc(collection(firestore, 'users'));
           const preRegUserForDb: Partial<User> = {
             id: newUserDocRef.id,
-            email: formData.email,
-            pin: pin,
-            ...formData,
-            avatarUrl: `https://picsum.photos/seed/${formData.email}/100/100`, // Use email for seed
+            ...cleanedData,
+            avatarUrl: `https://picsum.photos/seed/${formData.email}/100/100`,
           };
 
-          const cleanedData = removeUndefinedFields(preRegUserForDb);
-          await setDoc(newUserDocRef, cleanedData);
+          await setDoc(newUserDocRef, preRegUserForDb);
           
           toast({ title: 'Uživatel před-registrován', description: 'Uživatel nyní může dokončit registraci pomocí svého e-mailu a PINu.' });
         }

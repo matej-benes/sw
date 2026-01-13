@@ -23,11 +23,10 @@ import { useFirestore } from '@/firebase';
 import { doc, writeBatch, setDoc } from 'firebase/firestore';
 import type { User as AppUser } from '@/lib/types';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
-import { verifyPin } from '@/ai/flows/verify-pin';
+import { verifyPinByPin } from '@/ai/flows/verify-pin-by-pin';
 
 
 const pinSchema = z.object({
-  email: z.string().email('Neplatný formát e-mailu.'),
   pin: z.string().length(6, 'PIN musí mít 6 číslic.'),
 });
 
@@ -67,10 +66,10 @@ export default function RegistrationPage() {
   const onPinSubmit = async (data: PinFormValues) => {
     setIsLoading(true);
     try {
-        const result = await verifyPin(data);
+        const result = await verifyPinByPin(data);
 
         if (!result.user) {
-            toast({ variant: 'destructive', title: 'Chyba ověření', description: 'Kombinace e-mailu a PINu nebyla nalezena nebo je nesprávná.' });
+            toast({ variant: 'destructive', title: 'Chyba ověření', description: 'Zadaný PIN nebyl nalezen nebo je nesprávný.' });
             setIsLoading(false);
             return;
         }
@@ -130,14 +129,9 @@ export default function RegistrationPage() {
             <CardHeader className="text-center">
                 <Logo className="mx-auto h-12 w-12 text-primary" />
                 <CardTitle className="mt-4 text-2xl">První přihlášení</CardTitle>
-                <CardDescription>Zadejte svůj e-mail a registrační PIN, který vám byl přidělen.</CardDescription>
+                <CardDescription>Zadejte svůj 6-místný registrační PIN, který vám byl přidělen.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-1">
-                <Label htmlFor="email">E-mail</Label>
-                <Input id="email" type="email" {...registerPin('email')} disabled={isLoading} />
-                {pinErrors.email && <p className="text-sm text-destructive">{pinErrors.email.message}</p>}
-              </div>
               <div className="space-y-1">
                 <Label htmlFor="pin">Registrační PIN</Label>
                 <Input id="pin" type="text" {...registerPin('pin')} disabled={isLoading} />
@@ -147,7 +141,7 @@ export default function RegistrationPage() {
             <CardFooter>
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                Ověřit
+                Ověřit PIN
               </Button>
             </CardFooter>
           </form>
