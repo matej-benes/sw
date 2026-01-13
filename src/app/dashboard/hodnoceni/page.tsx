@@ -78,9 +78,9 @@ function TeacherView() {
     const { data: students, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
 
     const predmetyQuery = useMemoFirebase(() => {
-        if (!firestore || !activeOrganizationId) return null;
-        return query(collection(firestore, 'predmety'), where('organizationId', '==', activeOrganizationId));
-    }, [firestore, activeOrganizationId]);
+        if (!firestore) return null;
+        return collection(firestore, 'predmety');
+    }, [firestore]);
     const { data: predmety, isLoading: predmetyLoading } = useCollection<Predmet>(predmetyQuery);
 
     const { register, handleSubmit, control, reset, setValue, watch, formState: { errors } } = useForm<GradingFormData>({
