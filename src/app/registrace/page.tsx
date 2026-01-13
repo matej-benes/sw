@@ -67,7 +67,7 @@ export default function RegistrationPage() {
     try {
         const { user } = await verifyPinByPin({ pin: data.pin });
         if (user) {
-            setVerifiedUser(user);
+            setVerifiedUser(user as AppUser);
             setStep(2);
         } else {
             toast({ variant: 'destructive', title: 'Chyba ověření', description: 'Zadaný PIN nebyl nalezen nebo je nesprávný.' });
