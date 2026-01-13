@@ -67,9 +67,8 @@ import type { User } from '@/lib/types';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
-import { StudentMatrika } from '@/components/student-matrika';
 import { cn } from '@/lib/utils';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 
 
 const roleTranslations: { [key in Role]: string } = {
@@ -106,7 +105,7 @@ function UserForm({
 }: {
   user?: User | null;
   allUsers: User[],
-  onSave: (data: Partial<User>) => void;
+  onSave: (data: Partial<User>, pin: string | null) => void;
   closeDialog: () => void;
 }) {
   const { hasRole } = useAuth();
@@ -137,18 +136,23 @@ function UserForm({
       studentId: user?.studentId || null,
     },
   });
-
+  
+  const currentPin = watch('pin');
+  
   const onSubmit = (data: UserFormData) => {
-    onSave(data);
+    const pin = data.pin || null;
+    const userData = { ...data };
+    delete (userData as any).pin;
+    onSave(userData, pin);
     closeDialog();
   };
+
 
   const generatePin = () => {
     const newPin = Math.floor(100000 + Math.random() * 900000).toString();
     setValue('pin', newPin, { shouldValidate: true });
   };
   
-  const currentPin = watch('pin');
   const roles = watch('roles');
   const isZiak = roles.includes('ziak');
   const isRodic = roles.includes('rodic');
@@ -165,10 +169,6 @@ function UserForm({
   }, [isZiak, isRodic, setValue]);
   
   const students = useMemo(() => allUsers.filter(u => u.roles?.includes('ziak')), [allUsers]);
-
-  if (user && roles.includes('ziak')) {
-    return <StudentMatrika user={user} onSave={onSave} closeDialog={closeDialog} />
-  }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
@@ -328,7 +328,7 @@ function AdminUserManagement() {
         return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
     };
 
-    const handleSaveUser = async (formData: Partial<User>) => {
+    const handleSaveUser = async (formData: Partial<User>, pin: string | null) => {
       if (!firestore || !adminUser?.email) return;
 
       try {
@@ -358,24 +358,25 @@ function AdminUserManagement() {
           toast({ title: 'Uživatel aktualizován' });
 
         } else {
-          if (!formData.email || !formData.pin || !formData.name) {
+          if (!formData.email || !pin || !formData.name) {
             throw new Error("Email, PIN a jméno jsou povinné pro vytvoření nového uživatele.");
           }
           
-          // This is a workaround. We create the user, which logs them in,
-          // then we have to log the admin back in.
           const adminEmail = adminUser.email;
-          const adminPassword = prompt("Pro potvrzení zadejte prosím znovu své administrátorské heslo:");
-
-          if (!adminPassword) {
-            toast({ variant: 'destructive', title: 'Operace zrušena', description: 'Heslo nebylo zadáno.' });
-            return;
-          }
-
-          // Create the new user
-          const userCredential = await createUserWithEmailAndPassword(getAuth(), formData.email, formData.pin);
+          
+          const userCredential = await createUserWithEmailAndPassword(getAuth(), formData.email, pin);
           const newUser = userCredential.user;
           
+          // Re-authenticate as admin
+          const adminPassword = prompt("Pro potvrzení zadejte prosím znovu své administrátorské heslo:");
+          if (!adminPassword) {
+              toast({ variant: 'destructive', title: 'Operace přerušena', description: 'Novému uživateli byl vytvořen účet, ale vy jste byli odhlášeni. Přihlaste se prosím znovu.' });
+              await getAuth().signOut();
+              return;
+          }
+          await signIn(adminEmail, adminPassword);
+
+
           const newUserForDb: Partial<User> = {
             id: newUser.uid,
             name: formData.name,
@@ -389,17 +390,12 @@ function AdminUserManagement() {
           const cleanedData = removeUndefinedFields(newUserForDb);
           await setDoc(doc(firestore, 'users', newUser.uid), cleanedData);
           
-          toast({ title: 'Uživatel vytvořen, přihlašuji zpět admina...' });
-
-          // Sign the admin back in
-          await signIn(adminEmail, adminPassword);
-          toast({ title: 'Administrátor znovu přihlášen' });
-
+          toast({ title: 'Uživatel vytvořen' });
         }
       } catch (e: any) {
         console.error("Error saving user:", e);
         let description = 'Nepodařilo se uložit uživatele.';
-        if (e.code === 'auth/email-already-in-use' || e.message.includes('auth/email-already-exists')) {
+        if (e.code === 'auth/email-already-in-use') {
           description = 'Tento e-mail je již používán jiným účtem.';
         } else if (e.code === 'auth/wrong-password') {
             description = 'Bylo zadáno nesprávné administrátorské heslo. Uživatel byl vytvořen, ale vy jste byli odhlášeni.';
@@ -485,7 +481,7 @@ function AdminUserManagement() {
             </Table>
           </CardContent>
         </Card>
-        <DialogContent className={cn("sm:max-w-[425px]", editingUser && editingUser.roles?.includes('ziak') && "max-w-4xl")}>
+        <DialogContent className={cn("sm:max-w-[425px]")}>
           <DialogHeader>
             <DialogTitle>
               {editingUser ? 'Upravit uživatele' : 'Přidat nového uživatele'}
