@@ -2,7 +2,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Save, Loader2, Trash2, Edit, CalendarIcon, X, Info } from "lucide-react";
+import { PlusCircle, Save, Loader2, Trash2, Edit, CalendarIcon, X, Info, VenetianMask } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -37,6 +37,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { DateRange } from "react-day-picker";
 import { addDays } from "date-fns";
 import { Table, TableBody, TableCell, TableHeader, TableRow, TableHead } from "@/components/ui/table";
+import { ScheduleGenerator } from "@/components/schedule-generator";
 
 
 const daysOfWeek = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
@@ -924,6 +925,7 @@ function SchedulePreview() {
 }
 
 export default function RozvrhySuplovaniPage() {
+    const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
     return (
         <div className="space-y-6">
             <div>
@@ -938,10 +940,17 @@ export default function RozvrhySuplovaniPage() {
                         <TabsTrigger value="suplovani">Plánování suplování</TabsTrigger>
                         <TabsTrigger value="nahled">Náhled a úpravy</TabsTrigger>
                     </TabsList>
-                    <Button>
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Přidat novou akci
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button onClick={() => setIsGeneratorOpen(true)}>
+                            <VenetianMask className="mr-2 h-4 w-4" />
+                            Generovat rozvrh z šablon
+                        </Button>
+                        <Button>
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Přidat novou akci
+                        </Button>
+                    </div>
+
                 </div>
                 <TabsContent value="rozvrhy" className="mt-4">
                    <ScheduleEditor />
@@ -956,8 +965,10 @@ export default function RozvrhySuplovaniPage() {
                     <SchedulePreview />
                 </TabsContent>
             </Tabs>
+             <ScheduleGenerator 
+                isOpen={isGeneratorOpen}
+                onOpenChange={setIsGeneratorOpen}
+            />
         </div>
     );
 }
-
-    
