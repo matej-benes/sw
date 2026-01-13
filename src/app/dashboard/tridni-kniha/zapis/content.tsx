@@ -56,7 +56,7 @@ export default function TridniKnihaZapisContent() {
   const searchParams = useSearchParams();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const { user: teacherUser, activeOrganizationId } = useAuth();
+  const { user: teacherUser } = useAuth();
 
   const tridaId = searchParams.get('tridaId');
   const datum = searchParams.get('datum');
@@ -73,6 +73,7 @@ export default function TridniKnihaZapisContent() {
   const [students, setStudents] = useState<StudentWithAttendance[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
 
   // Fetch existing entry if it exists
   const zapisRef = useMemoFirebase(() => {
@@ -103,6 +104,12 @@ export default function TridniKnihaZapisContent() {
   const { data: studentDocs, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
   
   const isClassTeacher = teacherUser?.id === tridaData?.ucitelId;
+
+    useEffect(() => {
+        if(tridaData?.organizationId) {
+            setOrganizationId(tridaData.organizationId);
+        }
+  }, [tridaData]);
 
   useEffect(() => {
     if (!studentsLoading && studentDocs) {
@@ -135,7 +142,7 @@ export default function TridniKnihaZapisContent() {
 
 
   const handleSave = async (goBack: boolean) => {
-    if (!firestore || !teacherUser || !zapisId || !tridaId || !datum || !hodina || !predmetId || !activeOrganizationId) {
+    if (!firestore || !teacherUser || !zapisId || !tridaId || !datum || !hodina || !predmetId || !organizationId) {
         toast({ variant: 'destructive', title: 'Chyba', description: 'Nekompletní data pro uložení.'});
         return;
     }
@@ -149,7 +156,7 @@ export default function TridniKnihaZapisContent() {
         ucitelId: teacherUser.id,
         topic,
         note,
-        organizationId: activeOrganizationId,
+        organizationId: organizationId,
         attendance: students.map(s => ({
             studentId: s.id,
             status: s.attendanceStatus,
@@ -169,7 +176,7 @@ export default function TridniKnihaZapisContent() {
         const absenceId = `${student.id}-${datum}-${hodina}`;
         const absenceRef = doc(firestore, 'absences', absenceId);
         const absenceData: Omit<Absence, 'id'> = {
-          organizationId: activeOrganizationId,
+          organizationId: organizationId,
           studentId: student.id,
           tridaId,
           datum,
@@ -436,5 +443,3 @@ export default function TridniKnihaZapisContent() {
     </div>
   );
 }
-
-    

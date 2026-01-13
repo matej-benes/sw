@@ -18,17 +18,22 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   hasRole: (role: Role) => boolean;
   isSuperAdmin: () => boolean;
+  activeOrganization: Organization | null;
+  activeOrganizationId: string | null;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [activeOrganization, setActiveOrganization] = useState<Organization | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
   const firestore = useFirestore();
   const auth = getAuth();
+  
+  const activeOrganizationId = activeOrganization?.id || null;
 
   useEffect(() => {
     const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
@@ -89,6 +94,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut, 
     hasRole, 
     isSuperAdmin, 
+    activeOrganization,
+    activeOrganizationId
   };
 
    if (loading && ['/', '/registrace'].includes(pathname)) {
