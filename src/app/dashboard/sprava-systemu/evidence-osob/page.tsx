@@ -343,20 +343,23 @@ function AdminUserManagement() {
           toast({ title: 'Uživatel aktualizován' });
 
         } else {
-          // This path is now for PRE-REGISTERING a user in Firestore.
+          // This path is for PRE-REGISTERING a user in Firestore.
           // The actual Firebase Auth user is created in the /registrace flow.
           if (!formData.email || !pin || !formData.name) {
             throw new Error("Email, PIN a jméno jsou povinné pro vytvoření nového uživatele.");
           }
 
+          const newUserDocRef = doc(collection(firestore, 'users'));
           const preRegUserForDb: Partial<User> = {
+            id: newUserDocRef.id,
             ...formData,
+            email: formData.email,
             pin: pin,
             avatarUrl: `https://picsum.photos/seed/${formData.email}/100/100`, // Use email for seed
           };
 
           const cleanedData = removeUndefinedFields(preRegUserForDb);
-          await addDocumentNonBlocking(collection(firestore, 'users'), cleanedData);
+          await setDoc(newUserDocRef, cleanedData);
           
           toast({ title: 'Uživatel před-registrován', description: 'Uživatel nyní může dokončit registraci pomocí svého e-mailu a PINu.' });
         }
