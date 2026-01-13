@@ -352,9 +352,9 @@ function AdminUserManagement() {
           const newUserDocRef = doc(collection(firestore, 'users'));
           const preRegUserForDb: Partial<User> = {
             id: newUserDocRef.id,
-            ...formData,
             email: formData.email,
             pin: pin,
+            ...formData,
             avatarUrl: `https://picsum.photos/seed/${formData.email}/100/100`, // Use email for seed
           };
 
