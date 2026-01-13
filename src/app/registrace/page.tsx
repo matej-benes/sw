@@ -20,7 +20,7 @@ import { Logo } from '@/components/logo';
 import { Loader2, ShieldCheck, KeyRound, User, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { doc, writeBatch, setDoc, collection, updateDoc } from 'firebase/firestore';
+import { doc, writeBatch, setDoc, collection, updateDoc, deleteDoc } from 'firebase/firestore';
 import type { User as AppUser } from '@/lib/types';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 
@@ -95,12 +95,23 @@ export default function RegistrationPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, verifiedUser.email, data.password);
         const firebaseUser = userCredential.user;
 
-        const userDocRef = doc(firestore, 'users', verifiedUser.id);
+        const batch = writeBatch(firestore);
+
+        // Reference to the new, final user document with the correct ID (from Auth)
+        const newUserDocRef = doc(firestore, 'users', firebaseUser.uid);
         
-        await updateDoc(userDocRef, {
-            id: firebaseUser.uid,
-            pin: null, // Remove the PIN
-        });
+        // Data for the new document (excluding PIN)
+        const finalUserData = { ...verifiedUser };
+        delete (finalUserData as any).pin; // Ensure PIN is not copied
+        finalUserData.id = firebaseUser.uid; // Set the correct ID
+
+        batch.set(newUserDocRef, finalUserData);
+
+        // Reference to the old, temporary document with the random ID
+        const oldUserDocRef = doc(firestore, 'users', verifiedUser.id);
+        batch.delete(oldUserDocRef); // Delete the temporary document
+
+        await batch.commit();
 
         setStep(3);
         
