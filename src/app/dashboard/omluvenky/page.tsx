@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useFirestore, useCollection, useDoc, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, doc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, doc, Timestamp, getDoc } from 'firebase/firestore';
 import type { Omluvenka, User, Trida, Rozvrh, LessonBlock } from '@/lib/types';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -52,6 +52,7 @@ function ParentExcuseForm() {
             duvod: data.duvod,
             status: 'pending',
             datumPodani: Timestamp.now(),
+            organizationId: 'default', // Placeholder
         };
 
         await addDocumentNonBlocking(collection(firestore, 'omluvenky'), newOmluvenka);
@@ -145,6 +146,7 @@ function StudentExcuseForm() {
             duvod: data.duvod,
             status: 'pending',
             datumPodani: Timestamp.now(),
+            organizationId: 'default', // Placeholder
         };
 
         await addDocumentNonBlocking(collection(firestore, 'omluvenky'), newOmluvenka);

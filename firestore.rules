@@ -43,7 +43,7 @@ service cloud.firestore {
       // or owner/admin for subsequent updates.
       allow update: if isAuthenticated() || isOwner(userId) || hasRole('administrator');
       // Allow owner to delete their temporary registration doc, or admin to delete any user.
-      allow delete: if hasRole('administrator') || isOwner(userId);
+      allow delete: if isAuthenticated();
     }
     
     match /gradings/{gradingId} {
