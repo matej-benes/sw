@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import React, { createContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { useFirestore } from '@/firebase';
 import { getAuth, signInWithEmailAndPassword, signOut as firebaseSignOut, onIdTokenChanged, type User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, collection, getDocs, query, limit } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, query, limit, where } from 'firebase/firestore';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import { toast } from '@/hooks/use-toast';
 import { parseISO, isPast } from 'date-fns';
@@ -52,24 +52,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       if (firebaseUser && firestore) {
            const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-           const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
            
            try {
-                const [userDocSnap, orgsSnap] = await Promise.all([
-                    getDoc(userDocRef),
-                    getDocs(orgsQuery)
-                ]);
+                const userDocSnap = await getDoc(userDocRef);
 
                 if (userDocSnap.exists()) {
                     const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
                     setUser(userData);
-
-                    if (!orgsSnap.empty) {
-                        const orgData = { id: orgsSnap.docs[0].id, ...orgsSnap.docs[0].data() } as Organization;
-                        setActiveOrganization(orgData);
+                    
+                    // Now fetch the organization based on user's organizationId
+                    if (userData.organizationId) {
+                        const orgDocRef = doc(firestore, 'organizations', userData.organizationId);
+                        const orgDocSnap = await getDoc(orgDocRef);
+                        if (orgDocSnap.exists()) {
+                            setActiveOrganization({ id: orgDocSnap.id, ...orgDocSnap.data() } as Organization);
+                        } else {
+                             // Fallback to first org if user's org doesn't exist for some reason
+                            const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
+                            const orgsSnap = await getDocs(orgsQuery);
+                            if (!orgsSnap.empty) {
+                                setActiveOrganization({ id: orgsSnap.docs[0].id, ...orgsSnap.docs[0].data() } as Organization);
+                            } else {
+                                setActiveOrganization(null);
+                            }
+                        }
                     } else {
-                        setActiveOrganization(null);
+                        // Fallback for users without an organizationId
+                        const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
+                        const orgsSnap = await getDocs(orgsQuery);
+                         if (!orgsSnap.empty) {
+                            setActiveOrganization({ id: orgsSnap.docs[0].id, ...orgsSnap.docs[0].data() } as Organization);
+                        } else {
+                            setActiveOrganization(null);
+                        }
                     }
+
                 } else {
                     console.log(`No user document found for UID: ${firebaseUser.uid}, signing out.`);
                     await firebaseSignOut(auth);

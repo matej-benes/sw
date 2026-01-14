@@ -22,6 +22,7 @@ export interface User {
   studentId?: string; 
   pin?: string | null;
   isSuperAdmin?: boolean;
+  organizationId?: string;
 
   // Student-specific data (matrika)
   rodneCislo?: string;
@@ -58,7 +59,8 @@ export interface Grading {
   vaha: number;
   komentar: string;
   ucitelId: string;
-  createdAt: Timestamp;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 
