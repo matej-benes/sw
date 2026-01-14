@@ -61,7 +61,6 @@ function TeacherView() {
 
     const gradingsQuery = useMemoFirebase(() => {
         if (!user?.id || !firestore) return null;
-        // The orderBy was causing a composite index requirement. We will sort on the client.
         return query(collection(firestore, 'grades'), where('ucitelId', '==', user.id));
     }, [firestore, user?.id]);
 
@@ -69,7 +68,11 @@ function TeacherView() {
 
     const sortedGradings = useMemo(() => {
         if (!gradings) return [];
-        return [...gradings].sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis());
+        return [...gradings].sort((a, b) => {
+            const timeA = a.createdAt ? (a.createdAt as Timestamp).toMillis() : 0;
+            const timeB = b.createdAt ? (b.createdAt as Timestamp).toMillis() : 0;
+            return timeB - timeA;
+        });
     }, [gradings]);
 
 
@@ -90,9 +93,9 @@ function TeacherView() {
     const { data: students, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
 
     const predmetyQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
-        return collection(firestore, 'predmety');
-    }, [firestore]);
+        if (!firestore || !activeOrganizationId) return null;
+        return query(collection(firestore, 'predmety'), where('organizationId', '==', activeOrganizationId));
+    }, [firestore, activeOrganizationId]);
     const { data: predmety, isLoading: predmetyLoading } = useCollection<Predmet>(predmetyQuery);
 
     const { register, handleSubmit, control, reset, setValue, watch, formState: { errors } } = useForm<GradingFormData>({
@@ -101,9 +104,9 @@ function TeacherView() {
     });
     
     const allStudentsQuery = useMemoFirebase(() => {
-        if (!firestore || !activeOrganizationId) return null;
-        return query(collection(firestore, 'users'), where('roles', 'array-contains', 'ziak'), where('organizationId', '==', activeOrganizationId));
-    }, [firestore, activeOrganizationId]);
+        if (!firestore) return null;
+        return query(collection(firestore, 'users'), where('roles', 'array-contains', 'ziak'));
+    }, [firestore]);
     const { data: allStudents } = useCollection<User>(allStudentsQuery);
 
 
