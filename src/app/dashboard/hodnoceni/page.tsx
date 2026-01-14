@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, writeBatch, limit, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, writeBatch, limit, getDocs, Timestamp, getDoc } from 'firebase/firestore';
 import type { Grading, User, Trida, Predmet } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -92,23 +92,17 @@ function TeacherView() {
     }, [firestore, selectedClassId]);
     const { data: students, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
 
-    const predmetyQuery = useMemoFirebase(() => {
-        if (!firestore || !activeOrganizationId) return null;
-        return query(collection(firestore, 'predmety'), where('organizationId', '==', activeOrganizationId));
-    }, [firestore, activeOrganizationId]);
-    const { data: predmety, isLoading: predmetyLoading } = useCollection<Predmet>(predmetyQuery);
-
     const { register, handleSubmit, control, reset, setValue, watch, formState: { errors } } = useForm<GradingFormData>({
         resolver: zodResolver(gradingSchema),
         defaultValues: { studentIds: [], vaha: 1.0, znamka: 1 }
     });
     
-    const allStudentsQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, 'users'), where('roles', 'array-contains', 'ziak'));
+    const predmetyQuery = useMemoFirebase(() => {
+      if (!firestore) return null;
+      return collection(firestore, 'predmety');
     }, [firestore]);
-    const { data: allStudents } = useCollection<User>(allStudentsQuery);
-
+    const { data: predmety, isLoading: predmetyLoading } = useCollection<Predmet>(predmetyQuery);
+    
 
     const handleOpenDialog = useCallback((grading: Grading | null) => {
         setEditingGrading(grading);
@@ -119,8 +113,10 @@ function TeacherView() {
             setValue('znamka', grading.znamka);
             setValue('vaha', grading.vaha);
             setValue('komentar', grading.komentar || '');
-            const studentClass = allStudents?.find(s => s.id === grading.ziakId)?.tridaId;
-            setSelectedClassId(studentClass || null);
+            // Find student to set the selected class
+            const studentClassId = students?.find(s => s.id === grading.ziakId)?.tridaId;
+            if(studentClassId) setSelectedClassId(studentClassId);
+
         } else { // New mode
             reset({ 
                 studentIds: [], 
@@ -134,7 +130,7 @@ function TeacherView() {
             }
         }
         setIsDialogOpen(true);
-    }, [reset, setValue, tridaIdFromParams, predmetIdFromParams, allStudents]);
+    }, [reset, setValue, tridaIdFromParams, predmetIdFromParams, students]);
 
     // Set default class or class from params
     useEffect(() => {
@@ -153,25 +149,32 @@ function TeacherView() {
     }, [tridaIdFromParams, predmetIdFromParams, handleOpenDialog]);
 
     const handleSaveGrading = async (data: GradingFormData) => {
-        if (!user || !firestore || !allStudents || !activeOrganizationId) {
+        if (!user || !firestore || !activeOrganizationId) {
             toast({ variant: 'destructive', title: 'Chyba', description: 'Nekompletní data pro uložení.' });
-            return;
-        }
-        
-        const predmet = predmety?.find(p => p.id === data.predmetId);
-        if (!predmet) {
-            toast({ variant: 'destructive', title: 'Chyba', description: 'Vybraný předmět nebyl nalezen.' });
             return;
         }
 
         try {
-             if (editingGrading) {
-                const student = allStudents.find(s => s.id === data.studentIds[0]);
-                if(!student) return;
+            // Fetch subject and students directly to ensure data is available
+            const predmetDoc = await getDoc(doc(firestore, 'predmety', data.predmetId));
+            if (!predmetDoc.exists()) {
+                toast({ variant: 'destructive', title: 'Chyba', description: 'Vybraný předmět nebyl nalezen.' });
+                return;
+            }
+            const predmet = predmetDoc.data() as Predmet;
+
+            if (editingGrading) {
+                const studentDoc = await getDoc(doc(firestore, 'users', data.studentIds[0]));
+                 if(!studentDoc.exists()) {
+                    toast({ variant: 'destructive', title: 'Chyba', description: 'Vybraný student nebyl nalezen.' });
+                    return;
+                }
+                const student = studentDoc.data() as User;
+                
                 const gradingData: Partial<Grading> = {
                     ...data,
                     organizationId: activeOrganizationId,
-                    predmetId: predmet.id,
+                    predmetId: predmetDoc.id,
                     tridaId: student.tridaId,
                     ziakId: student.id,
                     datum: format(new Date(), 'dd.MM.yyyy'),
@@ -185,28 +188,29 @@ function TeacherView() {
                 await updateDoc(doc(firestore, 'grades', editingGrading.id), gradingData);
                 toast({ title: 'Hodnocení upraveno', description: 'Změny byly úspěšně uloženy.' });
             } else {
+                const studentsQuery = query(collection(firestore, 'users'), where('id', 'in', data.studentIds));
+                const studentDocs = await getDocs(studentsQuery);
+                const studentsData = studentDocs.docs.map(d => d.data() as User);
+
                 const batch = writeBatch(firestore);
-                data.studentIds.forEach(studentId => {
-                    const student = allStudents.find(s => s.id === studentId);
-                    if (student) {
-                        const newGradingDoc = doc(collection(firestore, 'grades'));
-                        const gradingData: Omit<Grading, 'id'> = {
-                            organizationId: activeOrganizationId,
-                            predmetId: predmet.id,
-                            tridaId: student.tridaId || '',
-                            ziakId: studentId,
-                            znamka: data.znamka,
-                            vaha: data.vaha,
-                            komentar: data.komentar || '',
-                            datum: format(new Date(), 'dd.MM.yyyy'),
-                            cas: format(new Date(), 'HH:mm'),
-                            ziakJmeno: student.name,
-                            predmet: predmet.name,
-                            ucitelId: user.id,
-                            createdAt: Timestamp.now(),
-                        };
-                        batch.set(newGradingDoc, gradingData);
-                    }
+                studentsData.forEach(student => {
+                    const newGradingDoc = doc(collection(firestore, 'grades'));
+                    const gradingData: Omit<Grading, 'id'> = {
+                        organizationId: activeOrganizationId,
+                        predmetId: predmetDoc.id,
+                        tridaId: student.tridaId || '',
+                        ziakId: student.id,
+                        znamka: data.znamka,
+                        vaha: data.vaha,
+                        komentar: data.komentar || '',
+                        datum: format(new Date(), 'dd.MM.yyyy'),
+                        cas: format(new Date(), 'HH:mm'),
+                        ziakJmeno: student.name,
+                        predmet: predmet.name,
+                        ucitelId: user.id,
+                        createdAt: Timestamp.now(),
+                    };
+                    batch.set(newGradingDoc, gradingData);
                 });
                 await batch.commit();
                 toast({ title: 'Hodnocení přidáno', description: `Nové hodnocení bylo úspěšně uloženo pro ${data.studentIds.length} žáků.` });
