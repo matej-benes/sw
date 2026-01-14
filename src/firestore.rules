@@ -46,7 +46,7 @@ service cloud.firestore {
       allow delete: if isAuthenticated();
     }
     
-    match /gradings/{gradingId} {
+    match /grades/{gradeId} {
       allow get: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
       allow list: if hasAnyRole(['ucitel', 'administrator']);
       allow create: if hasAnyRole(['ucitel', 'administrator']);
