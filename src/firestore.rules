@@ -48,11 +48,10 @@ service cloud.firestore {
     
     match /grades/{gradeId} {
       allow get: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
-      allow list: if (hasAnyRole(['ucitel', 'administrator'])) || 
-                     (isAuthenticated() && request.query.where.ziakId == request.auth.uid) ||
-                     (isAuthenticated() && isMyStudent(request.query.where.ziakId));
-      allow create: if hasAnyRole(['ucitel', 'administrator']);
-      allow update, delete: if hasAnyRole(['ucitel', 'administrator']);
+      allow list: if (hasAnyRole(['ucitel', 'administrator'])) ||
+                 (isAuthenticated() && request.query.where.ziakId == request.auth.uid) ||
+                 (isAuthenticated() && isMyStudent(request.query.where.ziakId));
+      allow create, update, delete: if hasAnyRole(['ucitel', 'administrator']);
     }
     
     match /tridy/{tridaId} {
