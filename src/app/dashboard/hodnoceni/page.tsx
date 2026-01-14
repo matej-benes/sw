@@ -155,7 +155,6 @@ function TeacherView() {
         }
 
         try {
-            // Fetch subject and students directly to ensure data is available
             const predmetDoc = await getDoc(doc(firestore, 'predmety', data.predmetId));
             if (!predmetDoc.exists()) {
                 toast({ variant: 'destructive', title: 'Chyba', description: 'Vybraný předmět nebyl nalezen.' });

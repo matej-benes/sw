@@ -60,24 +60,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
                     setUser(userData);
                     
-                    // Now fetch the organization based on user's organizationId
                     if (userData.organizationId) {
                         const orgDocRef = doc(firestore, 'organizations', userData.organizationId);
                         const orgDocSnap = await getDoc(orgDocRef);
                         if (orgDocSnap.exists()) {
                             setActiveOrganization({ id: orgDocSnap.id, ...orgDocSnap.data() } as Organization);
                         } else {
-                             // Fallback to first org if user's org doesn't exist for some reason
-                            const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
-                            const orgsSnap = await getDocs(orgsQuery);
-                            if (!orgsSnap.empty) {
-                                setActiveOrganization({ id: orgsSnap.docs[0].id, ...orgsSnap.docs[0].data() } as Organization);
-                            } else {
-                                setActiveOrganization(null);
-                            }
+                            setActiveOrganization(null);
                         }
                     } else {
-                        // Fallback for users without an organizationId
+                        // Fallback for users without an organizationId, e.g. super admins
                         const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
                         const orgsSnap = await getDocs(orgsQuery);
                          if (!orgsSnap.empty) {

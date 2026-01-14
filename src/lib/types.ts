@@ -61,6 +61,7 @@ export interface Grading {
   ucitelId: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+  tridaId: string;
 }
 
 
