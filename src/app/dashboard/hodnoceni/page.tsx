@@ -61,9 +61,16 @@ function TeacherView() {
 
     const gradingsQuery = useMemoFirebase(() => {
         if (!user?.id || !firestore) return null;
-        return query(collection(firestore, 'grades'), where('ucitelId', '==', user.id), orderBy('createdAt', 'desc'));
+        // The orderBy was causing a composite index requirement. We will sort on the client.
+        return query(collection(firestore, 'grades'), where('ucitelId', '==', user.id));
     }, [firestore, user?.id]);
+
     const { data: gradings, isLoading } = useCollection<Grading>(gradingsQuery);
+
+    const sortedGradings = useMemo(() => {
+        if (!gradings) return [];
+        return [...gradings].sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis());
+    }, [gradings]);
 
 
     const teacherClassesQuery = useMemoFirebase(() => {
@@ -163,7 +170,6 @@ function TeacherView() {
                     organizationId: activeOrganizationId,
                     predmetId: predmet.id,
                     tridaId: student.tridaId,
-                    studentIds: undefined, // remove from data
                     ziakId: student.id,
                     datum: format(new Date(), 'dd.MM.yyyy'),
                     cas: format(new Date(), 'HH:mm'),
@@ -172,6 +178,7 @@ function TeacherView() {
                     ucitelId: user.id,
                     updatedAt: Timestamp.now(),
                 };
+                delete (gradingData as any).studentIds;
                 await updateDoc(doc(firestore, 'grades', editingGrading.id), gradingData);
                 toast({ title: 'Hodnocení upraveno', description: 'Změny byly úspěšně uloženy.' });
             } else {
@@ -249,10 +256,10 @@ function TeacherView() {
                         <TableBody>
                             {isLoading ? (
                                 <TableRow><TableCell colSpan={8} className="text-center h-24">Načítání hodnocení...</TableCell></TableRow>
-                            ) : gradings?.length === 0 ? (
+                            ) : sortedGradings?.length === 0 ? (
                                 <TableRow><TableCell colSpan={8} className="text-center h-24">Nebylo zadáno žádné hodnocení.</TableCell></TableRow>
                             ) : (
-                                gradings?.map(g => (
+                                sortedGradings?.map(g => (
                                     <TableRow key={g.id}>
                                         <TableCell>{g.datum}</TableCell>
                                         <TableCell>{g.cas}</TableCell>
