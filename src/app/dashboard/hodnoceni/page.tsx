@@ -51,8 +51,6 @@ function TeacherView() {
     const { toast } = useToast();
     const searchParams = useSearchParams();
 
-    const [gradings, setGradings] = useState<Grading[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingGrading, setEditingGrading] = useState<Grading | null>(null);
     const [deletingGrading, setDeletingGrading] = useState<Grading | null>(null);
@@ -60,6 +58,13 @@ function TeacherView() {
     // Params from URL for pre-filling
     const tridaIdFromParams = searchParams.get('tridaId');
     const predmetIdFromParams = searchParams.get('predmetId');
+
+    const gradingsQuery = useMemoFirebase(() => {
+        if (!user || !firestore) return null;
+        return query(collection(firestore, 'gradings'), where('ucitelId', '==', user.id), orderBy('createdAt', 'desc'));
+    }, [firestore, user]);
+    const { data: gradings, isLoading } = useCollection<Grading>(gradingsQuery);
+
 
     const teacherClassesQuery = useMemoFirebase(() => {
         if (!user || !firestore) return null;
@@ -136,22 +141,6 @@ function TeacherView() {
             handleOpenDialog(null);
         }
     }, [tridaIdFromParams, predmetIdFromParams, handleOpenDialog]);
-
-    useEffect(() => {
-        if (!user || !firestore) return;
-        setIsLoading(true);
-        const q = query(collection(firestore, 'gradings'), where('ucitelId', '==', user.id), orderBy('createdAt', 'desc'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Grading));
-            setGradings(data);
-            setIsLoading(false);
-        }, (error) => {
-            console.error("Error fetching gradings: ", error);
-            toast({ variant: 'destructive', title: 'Chyba načítání hodnocení'});
-            setIsLoading(false);
-        });
-        return () => unsubscribe();
-    }, [user, firestore, toast]);
 
     const handleSaveGrading = async (data: GradingFormData) => {
         if (!user || !firestore || !allStudents || !activeOrganizationId) {
@@ -425,30 +414,16 @@ function StudentParentView() {
 
     const studentId = hasRole('ziak') ? user?.id : user?.studentId;
 
-    const [gradings, setGradings] = useState<Grading[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-
-    const { data: teachers, isLoading: teachersLoading } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, 'users'), where('roles', 'array-contains', 'ucitel')) : null, [firestore]));
-
-    useEffect(() => {
+    const gradesQuery = useMemoFirebase(() => {
         if (!firestore || !studentId) {
-            setIsLoading(false);
-            return;
+            return null;
         }
-
-        setIsLoading(true);
-        const q = query(collection(firestore, 'gradings'), where('ziakId', '==', studentId), orderBy('createdAt', 'desc'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedGradings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Grading));
-            setGradings(fetchedGradings);
-            setIsLoading(false);
-        }, (error) => {
-            console.error("Firestore Error:", error);
-            setIsLoading(false);
-        });
-
-        return () => unsubscribe();
+        return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId), orderBy('createdAt', 'desc'));
     }, [firestore, studentId]);
+
+    const { data: gradings, isLoading } = useCollection<Grading>(gradesQuery);
+    
+    const { data: teachers, isLoading: teachersLoading } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, 'users'), where('roles', 'array-contains', 'ucitel')) : null, [firestore]));
 
     const getTeacherName = useCallback((teacherId: string) => {
         return teachers?.find(t => t.id === teacherId)?.name || 'Neznámý';
