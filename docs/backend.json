@@ -35,6 +35,28 @@
       },
       "required": ["id", "name", "email"]
     },
+    "Grading": {
+      "title": "Grading",
+      "type": "object",
+      "description": "Represents a single grade given to a student.",
+      "properties": {
+        "organizationId": { "type": "string" },
+        "tridaId": { "type": "string" },
+        "ziakId": { "type": "string" },
+        "predmetId": { "type": "string" },
+        "ucitelId": { "type": "string" },
+        "ziakJmeno": { "type": "string" },
+        "predmet": { "type": "string" },
+        "znamka": { "type": "number" },
+        "vaha": { "type": "number" },
+        "komentar": { "type": "string" },
+        "datum": { "type": "string", "format": "date" },
+        "cas": { "type": "string", "format": "time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["organizationId", "tridaId", "ziakId", "predmetId", "ucitelId", "ziakJmeno", "predmet", "znamka", "vaha", "datum", "cas", "createdAt"]
+    },
     "Trida": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Trida",
@@ -268,6 +290,7 @@
     "structure": [
       { "path": "/organizations/{organizationId}", "definition": { "schema": { "$ref": "#/backend/entities/Organization" } } },
       { "path": "/users/{userId}", "definition": { "schema": { "$ref": "#/backend/entities/User" } } },
+      { "path": "/grades/{gradeId}", "definition": { "schema": { "$ref": "#/backend/entities/Grading" } } },
       { "path": "/tridy/{tridaId}", "definition": { "schema": { "$ref": "#/backend/entities/Trida" } } },
       { "path": "/predmety/{predmetId}", "definition": { "schema": { "$ref": "#/backend/entities/Predmet" } } },
       { "path": "/ucebny/{ucebnaId}", "definition": { "schema": { "$ref": "#/backend/entities/Ucebna" } } },
@@ -285,5 +308,3 @@
     ]
   }
 }
-
-    

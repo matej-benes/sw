@@ -24,7 +24,7 @@ export default function VysvedceniPage() {
 
     const gradesQuery = useMemoFirebase(() => {
         if (!firestore || !studentId) return null;
-        return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId));
+        return query(collection(firestore, 'grades'), where('ziakId', '==', studentId));
     }, [firestore, studentId]);
 
     const { data: grades, isLoading } = useCollection<Grading>(gradesQuery);

@@ -25,6 +25,11 @@ service cloud.firestore {
       return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(roles);
     }
     
+    function isMyStudent(studentId) {
+        let parentData = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+        return parentData.roles.hasAny(['rodic']) && parentData.studentId == studentId;
+    }
+    
     // Per-Collection Rules
 
     // Users can be created by anyone during registration.
@@ -34,6 +39,12 @@ service cloud.firestore {
       allow read, create: if true;
       allow update: if isOwner(userId) || hasRole('administrator');
       allow delete: if isOwner(userId) || hasRole('administrator');
+    }
+    
+    match /grades/{gradeId} {
+      allow get: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
+      allow list: if hasAnyRole(['ucitel', 'administrator']) || (isAuthenticated() && resource.data.ziakId == request.auth.uid) || (isAuthenticated() && isMyStudent(resource.data.ziakId));
+      allow create, update, delete: if hasAnyRole(['ucitel', 'administrator']);
     }
 
     // Any authenticated user can read data.
@@ -124,12 +135,6 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
     
-    // Allow read for authenticated users. Write for admins/teachers.
-    match /gradings/{gradingId} {
-      allow read: if isAuthenticated();
-      allow write: if hasAnyRole(['ucitel', 'administrator']);
-    }
-
     match /zaznamy-schuzek/{zaznamId} {
       allow read: if isAuthenticated();
       allow write: if hasAnyRole(['ucitel', 'administrator']);

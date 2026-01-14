@@ -17,7 +17,7 @@ export default function HodnoceniDetailPage() {
 
     const gradingRef = useMemoFirebase(() => {
         if (!firestore || !gradingId) return null;
-        return doc(firestore, 'gradings', gradingId);
+        return doc(firestore, 'grades', gradingId);
     }, [firestore, gradingId]);
 
     const { data: grading, isLoading } = useDoc<Grading>(gradingRef);

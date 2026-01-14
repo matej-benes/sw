@@ -48,7 +48,7 @@ export default function TiskVysvedceniPage() {
     const gradesQuery = useMemoFirebase(() => {
         if (!firestore || !selectedClassId) return null;
         // Correctly query gradings only for the selected class
-        return query(collection(firestore, 'gradings'), where('tridaId', '==', selectedClassId));
+        return query(collection(firestore, 'grades'), where('tridaId', '==', selectedClassId));
     }, [firestore, selectedClassId]);
     const { data: allGrades, isLoading: gradesLoading } = useCollection<Grading>(gradesQuery);
 

@@ -61,7 +61,7 @@ function TeacherView() {
 
     const gradingsQuery = useMemoFirebase(() => {
         if (!user || !firestore) return null;
-        return query(collection(firestore, 'gradings'), where('ucitelId', '==', user.id), orderBy('createdAt', 'desc'));
+        return query(collection(firestore, 'grades'), where('ucitelId', '==', user.id), orderBy('createdAt', 'desc'));
     }, [firestore, user]);
     const { data: gradings, isLoading } = useCollection<Grading>(gradingsQuery);
 
@@ -172,14 +172,14 @@ function TeacherView() {
                     ucitelId: user.id,
                     updatedAt: Timestamp.now(),
                 };
-                await updateDoc(doc(firestore, 'gradings', editingGrading.id), gradingData);
+                await updateDoc(doc(firestore, 'grades', editingGrading.id), gradingData);
                 toast({ title: 'Hodnocení upraveno', description: 'Změny byly úspěšně uloženy.' });
             } else {
                 const batch = writeBatch(firestore);
                 data.studentIds.forEach(studentId => {
                     const student = allStudents.find(s => s.id === studentId);
                     if (student) {
-                        const newGradingDoc = doc(collection(firestore, 'gradings'));
+                        const newGradingDoc = doc(collection(firestore, 'grades'));
                         const gradingData = {
                             organizationId: activeOrganizationId,
                             predmetId: predmet.id,
@@ -211,7 +211,7 @@ function TeacherView() {
     const handleDeleteGrading = async () => {
         if (!deletingGrading || !firestore) return;
         try {
-            await deleteDoc(doc(firestore, 'gradings', deletingGrading.id));
+            await deleteDoc(doc(firestore, 'grades', deletingGrading.id));
             toast({ title: 'Hodnocení smazáno' });
             setDeletingGrading(null);
         } catch (error) {
@@ -418,7 +418,7 @@ function StudentParentView() {
         if (!firestore || !studentId) {
             return null;
         }
-        return query(collection(firestore, 'gradings'), where('ziakId', '==', studentId), orderBy('createdAt', 'desc'));
+        return query(collection(firestore, 'grades'), where('ziakId', '==', studentId), orderBy('createdAt', 'desc'));
     }, [firestore, studentId]);
 
     const { data: gradings, isLoading } = useCollection<Grading>(gradesQuery);
