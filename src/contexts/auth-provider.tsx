@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import React, { createContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { useFirestore } from '@/firebase';
 import { getAuth, signInWithEmailAndPassword, signOut as firebaseSignOut, onIdTokenChanged, type User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import { Logo } from '@/components/logo';
 
@@ -29,31 +29,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const auth = getAuth();
 
   useEffect(() => {
-    const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
-      setLoading(true);
-      if (firebaseUser && firestore) {
-           const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-           try {
-                const userDocSnap = await getDoc(userDocRef);
-                if (userDocSnap.exists()) {
-                    const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
-                    setUser(userData);
-                } else {
-                    console.log(`No user document found for UID: ${firebaseUser.uid}, signing out.`);
-                    await firebaseSignOut(auth);
-                    setUser(null);
-                }
-           } catch (e) {
-                console.error("Error fetching user data:", e);
-                await firebaseSignOut(auth);
-                setUser(null);
-           }
-      } else {
-        setUser(null);
+    let unsubscribeDoc: (() => void) | null = null;
+
+    const unsubscribeAuth = onIdTokenChanged(auth, (firebaseUser) => {
+      // First, clean up any existing doc listener
+      if (unsubscribeDoc) {
+        unsubscribeDoc();
+        unsubscribeDoc = null;
       }
-      setLoading(false);
+      
+      if (firebaseUser && firestore) {
+        setLoading(true);
+        const userDocRef = doc(firestore, 'users', firebaseUser.uid);
+        
+        // Set up a new real-time listener for the user document
+        unsubscribeDoc = onSnapshot(userDocRef, 
+          (userDocSnap) => {
+            if (userDocSnap.exists()) {
+              setUser({ id: userDocSnap.id, ...userDocSnap.data() } as User);
+            } else {
+              console.log(`No user document found for UID: ${firebaseUser.uid}, signing out.`);
+              firebaseSignOut(auth); // This will trigger onIdTokenChanged again with null
+            }
+            setLoading(false);
+          },
+          (error) => {
+            console.error("Error fetching user data in real-time:", error);
+            firebaseSignOut(auth); // This will trigger onIdTokenChanged again with null
+            setLoading(false);
+          }
+        );
+      } else {
+        // No firebaseUser, so no user
+        setUser(null);
+        setLoading(false);
+      }
     });
-    return () => unsubscribe();
+
+    // Cleanup function for the component unmounting
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeDoc) {
+        unsubscribeDoc();
+      }
+    };
   }, [auth, firestore]);
 
 
