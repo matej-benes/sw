@@ -312,7 +312,7 @@ function UserRow({ user, onEdit, onDelete }: { user: User, onEdit: (user: User) 
 
 function AdminUserManagement() {
     const firestore = useFirestore();
-    const { user: adminUser, signIn } = useAuth();
+    const { user: adminUser, signIn, activeOrganizationId } = useAuth();
     
     const usersCollection = useMemoFirebase(
       () => (firestore) ? collection(firestore, 'users') : null,
@@ -348,6 +348,10 @@ function AdminUserManagement() {
           if (!formData.email || !password) {
             throw new Error("Email a heslo jsou povinné pro vytvoření nového uživatele.");
           }
+          if (!activeOrganizationId) {
+            toast({ variant: 'destructive', title: 'Chyba', description: 'Není aktivní žádná organizace. Nelze vytvořit uživatele.' });
+            return;
+          }
           
           const adminEmail = adminUser.email;
           
@@ -370,6 +374,7 @@ function AdminUserManagement() {
             name: formData.name,
             email: formData.email,
             roles: formData.roles || [],
+            organizationId: activeOrganizationId,
             avatarUrl: `https://picsum.photos/seed/${newUser.uid}/100/100`,
             ...(formData.studentId && { studentId: formData.studentId }),
             ...(formData.tridaId && { tridaId: formData.tridaId }),

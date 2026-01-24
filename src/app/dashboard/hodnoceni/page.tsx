@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, writeBatch, limit, getDocs, Timestamp, getDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, writeBatch, limit, getDocs, Timestamp, getDoc, documentId } from 'firebase/firestore';
 import type { Grading, User, Trida, Predmet } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -187,9 +187,9 @@ function TeacherView() {
                 await updateDoc(doc(firestore, 'grades', editingGrading.id), gradingData);
                 toast({ title: 'Hodnocení upraveno', description: 'Změny byly úspěšně uloženy.' });
             } else {
-                const studentsQuery = query(collection(firestore, 'users'), where('id', 'in', data.studentIds));
+                const studentsQuery = query(collection(firestore, 'users'), where(documentId(), 'in', data.studentIds));
                 const studentDocs = await getDocs(studentsQuery);
-                const studentsData = studentDocs.docs.map(d => d.data() as User);
+                const studentsData = studentDocs.docs.map(d => ({id: d.id, ...d.data()}) as User);
 
                 const batch = writeBatch(firestore);
                 studentsData.forEach(student => {
