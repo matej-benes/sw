@@ -44,9 +44,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useToast } from '@/hooks/use-toast';
 import {
   collection,
-  doc
+  doc,
+  addDoc,
+  updateDoc
 } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useUser, deleteDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import type { Organization, OrganizationType } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -160,28 +162,37 @@ function AdminOrgManagement() {
   const [deletingOrg, setDeletingOrg] = useState<Organization | null>(null);
   const { toast } = useToast();
 
-  const handleSaveOrg = (formData: Partial<Organization>) => {
+  const handleSaveOrg = async (formData: Partial<Organization>) => {
     if (!firestore || !user) return;
     
-    if (editingOrg) {
-      const orgRef = doc(firestore, 'organizations', editingOrg.id);
-       const dataToSave = { ...formData };
-      updateDocumentNonBlocking(orgRef, dataToSave);
-      toast({
-        title: 'Organizace uložena',
-      });
-    } else {
-        const dataToSave: Partial<Organization> = {
-          ...formData,
-          ownerId: user.id
-        };
-      addDocumentNonBlocking(collection(firestore, 'organizations'), dataToSave);
-      toast({
-        title: 'Organizace přidána',
-      });
+    try {
+        if (editingOrg) {
+        const orgRef = doc(firestore, 'organizations', editingOrg.id);
+        const dataToSave = { ...formData };
+        await updateDoc(orgRef, dataToSave);
+        toast({
+            title: 'Organizace uložena',
+        });
+        } else {
+            const dataToSave: Partial<Organization> = {
+            ...formData,
+            ownerId: user.id
+            };
+        await addDoc(collection(firestore, 'organizations'), dataToSave);
+        toast({
+            title: 'Organizace přidána',
+        });
+        }
+        setIsDialogOpen(false);
+        setEditingOrg(null);
+    } catch(error) {
+        console.error("Error saving organization", error);
+        toast({
+            title: 'Chyba ukládání',
+            description: 'Při ukládání organizace došlo k chybě.',
+            variant: 'destructive',
+        });
     }
-    setIsDialogOpen(false);
-    setEditingOrg(null);
   };
 
   const handleDeleteOrg = () => {
