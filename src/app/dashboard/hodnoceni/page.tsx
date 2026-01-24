@@ -66,8 +66,7 @@ function TeacherView() {
 
         if (hasRole('administrator')) {
             // Admin sees all grades in their organization
-            if (!user.organizationId) return null; // Safety check
-            return query(gradesCollection, where('organizationId', '==', user.organizationId), orderBy('createdAt', 'desc'));
+            return query(gradesCollection, where('organizationId', '==', user.organizationId!), orderBy('createdAt', 'desc'));
         }
         
         // Teacher sees only their own grades
@@ -155,16 +154,17 @@ function TeacherView() {
         }
 
         try {
-            const classDocRef = doc(firestore, 'tridy', selectedClassId || data.tridaId);
-            const classDocSnap = await getDoc(classDocRef);
             let organizationId: string | undefined;
 
-            if (classDocSnap.exists()) {
-                organizationId = classDocSnap.data().organizationId;
+            if (selectedClassId) {
+                const classDocRef = doc(firestore, 'tridy', selectedClassId);
+                const classDocSnap = await getDoc(classDocRef);
+                if (classDocSnap.exists()) {
+                    organizationId = classDocSnap.data().organizationId;
+                }
             }
-
+            
             if (!organizationId) {
-                // Fallback to user's organizationId if class doesn't have one
                 organizationId = user.organizationId;
             }
             
@@ -616,6 +616,18 @@ function HodnoceniPageContent() {
   
   if (loading) return <div className="flex h-full w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   if (!user) return <div className="flex h-full w-full items-center justify-center">Přístup odepřen.</div>;
+
+  if (hasRole('administrator') && !user.organizationId) {
+      return (
+        <Card>
+            <CardHeader><CardTitle>Načítání dat organizace...</CardTitle></CardHeader>
+            <CardContent>
+                <p>Váš účet je administrátorský, ale zatím nebylo načteno přiřazení k organizaci. Chvilku strpení...</p>
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mt-4" />
+            </CardContent>
+        </Card>
+      );
+  }
 
   if (hasRole('ucitel') || hasRole('administrator')) {
     return <TeacherView />;

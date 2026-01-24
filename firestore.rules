@@ -48,19 +48,19 @@ service cloud.firestore {
       allow list: if 
                   (
                     hasRole('administrator') &&
-                    resource.data.organizationId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId
+                    request.query.organizationId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId
                   ) ||
                   (
                     hasRole('ucitel') &&
-                    resource.data.ucitelId == request.auth.uid
+                    request.query.ucitelId == request.auth.uid
                   ) ||
                   (
                     hasRole('ziak') &&
-                    resource.data.ziakId == request.auth.uid
+                    request.query.ziakId == request.auth.uid
                   ) ||
                   (
                     hasRole('rodic') && 
-                    resource.data.ziakId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentId
+                    isMyStudent(request.query.ziakId)
                   );
       allow create, update, delete: if hasAnyRole(['ucitel', 'administrator']);
     }
@@ -96,9 +96,23 @@ service cloud.firestore {
           resource.data.studentId == request.auth.uid || 
           isMyStudent(resource.data.studentId)
         );
-        allow list: if (hasAnyRole(['ucitel', 'administrator'])) ||
-                    (hasRole('ziak') && resource.data.studentId == request.auth.uid) ||
-                    (hasRole('rodic') && isMyStudent(resource.data.studentId));
+        allow list: if 
+                    (
+                      hasRole('administrator') &&
+                      request.query.organizationId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId
+                    ) ||
+                    (
+                      hasRole('ucitel') &&
+                      request.query.ucitelId == request.auth.uid
+                    ) ||
+                    (
+                      hasRole('ziak') &&
+                      request.query.studentId == request.auth.uid
+                    ) ||
+                    (
+                      hasRole('rodic') &&
+                      isMyStudent(request.query.studentId)
+                    );
         allow write: if hasAnyRole(['ucitel', 'administrator']);
     }
 
