@@ -60,6 +60,7 @@ function ParentExcuseForm() {
             duvod: data.duvod,
             status: 'pending',
             datumPodani: Timestamp.now(),
+            organizationId: studentData.organizationId || '',
         };
 
         await addDocumentNonBlocking(collection(firestore, 'omluvenky'), newOmluvenka);
@@ -140,7 +141,7 @@ function StudentExcuseForm() {
     });
 
     const onSubmit = async (data: OmluvenkaFormData) => {
-        if (!user || !user.tridaId) {
+        if (!user || !user.tridaId || !user.organizationId) {
             toast({ variant: 'destructive', title: 'Chyba', description: 'Nelze odeslat omluvenku, chybí údaje o třídě.' });
             return;
         }
@@ -153,6 +154,7 @@ function StudentExcuseForm() {
             duvod: data.duvod,
             status: 'pending',
             datumPodani: Timestamp.now(),
+            organizationId: user.organizationId,
         };
 
         await addDocumentNonBlocking(collection(firestore, 'omluvenky'), newOmluvenka);
@@ -521,19 +523,29 @@ export default function OmluvenkyPage() {
     }
     
     const isTeacher = hasRole('ucitel');
+    const isParent = hasRole('rodic');
+    const isStudent = hasRole('ziak');
+
+    let content;
+    if (isTeacher) {
+        content = <TeacherExcuseManagement />;
+    } else if (isParent) {
+        content = <ParentExcuseForm />;
+    } else if (isStudent) {
+        content = <StudentExcuseForm />;
+    } else {
+        content = (
+             <Card>
+                <CardHeader><CardTitle>Žádný obsah</CardTitle></CardHeader>
+                <CardContent><p>Tato stránka je určena pro rodiče, žáky a učitele.</p></CardContent>
+            </Card>
+        );
+    }
 
     return (
         <div className="space-y-6">
             <h1 className="text-3xl font-bold tracking-tight">Omluvenky</h1>
-            {hasRole('rodic') && <ParentExcuseForm />}
-            {hasRole('ziak') && <StudentExcuseForm />}
-            {isTeacher && <TeacherExcuseManagement />}
-            {(!hasRole('rodic') && !hasRole('ziak') && !isTeacher) && (
-                 <Card>
-                    <CardHeader><CardTitle>Žádný obsah</CardTitle></CardHeader>
-                    <CardContent><p>Tato stránka je určena pro rodiče, žáky a učitele.</p></CardContent>
-                </Card>
-            )}
+            {content}
         </div>
     );
 }
