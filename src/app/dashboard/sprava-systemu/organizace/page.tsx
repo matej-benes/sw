@@ -57,9 +57,7 @@ import { cs } from 'date-fns/locale';
 
 const orgSchema = z.object({
   name: z.string().min(1, 'Název je povinný'),
-  status: z.enum(['trial', 'active', 'expired']),
   type: z.enum(['skola', 'zajmova_skupina']),
-  trialEndDate: z.string().optional().nullable(),
   registrationPin: z.string().optional().nullable(),
 });
 
@@ -85,18 +83,13 @@ function OrgForm({
     resolver: zodResolver(orgSchema),
     defaultValues: {
       name: org?.name || '',
-      status: org?.status || 'trial',
       type: org?.type || 'skola',
-      trialEndDate: org?.trialEndDate || null,
       registrationPin: org?.registrationPin || null,
     },
   });
 
   const onSubmit = (data: OrgFormData) => {
-    onSave({
-      ...data,
-      trialEndDate: data.trialEndDate || undefined,
-    });
+    onSave(data);
     closeDialog();
   };
   
@@ -131,27 +124,6 @@ function OrgForm({
                 </Select>
             )}
         />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="status">Stav</Label>
-        <Controller
-            name="status"
-            control={control}
-            render={({ field }) => (
-                <Select onValueChange={field.onChange} value={field.value}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="trial">Zkušební</SelectItem>
-                        <SelectItem value="active">Aktivní</SelectItem>
-                        <SelectItem value="expired">Vypršela</SelectItem>
-                    </SelectContent>
-                </Select>
-            )}
-        />
-      </div>
-       <div className="space-y-1">
-        <Label htmlFor="trialEndDate">Konec zkušební verze (YYYY-MM-DDTHH:mm:ss)</Label>
-        <Input id="trialEndDate" {...register('trialEndDate')} placeholder="např. 2024-12-31T23:59:00" />
       </div>
       <div className="space-y-2">
         <Label htmlFor="pin">Registrační PIN ředitele</Label>
@@ -194,9 +166,6 @@ function AdminOrgManagement() {
     if (editingOrg) {
       const orgRef = doc(firestore, 'organizations', editingOrg.id);
        const dataToSave = { ...formData };
-        if (dataToSave.trialEndDate === undefined) {
-            delete dataToSave.trialEndDate;
-        }
       updateDocumentNonBlocking(orgRef, dataToSave);
       toast({
         title: 'Organizace uložena',
@@ -206,9 +175,6 @@ function AdminOrgManagement() {
           ...formData,
           ownerId: user.id
         };
-        if (dataToSave.trialEndDate === undefined || dataToSave.trialEndDate === null) {
-            delete dataToSave.trialEndDate;
-        }
       addDocumentNonBlocking(collection(firestore, 'organizations'), dataToSave);
       toast({
         title: 'Organizace přidána',
@@ -262,8 +228,6 @@ function AdminOrgManagement() {
                 <TableRow>
                   <TableHead>Název</TableHead>
                   <TableHead>Typ</TableHead>
-                  <TableHead>Stav</TableHead>
-                  <TableHead>Konec zkušební verze</TableHead>
                   <TableHead>Registrační PIN</TableHead>
                    <TableHead>
                     <span className="sr-only">Akce</span>
@@ -273,7 +237,7 @@ function AdminOrgManagement() {
               <TableBody>
                 {orgsLoading && (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
+                    <TableCell colSpan={4} className="h-24 text-center">
                       Načítání dat...
                     </TableCell>
                   </TableRow>
@@ -282,8 +246,6 @@ function AdminOrgManagement() {
                     <TableRow key={org.id}>
                         <TableCell className="font-medium">{org.name}</TableCell>
                         <TableCell>{orgTypeTranslations[org.type] || org.type}</TableCell>
-                        <TableCell>{org.status}</TableCell>
-                        <TableCell>{org.trialEndDate ? format(new Date(org.trialEndDate), 'd. M. yyyy HH:mm') : '-'}</TableCell>
                         <TableCell className="font-mono">{org.registrationPin || '-'}</TableCell>
                         <TableCell className="text-right">
                            <Button variant="ghost" size="icon" onClick={() => openDialog(org)}><Pencil className="h-4 w-4" /></Button>
@@ -339,9 +301,15 @@ function AdminOrgManagement() {
 }
 
 export default function SpravaOrganizaciPage() {
-  const { isSuperAdmin, loading } = useAuth();
+  const { isSuperAdmin, loading: authLoading } = useAuth();
+  const firestore = useFirestore();
+
+  const orgsCollection = useMemoFirebase(() => (firestore ? collection(firestore, 'organizations') : null), [firestore]);
+  const { data: organizations, isLoading: orgsLoading } = useCollection<Organization>(orgsCollection);
+
+  const isLoading = authLoading || orgsLoading;
   
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-6">
         <div>
@@ -350,10 +318,11 @@ export default function SpravaOrganizaciPage() {
         <Card>
             <CardHeader>
               <CardTitle>Načítání...</CardTitle>
+              <CardDescription>Ověřování oprávnění.</CardDescription>
             </CardHeader>
             <CardContent>
                 <div className="h-24 text-center flex items-center justify-center">
-                    Ověřování oprávnění...
+                    Načítání dat...
                 </div>
             </CardContent>
         </Card>
@@ -361,8 +330,9 @@ export default function SpravaOrganizaciPage() {
     )
   }
   
-  if (!isSuperAdmin()) {
-    return (
+  // Allow access if user is super admin OR if no organizations exist yet
+  if (!isSuperAdmin() && organizations && organizations.length > 0) {
+     return (
       <div className="space-y-6">
          <Card>
             <CardHeader>

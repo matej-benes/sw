@@ -4,6 +4,9 @@ import {
   Card,
   CardContent,
   CardHeader,
+  CardTitle,
+  CardDescription,
+  CardFooter
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -33,6 +36,7 @@ import {
 } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { WhatsNewDialog } from '@/components/dashboard/whats-new-dialog';
+import { useRouter } from 'next/navigation';
 
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, useDoc } from '@/firebase';
 import { collection, query, where, getDocs, doc, writeBatch, getDoc } from 'firebase/firestore';
@@ -46,6 +50,7 @@ import type {
   Substitution,
   ScheduleTemplate,
   Omluvenka,
+  Organization,
 } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Separator } from '@/components/ui/separator';
@@ -56,7 +61,15 @@ export function DesktopDashboard() {
   const firestore = useFirestore();
   const { user, hasRole, isSuperAdmin, loading: isUserLoading } = useAuth();
   const { unreadCount } = useUnreadMessages();
+  const router = useRouter();
   
+  const { data: organizations, isLoading: orgsLoading } = useCollection<Organization>(
+    useMemoFirebase(
+      () => (firestore ? collection(firestore, 'organizations') : null),
+      [firestore]
+    )
+  );
+
   const { data: tridy } = useCollection<Trida>(
     useMemoFirebase(
       () => (firestore ? collection(firestore, 'tridy') : null),
@@ -206,10 +219,32 @@ export function DesktopDashboard() {
     };
   }, [studentClassData, allStaff, classTeacherData]);
 
-  const isLoading = isUserLoading || !user;
+  const isLoading = isUserLoading || !user || orgsLoading;
 
   if (isLoading) {
     return <div className="flex h-full w-full items-center justify-center">Načítání dat...</div>;
+  }
+
+  if (!isLoading && organizations && organizations.length === 0) {
+    return (
+        <Card className="mt-10 max-w-2xl mx-auto">
+            <CardHeader>
+                <CardTitle className="text-2xl">Vítejte ve ŠkolaWeb!</CardTitle>
+                <CardDescription>
+                    Pro plné využití aplikace je nejprve potřeba vytvořit vaši školu nebo organizaci. 
+                    Tento krok je vyžadován pouze jednou.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <p>Kliknutím na tlačítko níže přejdete na stránku pro správu organizací, kde můžete zadat základní údaje o vaší instituci.</p>
+            </CardContent>
+            <CardFooter>
+                <Button onClick={() => router.push('/dashboard/sprava-systemu/organizace')}>
+                    Vytvořit organizaci
+                </Button>
+            </CardFooter>
+        </Card>
+    );
   }
   
   if(isSuperAdmin()) {
