@@ -431,7 +431,7 @@ function StudentParentView() {
         if (!firestore || !studentId) {
             return null;
         }
-        return query(collection(firestore, 'grades'), where('ziakId', '==', studentId), orderBy('createdAt', 'desc'));
+        return query(collection(firestore, 'grades'), where('ziakId', '==', studentId));
     }, [firestore, studentId]);
 
     const { data: gradings, isLoading } = useCollection<Grading>(gradesQuery);
@@ -467,6 +467,11 @@ function StudentParentView() {
         }
         return averages;
     }, [gradesBySubject]);
+    
+    const sortedGradings = useMemo(() => {
+        if (!gradings) return [];
+        return [...gradings].sort((a,b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis());
+    }, [gradings]);
 
     if (isLoading || teachersLoading) {
         return <div className="p-6 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto" /></div>;
@@ -542,12 +547,12 @@ function StudentParentView() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {gradings.length === 0 ? (
+                            {sortedGradings.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={5} className="h-24 text-center">Nebyly nalezeny žádné známky.</TableCell>
                                 </TableRow>
                             ) : (
-                                gradings.map(g => (
+                                sortedGradings.map(g => (
                                     <TableRow key={g.id} onClick={() => router.push(`/dashboard/hodnoceni/${g.id}`)} className="cursor-pointer">
                                         <TableCell>{g.datum}</TableCell>
                                         <TableCell>{g.predmet}</TableCell>
