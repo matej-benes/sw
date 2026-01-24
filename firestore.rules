@@ -46,10 +46,22 @@ service cloud.firestore {
     match /grades/{gradeId} {
       allow get: if isOrgMember(resource.data.organizationId) && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
       allow list: if 
-                  (hasRole('administrator') && request.query.organizationId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId) ||
-                  (hasRole('ucitel') && request.query.ucitelId == request.auth.uid) ||
-                  (hasRole('ziak') && request.query.ziakId == request.auth.uid) ||
-                  (hasRole('rodic') && isMyStudent(request.query.ziakId));
+                  (
+                    hasRole('administrator') &&
+                    resource.data.organizationId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId
+                  ) ||
+                  (
+                    hasRole('ucitel') &&
+                    resource.data.ucitelId == request.auth.uid
+                  ) ||
+                  (
+                    hasRole('ziak') &&
+                    resource.data.ziakId == request.auth.uid
+                  ) ||
+                  (
+                    hasRole('rodic') && 
+                    resource.data.ziakId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentId
+                  );
       allow create, update, delete: if hasAnyRole(['ucitel', 'administrator']);
     }
 
@@ -85,8 +97,8 @@ service cloud.firestore {
           isMyStudent(resource.data.studentId)
         );
         allow list: if (hasAnyRole(['ucitel', 'administrator'])) ||
-                    (hasRole('ziak') && request.query.studentId == request.auth.uid) ||
-                    (hasRole('rodic') && isMyStudent(request.query.studentId));
+                    (hasRole('ziak') && resource.data.studentId == request.auth.uid) ||
+                    (hasRole('rodic') && isMyStudent(resource.data.studentId));
         allow write: if hasAnyRole(['ucitel', 'administrator']);
     }
 
