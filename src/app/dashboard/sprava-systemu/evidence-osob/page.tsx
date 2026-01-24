@@ -359,18 +359,8 @@ function AdminUserManagement() {
           const userCredential = await createUserWithEmailAndPassword(getAuth(), formData.email, password);
           const newUser = userCredential.user;
           
-          // 2. Re-authenticate as admin because createUserWithEmailAndPassword signs the admin out
-          const adminPassword = prompt("Pro potvrzení vytvoření účtu zadejte prosím znovu své administrátorské heslo:");
-          if (!adminPassword) {
-              toast({ variant: 'destructive', title: 'Operace přerušena', description: 'Novému uživateli byl vytvořen účet, ale vy jste byli odhlášeni. Přihlaste se prosím znovu.' });
-              await getAuth().signOut();
-              return;
-          }
-          await signIn(adminEmail, adminPassword);
-
-          // 3. Create Firestore document for the new user
-          const newUserForDb: Partial<User> = {
-            id: newUser.uid,
+          // 2. Create Firestore document for the new user IMMEDIATELY
+          const newUserForDb: Omit<Partial<User>, 'id'> = {
             name: formData.name,
             email: formData.email,
             roles: formData.roles || [],
@@ -379,10 +369,18 @@ function AdminUserManagement() {
             ...(formData.studentId && { studentId: formData.studentId }),
             ...(formData.tridaId && { tridaId: formData.tridaId }),
           };
-          
           const cleanedData = removeUndefinedFields(newUserForDb);
           await setDoc(doc(firestore, 'users', newUser.uid), cleanedData);
           
+          // 3. Re-authenticate as admin because createUserWithEmailAndPassword signs the admin out
+          const adminPassword = prompt("Pro potvrzení vytvoření účtu zadejte prosím znovu své administrátorské heslo:");
+          if (!adminPassword) {
+              toast({ variant: 'destructive', title: 'Operace přerušena', description: 'Novému uživateli byl vytvořen účet, ale vy jste byli odhlášeni. Přihlaste se prosím znovu.' });
+              await getAuth().signOut();
+              return;
+          }
+          await signIn(adminEmail, adminPassword);
+
           toast({ title: 'Uživatel úspěšně vytvořen a je aktivní.' });
         }
       } catch (e: any) {
