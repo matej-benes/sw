@@ -46,7 +46,10 @@ import {
   collection,
   doc,
   addDoc,
-  updateDoc
+  updateDoc,
+  query,
+  limit,
+  getDocs
 } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase, useUser, deleteDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
@@ -167,21 +170,40 @@ function AdminOrgManagement() {
     
     try {
         if (editingOrg) {
-        const orgRef = doc(firestore, 'organizations', editingOrg.id);
-        const dataToSave = { ...formData };
-        await updateDoc(orgRef, dataToSave);
-        toast({
-            title: 'Organizace uložena',
-        });
+          const orgRef = doc(firestore, 'organizations', editingOrg.id);
+          const dataToSave = { ...formData };
+          await updateDoc(orgRef, dataToSave);
+          toast({ title: 'Organizace uložena' });
         } else {
+            const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
+            const orgsSnap = await getDocs(orgsQuery);
+            const isFirstOrg = orgsSnap.empty;
+
             const dataToSave: Partial<Organization> = {
-            ...formData,
-            ownerId: user.id
+              ...formData,
+              ownerId: user.id
             };
-        await addDoc(collection(firestore, 'organizations'), dataToSave);
-        toast({
-            title: 'Organizace přidána',
-        });
+            await addDoc(collection(firestore, 'organizations'), dataToSave);
+            
+            if (isFirstOrg) {
+                try {
+                    const userRef = doc(firestore, 'users', user.id);
+                    await updateDoc(userRef, { isSuperAdmin: true });
+                    toast({
+                        title: 'Organizace vytvořena a vy jste nyní Super Administrátor.',
+                        description: 'Možná bude potřeba obnovit stránku pro plnou aktivaci oprávnění.'
+                    });
+                } catch (e) {
+                    console.error("Failed to make user super admin", e);
+                    toast({
+                        variant: 'destructive',
+                        title: 'Chyba při nastavování oprávnění',
+                        description: 'Organizace byla vytvořena, ale nepodařilo se nastavit administrátorská oprávnění.'
+                    });
+                }
+            } else {
+                toast({ title: 'Organizace přidána' });
+            }
         }
         setIsDialogOpen(false);
         setEditingOrg(null);

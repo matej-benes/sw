@@ -32,9 +32,6 @@ service cloud.firestore {
     
     // Per-Collection Rules
 
-    // Users can be created by anyone during registration.
-    // Users can see other users' basic info if logged in.
-    // Only owner or admin can update/delete their own profile.
     match /users/{userId} {
       allow read, create: if true;
       allow update: if isOwner(userId) || hasRole('administrator');
@@ -43,12 +40,13 @@ service cloud.firestore {
     
     match /grades/{gradeId} {
       allow get: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
-      allow list: if hasAnyRole(['ucitel', 'administrator']) || (isAuthenticated() && resource.data.ziakId == request.auth.uid) || (isAuthenticated() && isMyStudent(resource.data.ziakId));
+      allow list: if (hasAnyRole(['administrator'])) || 
+                  (hasRole('ucitel') && request.query.where.ucitelId == request.auth.uid) ||
+                  (hasRole('ziak') && request.query.where.ziakId == request.auth.uid) ||
+                  (hasRole('rodic') && isMyStudent(request.query.where.ziakId));
       allow create, update, delete: if hasAnyRole(['ucitel', 'administrator']);
     }
 
-    // Any authenticated user can read data.
-    // Write operations are restricted to teachers and administrators.
     match /tridy/{tridaId} {
       allow read: if isAuthenticated();
       allow write: if hasAnyRole(['administrator', 'ucitel']);
@@ -64,8 +62,6 @@ service cloud.firestore {
       allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
 
-    // Schedules are readable by any authenticated user.
-    // Writing is restricted to admins/teachers.
     match /rozvrhy/{rozvrhId} {
         allow read: if isAuthenticated();
         allow write: if hasAnyRole(['administrator', 'ucitel']);
@@ -76,11 +72,16 @@ service cloud.firestore {
         allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
 
-    // Notes can be read by anyone authenticated (students/parents need to see them).
-    // Writes are restricted to teachers/admins.
     match /poznamky-zaku/{poznamkaId} {
-        allow read: if isAuthenticated();
-        allow write: if hasAnyRole(['administrator', 'ucitel']);
+        allow get: if isAuthenticated() && (
+          hasAnyRole(['ucitel', 'administrator']) || 
+          resource.data.studentId == request.auth.uid || 
+          isMyStudent(resource.data.studentId)
+        );
+        allow list: if (hasAnyRole(['ucitel', 'administrator'])) ||
+                    (hasRole('ziak') && request.query.where.studentId == request.auth.uid) ||
+                    (hasRole('rodic') && isMyStudent(request.query.where.studentId));
+        allow write: if hasAnyRole(['ucitel', 'administrator']);
     }
 
     match /udalosti/{udalostId} {
@@ -88,9 +89,6 @@ service cloud.firestore {
         allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
     
-    // Messages can be created by any logged-in user.
-    // A user can only read messages where they are the sender or a recipient.
-    // Updating (e.g., marking as read) is allowed only for recipients.
     match /messages/{messageId} {
       allow create: if isAuthenticated();
       allow get: if isAuthenticated() && (resource.data.senderId == request.auth.uid || request.auth.uid in resource.data.recipientIds);
@@ -104,27 +102,20 @@ service cloud.firestore {
         allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
 
-    // Absences: students/parents can see their own, teachers/admins can see all.
     match /absences/{absenceId} {
       allow read: if isAuthenticated();
       allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
     
-    // Omluvenky can be created/read by any authenticated user (parents/students).
-    // Teachers/admins will read them via broader queries, but this allows creation.
     match /omluvenky/{omluvenkaId} {
         allow read, write: if isAuthenticated();
     }
     
-    // Homework can be read by any authenticated user.
-    // Homework can only be created/edited by teachers/admins.
     match /ukoly/{ukolId} {
         allow read: if isAuthenticated();
         allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
 
-    // Public can apply for admission.
-    // Only admins can read/manage applications.
     match /prijimaci-rizeni/{rizeniId} {
       allow create: if true;
       allow read, update, delete: if hasRole('administrator');
@@ -132,7 +123,8 @@ service cloud.firestore {
     
     match /organizations/{organizationId} {
       allow read: if isAuthenticated();
-      allow write: if isSuperAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if isSuperAdmin();
     }
     
     match /zaznamy-schuzek/{zaznamId} {
