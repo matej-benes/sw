@@ -238,9 +238,9 @@ function ScheduleEditor() {
 
     // Data fetching
     const tridyCollection = useMemoFirebase(() => {
-      if (!firestore || !activeOrganizationId) return null;
-      return query(collection(firestore, 'tridy'), where('organizationId', '==', activeOrganizationId))
-    }, [firestore, activeOrganizationId]);
+      if (!firestore) return null;
+      return collection(firestore, 'tridy');
+    }, [firestore]);
     const { data: classes, isLoading: classesLoading } = useCollection<Trida>(tridyCollection);
     
     const scheduleTemplateRef = useMemoFirebase(() => {

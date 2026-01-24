@@ -275,7 +275,7 @@ function ClassRow({ classData, allUsers, onEdit, onDelete }: { classData: Class,
 
 function AdminClassManagement() {
   const firestore = useFirestore();
-  const { hasRole } = useAuth();
+  const { hasRole, activeOrganizationId } = useAuth();
   
   const classesCollection = useMemoFirebase(() => (firestore) ? collection(firestore, 'tridy') : null, [firestore]);
   const { data: classes, isLoading: classesLoading, error: classesError } = useCollection<Class>(classesCollection);
@@ -299,9 +299,17 @@ function AdminClassManagement() {
   const { toast } = useToast();
 
   const handleSaveClass = (formData: ClassFormData) => {
-    if (!firestore) return;
+    if (!firestore || !activeOrganizationId) {
+       toast({
+        variant: "destructive",
+        title: "Chyba",
+        description: "Nelze uložit třídu, chybí ID organizace.",
+      });
+      return;
+    };
     
     const dataToSave = {
+        organizationId: activeOrganizationId,
         nazev: formData.nazev,
         ucitelId: formData.ucitelId,
         zastupciIds: formData.zastupciIds || [],
