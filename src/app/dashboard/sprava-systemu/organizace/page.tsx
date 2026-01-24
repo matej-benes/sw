@@ -183,12 +183,15 @@ function AdminOrgManagement() {
               ...formData,
               ownerId: user.id
             };
-            await addDoc(collection(firestore, 'organizations'), dataToSave);
+            const newOrgRef = await addDoc(collection(firestore, 'organizations'), dataToSave);
             
             if (isFirstOrg) {
                 try {
                     const userRef = doc(firestore, 'users', user.id);
-                    await updateDoc(userRef, { isSuperAdmin: true });
+                    await updateDoc(userRef, { 
+                      isSuperAdmin: true,
+                      organizationId: newOrgRef.id
+                    });
                     toast({
                         title: 'Organizace vytvořena a vy jste nyní Super Administrátor.',
                         description: 'Možná bude potřeba obnovit stránku pro plnou aktivaci oprávnění.'
@@ -387,4 +390,3 @@ export default function SpravaOrganizaciPage() {
     </div>
   );
 }
-    

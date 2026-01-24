@@ -26,6 +26,9 @@ import {
   getDocs,
   updateDoc,
   doc,
+  getDoc,
+  setDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { useFirestore } from '@/firebase';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -119,12 +122,24 @@ export default function RegistrationPage() {
         verifiedUser.email,
         data.password
       );
+      
+      const tempUserDocRef = doc(firestore, 'users', verifiedUser.id);
+      const tempUserSnap = await getDoc(tempUserDocRef);
 
-      const userDocRef = doc(firestore, 'users', verifiedUser.id);
-      await updateDoc(userDocRef, {
-        pin: null, // Remove PIN after registration
-        id: userCredential.user.uid, // Update ID to match auth UID
-      });
+      if(tempUserSnap.exists()) {
+        const userData = tempUserSnap.data();
+        // Remove pin and old id from data before creating new doc
+        delete (userData as any).pin;
+        delete (userData as any).id;
+        
+        const newUserDocRef = doc(firestore, 'users', userCredential.user.uid);
+        await setDoc(newUserDocRef, userData);
+        await deleteDoc(tempUserDocRef);
+
+      } else {
+        throw new Error("Původní uživatelský dokument nebyl nalezen.");
+      }
+
 
       toast({
         title: 'Registrace dokončena!',
@@ -137,6 +152,7 @@ export default function RegistrationPage() {
         description =
           'Tento e-mailový účet již existuje. Pokud jste již registrováni, přihlaste se na hlavní stránce.';
       }
+       console.error("Registration error:", error);
       toast({ variant: 'destructive', title: 'Chyba registrace', description });
     }
     setIsLoading(false);
