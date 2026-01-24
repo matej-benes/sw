@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select';
 import { useFirestore, useCollection, useMemoFirebase, useDoc, setDocumentNonBlocking, updateDocumentNonBlocking, addDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import type { Trida, LessonBlock, User, Predmet, Ucebna, ScheduleTemplate, Rozvrh, Substitution, Absence, Udalost } from '@/lib/types';
-import { collection, query, where, doc, getDoc, writeBatch } from 'firebase/firestore';
+import { collection, query, where, doc, getDoc, writeBatch, limit, getDocs } from 'firebase/firestore';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -231,7 +231,6 @@ function LessonEditDialog({
 function ScheduleEditor() {
     const firestore = useFirestore();
     const { toast } = useToast();
-    const { activeOrganizationId } = useAuth();
 
     const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
     const [timeSlots, setTimeSlots] = useState<string[]>(defaultTimeSlots);
@@ -301,12 +300,19 @@ function ScheduleEditor() {
 
 
     const handleSave = async () => {
-        if (!selectedClassId || !firestore || !activeOrganizationId) {
-            toast({ variant: "destructive", title: "Chyba", description: "Není vybrána žádná třída nebo chybí ID organizace." });
+        if (!selectedClassId || !firestore) {
+            toast({ variant: "destructive", title: "Chyba", description: "Není vybrána žádná třída." });
             return;
         }
         setIsSaving(true);
         try {
+            const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
+            const orgsSnap = await getDocs(orgsQuery);
+            if (orgsSnap.empty) {
+                throw new Error("V databázi neexistuje žádná organizace.");
+            }
+            const organizationId = orgsSnap.docs[0].id;
+            
             const templateRef = doc(firestore, 'scheduleTemplates', selectedClassId);
 
             // Function to sanitize an object, replacing undefined with null recursively
@@ -336,7 +342,7 @@ function ScheduleEditor() {
 
             const templateData: ScheduleTemplate = {
                 id: selectedClassId,
-                organizationId: activeOrganizationId,
+                organizationId: organizationId,
                 tridaId: selectedClassId,
                 timeSlots: timeSlots,
                 days: storableDays,
@@ -345,9 +351,9 @@ function ScheduleEditor() {
             await setDocumentNonBlocking(templateRef, templateData, { merge: true });
 
             toast({ title: "Šablona rozvrhu uložena", description: "Změny v šabloně byly úspěšně uloženy." });
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error saving schedule template:", error);
-            toast({ variant: "destructive", title: "Chyba ukládání", description: "Při ukládání šablony rozvrhu došlo k chybě." });
+            toast({ variant: "destructive", title: "Chyba ukládání", description: error.message || "Při ukládání šablony rozvrhu došlo k chybě." });
         } finally {
             setIsSaving(false);
         }
@@ -509,7 +515,7 @@ function ScheduleEditor() {
 function AbsencePlanner() {
     const firestore = useFirestore();
     const { toast } = useToast();
-    const { activeOrganizationId } = useAuth();
+    const { user } = useAuth();
 
     const [teacherId, setTeacherId] = useState<string>('');
     const [date, setDate] = useState<DateRange | undefined>({ from: new Date(), to: addDays(new Date(), 1) });
@@ -524,15 +530,15 @@ function AbsencePlanner() {
     );
     const { data: absences, isLoading: absencesLoading } = useCollection<Absence>(
         useMemoFirebase(() => {
-            if (!firestore || !activeOrganizationId) return null;
-            return query(collection(firestore, 'absences'), where('organizationId', '==', activeOrganizationId));
-        }, [firestore, activeOrganizationId])
+            if (!firestore) return null;
+            return query(collection(firestore, 'absences'));
+        }, [firestore])
     );
 
     const teacherAbsences = useMemo(() => {
-        if (!absences) return [];
-        return absences.filter((a: any) => a.teacherId && a.startDate && a.endDate);
-    }, [absences]);
+        if (!absences || !user?.organizationId) return [];
+        return absences.filter((a: any) => a.teacherId && a.startDate && a.endDate && a.organizationId === user.organizationId);
+    }, [absences, user?.organizationId]);
     
     const handleDelete = async (absenceId: string) => {
         if (!firestore) return;
@@ -541,14 +547,21 @@ function AbsencePlanner() {
     }
 
     const handleSave = async () => {
-        if (!firestore || !teacherId || !date?.from || !date?.to || !activeOrganizationId) {
+        if (!firestore || !teacherId || !date?.from || !date?.to) {
             toast({ variant: "destructive", title: "Chybějící údaje", description: "Vyberte učitele a rozsah data." });
             return;
         }
         setIsSaving(true);
         try {
+            const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
+            const orgsSnap = await getDocs(orgsQuery);
+            if (orgsSnap.empty) {
+                throw new Error("V databázi neexistuje žádná organizace.");
+            }
+            const organizationId = orgsSnap.docs[0].id;
+
             await addDocumentNonBlocking(collection(firestore, 'absences'), {
-                organizationId: activeOrganizationId,
+                organizationId: organizationId,
                 teacherId,
                 startDate: format(date.from, 'yyyy-MM-dd'),
                 endDate: format(date.to, 'yyyy-MM-dd'),
@@ -558,9 +571,9 @@ function AbsencePlanner() {
             setTeacherId('');
             setReason('');
             setDate({ from: new Date(), to: addDays(new Date(), 1) });
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error saving absence: ", error);
-            toast({ variant: "destructive", title: "Chyba při ukládání" });
+            toast({ variant: "destructive", title: "Chyba při ukládání", description: error.message });
         } finally {
             setIsSaving(false);
         }
@@ -690,7 +703,7 @@ function SubstitutionPlanner() {
     const absentTeachersToday = useMemo(() => {
         if (!absences) return [];
         return absences
-            .filter((a: any) => a.startDate && a.endDate && isWithinInterval(date, { start: parseISO(a.startDate), end: parseISO(a.endDate) }))
+            .filter((a: any) => a.teacherId && a.startDate && a.endDate && isWithinInterval(date, { start: parseISO(a.startDate), end: parseISO(a.endDate) }))
             .map((a: any) => a.teacherId);
     }, [absences, date]);
 

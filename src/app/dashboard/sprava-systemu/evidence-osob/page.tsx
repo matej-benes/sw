@@ -60,6 +60,7 @@ import {
   query,
   where,
   getDocs,
+  limit,
 } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
@@ -68,7 +69,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { cn } from '@/lib/utils';
-import { createUserWithEmailAndPassword, getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 
 
 const roleTranslations: { [key in Role]: string } = {
@@ -90,7 +91,7 @@ const userSchema = z.object({
   name: z.string().min(1, 'Jméno je povinné'),
   email: z.string().email('Neplatný formát emailu'),
   roles: z.array(z.string()).min(1, 'Uživatel musí mít alespoň jednu roli'),
-  password: z.string().optional().nullable(),
+  pin: z.string().optional().nullable(),
   tridaId: z.string().optional().nullable(),
   studentId: z.string().optional().nullable(),
 });
@@ -105,12 +106,11 @@ function UserForm({
 }: {
   user?: User | null;
   allUsers: User[],
-  onSave: (data: Partial<User>, password: string | null) => void;
+  onSave: (data: Partial<User>, pin: string | null) => void;
   closeDialog: () => void;
 }) {
   const { hasRole } = useAuth();
   const firestore = useFirestore();
-  const [showPassword, setShowPassword] = useState(false);
   
   const tridyQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -132,22 +132,25 @@ function UserForm({
       name: user?.name || '',
       email: user?.email || '',
       roles: user?.roles || [],
-      password: '',
+      pin: user?.pin || '',
       tridaId: (user as any)?.tridaId || null,
       studentId: user?.studentId || null,
     },
   });
   
+  const currentPin = watch('pin');
+  
   const onSubmit = (data: UserFormData) => {
-    const password = data.password || null;
-    onSave(data, password);
+    const pin = data.pin || null;
+    const userData = { ...data };
+    delete (userData as any).pin;
+    onSave(userData, pin);
     closeDialog();
   };
 
-
-  const generatePassword = () => {
-    const newPassword = Math.random().toString(36).slice(-8);
-    setValue('password', newPassword, { shouldValidate: true });
+  const generatePin = () => {
+    const newPin = Math.floor(100000 + Math.random() * 900000).toString();
+    setValue('pin', newPin, { shouldValidate: true });
   };
   
   const roles = watch('roles');
@@ -239,24 +242,19 @@ function UserForm({
             />
         </div>
        )}
-
-
-       {!user && (
-        <div className="space-y-2">
-            <Label htmlFor="password">Počáteční heslo</Label>
-            <div className="flex items-center gap-2">
-            <Input id="password" type={showPassword ? 'text' : 'password'} {...register('password')} />
-            <Button type="button" variant="ghost" size="icon" onClick={() => setShowPassword(!showPassword)}>
-                {showPassword ? <EyeOff /> : <Eye />}
-            </Button>
-            <Button type="button" variant="outline" onClick={generatePassword}>
-                <ShieldCheck className="mr-2 h-4 w-4" />
-                Generovat
-            </Button>
-            </div>
-            {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+      
+       <div className="space-y-2">
+        <Label htmlFor="pin">Registrační PIN</Label>
+        <div className="flex items-center gap-2">
+          <Input id="pin" {...register('pin')} placeholder="PIN není vygenerován" />
+          <Button type="button" variant="outline" onClick={generatePin}>
+            <ShieldCheck className="mr-2 h-4 w-4" />
+            Generovat
+          </Button>
         </div>
-       )}
+        {errors.pin && <p className="text-sm text-destructive">{errors.pin.message}</p>}
+        {currentPin && <p className="text-xs text-muted-foreground">Tento PIN slouží pro první registraci uživatele.</p>}
+      </div>
 
       <DialogFooter>
         <DialogClose asChild>
@@ -312,7 +310,6 @@ function UserRow({ user, onEdit, onDelete }: { user: User, onEdit: (user: User) 
 
 function AdminUserManagement() {
     const firestore = useFirestore();
-    const { user: adminUser, signIn, activeOrganizationId } = useAuth();
     
     const usersCollection = useMemoFirebase(
       () => (firestore) ? collection(firestore, 'users') : null,
@@ -330,68 +327,47 @@ function AdminUserManagement() {
         return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined && v !== null));
     };
 
-    const handleSaveUser = async (formData: Partial<User>, password: string | null) => {
-      if (!firestore || !adminUser?.email) return;
+    const handleSaveUser = async (formData: Partial<User>, pin: string | null) => {
+      if (!firestore) return;
 
       try {
         if (editingUser) {
-          // --- EDITING EXISTING USER ---
           const userRef = doc(firestore, 'users', editingUser.id);
-          const dataToUpdate = { ...formData };
-          delete (dataToUpdate as any).password;
+          const dataToUpdate = { ...formData, pin }; // Also update PIN if it changed
           const cleanedData = removeUndefinedFields(dataToUpdate);
           await updateDoc(userRef, cleanedData);
           toast({ title: 'Uživatel aktualizován' });
-
         } else {
           // --- CREATING NEW USER ---
-          if (!formData.email || !password) {
-            throw new Error("Email a heslo jsou povinné pro vytvoření nového uživatele.");
+          if (!formData.email || !formData.name) {
+            throw new Error("Email a jméno jsou povinné pro vytvoření nového uživatele.");
           }
-          if (!activeOrganizationId) {
-            toast({ variant: 'destructive', title: 'Chyba', description: 'Není aktivní žádná organizace. Nelze vytvořit uživatele.' });
-            return;
+
+          // Fetch the organization ID
+          const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
+          const orgsSnap = await getDocs(orgsQuery);
+          if (orgsSnap.empty) {
+            throw new Error("V databázi neexistuje žádná organizace. Vytvořte ji prosím nejprve ve správě organizací.");
           }
+          const organizationId = orgsSnap.docs[0].id;
           
-          const adminEmail = adminUser.email;
-          
-          // 1. Create Firebase Auth user
-          const userCredential = await createUserWithEmailAndPassword(getAuth(), formData.email, password);
-          const newUser = userCredential.user;
-          
-          // 2. Create Firestore document for the new user IMMEDIATELY
           const newUserForDb: Omit<Partial<User>, 'id'> = {
             name: formData.name,
             email: formData.email,
             roles: formData.roles || [],
-            organizationId: activeOrganizationId,
-            avatarUrl: `https://picsum.photos/seed/${newUser.uid}/100/100`,
+            organizationId: organizationId,
+            pin: pin || Math.floor(100000 + Math.random() * 900000).toString(), // Generate pin if not provided
+            avatarUrl: `https://picsum.photos/seed/${Math.random()}/100/100`,
             ...(formData.studentId && { studentId: formData.studentId }),
             ...(formData.tridaId && { tridaId: formData.tridaId }),
           };
           const cleanedData = removeUndefinedFields(newUserForDb);
-          await setDoc(doc(firestore, 'users', newUser.uid), cleanedData);
-          
-          // 3. Re-authenticate as admin because createUserWithEmailAndPassword signs the admin out
-          const adminPassword = prompt("Pro potvrzení vytvoření účtu zadejte prosím znovu své administrátorské heslo:");
-          if (!adminPassword) {
-              toast({ variant: 'destructive', title: 'Operace přerušena', description: 'Novému uživateli byl vytvořen účet, ale vy jste byli odhlášeni. Přihlaste se prosím znovu.' });
-              await getAuth().signOut();
-              return;
-          }
-          await signIn(adminEmail, adminPassword);
-
-          toast({ title: 'Uživatel úspěšně vytvořen a je aktivní.' });
+          await addDocumentNonBlocking(collection(firestore, 'users'), cleanedData);
+          toast({ title: 'Uživatel vytvořen', description: `Uživatel ${formData.name} byl vytvořen s registračním PINem.` });
         }
       } catch (e: any) {
         console.error("Error saving user:", e);
-        let description = 'Nepodařilo se uložit uživatele.';
-        if (e.code === 'auth/email-already-in-use') {
-          description = 'Tento e-mail je již používán jiným účtem.';
-        } else if (e.code === 'auth/wrong-password') {
-            description = 'Bylo zadáno nesprávné administrátorské heslo. Uživatel byl vytvořen, ale vy jste byli odhlášeni.';
-        }
-        toast({ variant: 'destructive', title: 'Chyba', description });
+        toast({ variant: 'destructive', title: 'Chyba', description: e.message || 'Nepodařilo se uložit uživatele.' });
       }
 
       setIsDialogOpen(false);

@@ -54,7 +54,8 @@ import {
   query,
   where,
   getDocs,
-  writeBatch
+  writeBatch,
+  limit,
 } from 'firebase/firestore';
 import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
@@ -275,7 +276,6 @@ function ClassRow({ classData, allUsers, onEdit, onDelete }: { classData: Class,
 
 function AdminClassManagement() {
   const firestore = useFirestore();
-  const { hasRole, activeOrganizationId } = useAuth();
   
   const classesCollection = useMemoFirebase(() => (firestore) ? collection(firestore, 'tridy') : null, [firestore]);
   const { data: classes, isLoading: classesLoading, error: classesError } = useCollection<Class>(classesCollection);
@@ -298,43 +298,54 @@ function AdminClassManagement() {
   const [deletingClass, setDeletingClass] = useState<Class | null>(null);
   const { toast } = useToast();
 
-  const handleSaveClass = (formData: ClassFormData) => {
-    if (!firestore || !activeOrganizationId) {
+  const handleSaveClass = async (formData: ClassFormData) => {
+    if (!firestore) {
        toast({
         variant: "destructive",
         title: "Chyba",
-        description: "Nelze uložit třídu, chybí ID organizace.",
+        description: "Nelze uložit třídu, databáze není dostupná.",
       });
       return;
     };
     
-    const dataToSave = {
-        organizationId: activeOrganizationId,
-        nazev: formData.nazev,
-        ucitelId: formData.ucitelId,
-        zastupciIds: formData.zastupciIds || [],
-        asistentiIds: formData.asistentiIds || [],
-    }
+    try {
+        const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
+        const orgsSnap = await getDocs(orgsQuery);
+        if (orgsSnap.empty) {
+            throw new Error("V databázi neexistuje žádná organizace.");
+        }
+        const organizationId = orgsSnap.docs[0].id;
+        
+        const dataToSave = {
+            organizationId: organizationId,
+            nazev: formData.nazev,
+            ucitelId: formData.ucitelId,
+            zastupciIds: formData.zastupciIds || [],
+            asistentiIds: formData.asistentiIds || [],
+        }
 
-    if (editingClass) {
-      const classRef = doc(firestore, 'tridy', editingClass.id);
-      updateDocumentNonBlocking(classRef, dataToSave);
-      toast({
-        title: 'Třída uložena',
-        description: `Třída ${formData.nazev} byla úspěšně uložena.`,
-      });
-    } else {
-      addDocumentNonBlocking(collection(firestore, 'tridy'), {
-          ...dataToSave,
-          ziaciIds: [], // initialize with empty students array
-      });
-      toast({
-        title: 'Třída přidána',
-        description: `Třída ${formData.nazev} byla úspěšně přidána.`,
-      });
+        if (editingClass) {
+          const classRef = doc(firestore, 'tridy', editingClass.id);
+          await updateDocumentNonBlocking(classRef, dataToSave);
+          toast({
+            title: 'Třída uložena',
+            description: `Třída ${formData.nazev} byla úspěšně uložena.`,
+          });
+        } else {
+          await addDocumentNonBlocking(collection(firestore, 'tridy'), {
+              ...dataToSave,
+              ziaciIds: [], // initialize with empty students array
+          });
+          toast({
+            title: 'Třída přidána',
+            description: `Třída ${formData.nazev} byla úspěšně přidána.`,
+          });
+        }
+        setIsDialogOpen(false);
+        setEditingClass(null);
+    } catch (e: any) {
+        toast({ variant: "destructive", title: "Chyba", description: e.message || 'Nepodařilo se uložit třídu.' });
     }
-    setIsDialogOpen(false);
-    setEditingClass(null);
   };
 
   const handleDeleteClass = async () => {

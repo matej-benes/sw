@@ -20,7 +20,7 @@ import { PlusCircle, Trash2 } from 'lucide-react';
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import type { ZaznamSchuzky } from '@/lib/types';
-import { collection, query, where, orderBy, Timestamp, doc } from 'firebase/firestore';
+import { collection, query, where, orderBy, Timestamp, doc, getDocs, limit } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
@@ -37,7 +37,7 @@ const meetingSchema = z.object({
 type MeetingFormData = z.infer<typeof meetingSchema>;
 
 export default function SchuzkyPage() {
-  const { user, activeOrganizationId, hasRole } = useAuth();
+  const { user, hasRole } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
 
@@ -52,27 +52,34 @@ export default function SchuzkyPage() {
   });
 
   const meetingsQuery = useMemoFirebase(() => {
-    if (!firestore || !activeOrganizationId) return null;
+    if (!firestore || !user?.organizationId) return null;
     return query(
       collection(firestore, 'zaznamy-schuzek'),
-      where('organizationId', '==', activeOrganizationId),
+      where('organizationId', '==', user.organizationId),
       orderBy('createdAt', 'desc')
     );
-  }, [firestore, activeOrganizationId]);
+  }, [firestore, user?.organizationId]);
 
   const { data: meetings, isLoading } = useCollection<ZaznamSchuzky>(meetingsQuery);
 
   const handleSaveMeeting = async (data: MeetingFormData) => {
-    if (!firestore || !user || !activeOrganizationId) return;
-
-    const newMeeting: Omit<ZaznamSchuzky, 'id'> = {
-      ...data,
-      organizationId: activeOrganizationId,
-      createdBy: user.id,
-      createdAt: Timestamp.now(),
-    };
+    if (!firestore || !user) return;
     
     try {
+      const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
+      const orgsSnap = await getDocs(orgsQuery);
+      if (orgsSnap.empty) {
+        throw new Error("V databázi neexistuje žádná organizace.");
+      }
+      const organizationId = orgsSnap.docs[0].id;
+      
+      const newMeeting: Omit<ZaznamSchuzky, 'id'> = {
+        ...data,
+        organizationId: organizationId,
+        createdBy: user.id,
+        createdAt: Timestamp.now(),
+      };
+
       await addDocumentNonBlocking(collection(firestore, 'zaznamy-schuzek'), newMeeting);
       toast({ title: 'Záznam uložen', description: 'Nový záznam o schůzce byl úspěšně přidán.' });
       reset({
@@ -81,9 +88,9 @@ export default function SchuzkyPage() {
           topic: '',
           notes: '',
       });
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      toast({ variant: 'destructive', title: 'Chyba', description: 'Při ukládání záznamu došlo k chybě.' });
+      toast({ variant: 'destructive', title: 'Chyba', description: e.message || 'Při ukládání záznamu došlo k chybě.' });
     }
   };
   

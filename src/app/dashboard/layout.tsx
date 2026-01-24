@@ -4,23 +4,17 @@ import { UserNav } from '@/components/layout/user-nav';
 import { Logo } from '@/components/logo';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Menu } from 'lucide-react';
-import Link from 'next/link';
-import { useUnreadMessages } from '@/hooks/use-unread-messages';
+import { useEffect } from 'react';
 import { usePageTitleUpdater } from '@/hooks/usePageTitleUpdater';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { MobileLayout } from '@/components/layout/mobile-layout';
-import { TrialExpiredOverlay } from '@/components/layout/trial-expired-overlay';
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading, isTrialExpired } = useAuth();
+  const { user, loading } = useAuth();
   const router = useRouter();
   const isMobile = useIsMobile();
   usePageTitleUpdater();
@@ -40,12 +34,11 @@ export default function DashboardLayout({
   }
 
   if (isMobile) {
-    return <MobileLayout>{isTrialExpired ? <TrialExpiredOverlay /> : children}</MobileLayout>;
+    return <MobileLayout>{children}</MobileLayout>;
   }
 
   return (
     <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr] relative">
-       {isTrialExpired && <TrialExpiredOverlay />}
        <div className="hidden border-r bg-muted/40 md:block">
             <AppSidebar />
        </div>
