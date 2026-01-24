@@ -310,10 +310,12 @@ function AdminClassManagement() {
     };
     
     try {
-        const organizationId = user?.organizationId;
-        if (!organizationId) {
-            throw new Error('Vašemu administrátorskému účtu chybí přiřazená organizace.');
+        const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
+        const orgsSnap = await getDocs(orgsQuery);
+        if (orgsSnap.empty) {
+            throw new Error('V databázi neexistuje žádná organizace. Vytvořte ji prosím nejprve.');
         }
+        const organizationId = orgsSnap.docs[0].id;
         
         const dataToSave = {
             organizationId: organizationId,
