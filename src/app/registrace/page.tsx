@@ -185,7 +185,54 @@ export default function RegistrationPage() {
             </CardFooter>
           </form>
         );
-      // Other steps remain the same
+      case 2:
+        return (
+          <form onSubmit={handleSubmitPassword(onPasswordSubmit)}>
+            <CardHeader className="text-center">
+              <Logo className="mx-auto h-12 w-12 text-primary" />
+              <CardTitle className="mt-4 text-2xl">Nastavení hesla</CardTitle>
+              <CardDescription>
+                Vytvořte si heslo pro váš účet: {verifiedUser?.email}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1">
+                <Label htmlFor="password">Nové heslo</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  {...registerPassword('password')}
+                  disabled={isLoading}
+                />
+                {passwordErrors.password && (
+                  <p className="text-sm text-destructive">
+                    {passwordErrors.password.message}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="confirmPassword">Potvrzení hesla</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  {...registerPassword('confirmPassword')}
+                  disabled={isLoading}
+                />
+                {passwordErrors.confirmPassword && (
+                  <p className="text-sm text-destructive">
+                    {passwordErrors.confirmPassword.message}
+                  </p>
+                )}
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Dokončit registraci
+              </Button>
+            </CardFooter>
+          </form>
+        );
       default:
         return null;
     }
