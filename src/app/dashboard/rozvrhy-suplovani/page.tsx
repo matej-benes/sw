@@ -237,11 +237,9 @@ function ScheduleEditor() {
     const [timeSlots, setTimeSlots] = useState<string[]>(defaultTimeSlots);
 
     // Data fetching
-    const tridyCollection = useMemoFirebase(() => {
-      if (!firestore) return null;
-      return collection(firestore, 'tridy');
-    }, [firestore]);
-    const { data: classes, isLoading: classesLoading } = useCollection<Trida>(tridyCollection);
+    const { data: classes, isLoading: classesLoading } = useCollection<Trida>(
+      useMemoFirebase(() => (firestore ? collection(firestore, 'tridy') : null), [firestore])
+    );
     
     const scheduleTemplateRef = useMemoFirebase(() => {
         if (!firestore || !selectedClassId) return null;
@@ -251,21 +249,21 @@ function ScheduleEditor() {
 
 
     const uciteleQuery = useMemoFirebase(() => {
-        if (!firestore || !activeOrganizationId) return null;
-        return query(collection(firestore, "users"), where("organizationId", "==", activeOrganizationId), where("roles", "array-contains", "ucitel"));
-    }, [firestore, activeOrganizationId]);
+        if (!firestore) return null;
+        return query(collection(firestore, "users"), where("roles", "array-contains", "ucitel"));
+    }, [firestore]);
     const { data: teachers, isLoading: teachersLoading } = useCollection<User>(uciteleQuery);
 
     const predmetyCollection = useMemoFirebase(() => {
-      if (!firestore || !activeOrganizationId) return null;
-      return query(collection(firestore, 'predmety'), where('organizationId', '==', activeOrganizationId))
-    }, [firestore, activeOrganizationId]);
+      if (!firestore) return null;
+      return query(collection(firestore, 'predmety'))
+    }, [firestore]);
     const { data: subjects, isLoading: subjectsLoading } = useCollection<Predmet>(predmetyCollection);
 
     const ucebnyCollection = useMemoFirebase(() => {
-      if (!firestore || !activeOrganizationId) return null;
-      return query(collection(firestore, 'ucebny'), where('organizationId', '==', activeOrganizationId))
-    }, [firestore, activeOrganizationId]);
+      if (!firestore) return null;
+      return query(collection(firestore, 'ucebny'))
+    }, [firestore]);
     const { data: classrooms, isLoading: classroomsLoading } = useCollection<Ucebna>(ucebnyCollection);
 
 
@@ -520,9 +518,9 @@ function AbsencePlanner() {
     
     const { data: teachers, isLoading: teachersLoading } = useCollection<User>(
         useMemoFirebase(() => {
-            if (!firestore || !activeOrganizationId) return null;
-            return query(collection(firestore, "users"), where("organizationId", "==", activeOrganizationId), where("roles", "array-contains", "ucitel"));
-        }, [firestore, activeOrganizationId])
+            if (!firestore) return null;
+            return query(collection(firestore, "users"), where("roles", "array-contains", "ucitel"));
+        }, [firestore])
     );
     const { data: absences, isLoading: absencesLoading } = useCollection<Absence>(
         useMemoFirebase(() => {
@@ -530,6 +528,11 @@ function AbsencePlanner() {
             return query(collection(firestore, 'absences'), where('organizationId', '==', activeOrganizationId));
         }, [firestore, activeOrganizationId])
     );
+
+    const teacherAbsences = useMemo(() => {
+        if (!absences) return [];
+        return absences.filter((a: any) => a.teacherId && a.startDate && a.endDate);
+    }, [absences]);
     
     const handleDelete = async (absenceId: string) => {
         if (!firestore) return;
@@ -649,7 +652,7 @@ function AbsencePlanner() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {absences && absences.length > 0 ? absences.map(absence => (
+                                    {teacherAbsences && teacherAbsences.length > 0 ? teacherAbsences.map((absence: any) => (
                                         <TableRow key={absence.id}>
                                             <TableCell className="font-medium">{getTeacherName(absence.teacherId)}</TableCell>
                                             <TableCell>{format(parseISO(absence.startDate), "d.M.yyyy")}</TableCell>
@@ -687,8 +690,8 @@ function SubstitutionPlanner() {
     const absentTeachersToday = useMemo(() => {
         if (!absences) return [];
         return absences
-            .filter(a => isWithinInterval(date, { start: parseISO(a.startDate), end: parseISO(a.endDate) }))
-            .map(a => a.teacherId);
+            .filter((a: any) => a.startDate && a.endDate && isWithinInterval(date, { start: parseISO(a.startDate), end: parseISO(a.endDate) }))
+            .map((a: any) => a.teacherId);
     }, [absences, date]);
 
     const lessonsToSubstitute = useMemo(() => {
