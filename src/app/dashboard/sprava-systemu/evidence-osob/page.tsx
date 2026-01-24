@@ -318,10 +318,19 @@ function AdminUserManagement() {
 
     const { data: allUsers, isLoading: usersLoading } = useCollection<User>(usersCollection);
 
+    const [selectedRole, setSelectedRole] = useState<Role | 'all'>('all');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [deletingUser, setDeletingUser] = useState<User | null>(null);
     const { toast } = useToast();
+
+    const filteredUsers = useMemo(() => {
+        if (!allUsers) return [];
+        if (selectedRole === 'all') {
+            return allUsers;
+        }
+        return allUsers.filter(user => user.roles?.includes(selectedRole));
+    }, [allUsers, selectedRole]);
 
     const removeUndefinedFields = (obj: any) => {
         return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined && v !== null));
@@ -331,32 +340,30 @@ function AdminUserManagement() {
       if (!firestore) return;
 
       try {
+        const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
+        const orgsSnap = await getDocs(orgsQuery);
+        if (orgsSnap.empty) {
+          throw new Error("V databázi neexistuje žádná organizace. Vytvořte ji prosím nejprve.");
+        }
+        const organizationId = orgsSnap.docs[0].id;
+        
         if (editingUser) {
           const userRef = doc(firestore, 'users', editingUser.id);
-          const dataToUpdate = { ...formData, pin }; // Also update PIN if it changed
+          const dataToUpdate = { ...formData, pin };
           const cleanedData = removeUndefinedFields(dataToUpdate);
           await updateDoc(userRef, cleanedData);
           toast({ title: 'Uživatel aktualizován' });
         } else {
-          // --- CREATING NEW USER ---
           if (!formData.email || !formData.name) {
             throw new Error("Email a jméno jsou povinné pro vytvoření nového uživatele.");
           }
-
-          // Fetch the organization ID
-          const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
-          const orgsSnap = await getDocs(orgsQuery);
-          if (orgsSnap.empty) {
-            throw new Error("V databázi neexistuje žádná organizace. Vytvořte ji prosím nejprve ve správě organizací.");
-          }
-          const organizationId = orgsSnap.docs[0].id;
           
           const newUserForDb: Omit<Partial<User>, 'id'> = {
             name: formData.name,
             email: formData.email,
             roles: formData.roles || [],
             organizationId: organizationId,
-            pin: pin || Math.floor(100000 + Math.random() * 900000).toString(), // Generate pin if not provided
+            pin: pin || Math.floor(100000 + Math.random() * 900000).toString(),
             avatarUrl: `https://picsum.photos/seed/${Math.random()}/100/100`,
             ...(formData.studentId && { studentId: formData.studentId }),
             ...(formData.tridaId && { tridaId: formData.tridaId }),
@@ -402,6 +409,11 @@ function AdminUserManagement() {
       setIsDialogOpen(true);
     };
     
+    const roleOptions = [
+      { value: 'all', label: 'Všechny role' },
+      ...allSchoolRoles.map(r => ({ value: r, label: roleTranslations[r] }))
+    ];
+
     return (
     <>
       <Dialog open={isDialogOpen} onOpenChange={(isOpen) => {
@@ -413,13 +425,25 @@ function AdminUserManagement() {
             <div>
               <CardTitle>Seznam uživatelů</CardTitle>
               <CardDescription>
-                Celkem {allUsers?.length ?? 0} uživatelů.
+                Celkem {filteredUsers?.length ?? 0} uživatelů.
               </CardDescription>
             </div>
-            <Button onClick={() => openDialog(null)}>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Přidat uživatele
-            </Button>
+             <div className="flex items-center gap-2">
+                <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as Role | 'all')}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Filtrovat podle role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {roleOptions.map(option => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <Button onClick={() => openDialog(null)}>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Přidat uživatele
+                </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
@@ -441,9 +465,16 @@ function AdminUserManagement() {
                     </TableCell>
                   </TableRow>
                 )}
-                {!usersLoading && allUsers?.map((user) => (
+                {!usersLoading && filteredUsers?.map((user) => (
                     <UserRow key={user.id} user={user} onEdit={openDialog} onDelete={setDeletingUser} />
                 ))}
+                {!usersLoading && filteredUsers?.length === 0 && (
+                    <TableRow>
+                        <TableCell colSpan={4} className="h-24 text-center">
+                            Žádní uživatelé neodpovídají filtru.
+                        </TableCell>
+                    </TableRow>
+                )}
               </TableBody>
             </Table>
           </CardContent>
