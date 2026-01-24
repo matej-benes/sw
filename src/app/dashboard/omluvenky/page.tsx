@@ -22,6 +22,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 const omluvenkaSchema = z.object({
   datum: z.object({ from: z.date(), to: z.date() }),
@@ -336,24 +338,39 @@ function TeacherExcuseManagement() {
     const { toast } = useToast();
     
     const [approvingExcuse, setApprovingExcuse] = useState<Omluvenka | null>(null);
+    const [showSubstituteClasses, setShowSubstituteClasses] = useState(false);
 
     const teacherClassesQuery = useMemoFirebase(() => {
         if (!firestore || !user) return null;
         return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
     }, [firestore, user]);
-    const { data: teacherClasses } = useCollection<Trida>(teacherClassesQuery);
-    const teacherClassIds = useMemo(() => teacherClasses?.map(c => c.id) || [], [teacherClasses]);
+    const { data: teacherClasses, isLoading: teacherClassesLoading } = useCollection<Trida>(teacherClassesQuery);
+
+    const substituteClassesQuery = useMemoFirebase(() => {
+        if (!firestore || !user) return null;
+        return query(collection(firestore, 'tridy'), where('zastupciIds', 'array-contains', user.id));
+    }, [firestore, user]);
+    const { data: substituteClasses, isLoading: substituteClassesLoading } = useCollection<Trida>(substituteClassesQuery);
+    
+    const activeClassIds = useMemo(() => {
+        const mainClassIds = teacherClasses?.map(c => c.id) || [];
+        if (showSubstituteClasses) {
+            const subClassIds = substituteClasses?.map(c => c.id) || [];
+            return [...new Set([...mainClassIds, ...subClassIds])];
+        }
+        return mainClassIds;
+    }, [teacherClasses, substituteClasses, showSubstituteClasses]);
     
     const omluvenkyQuery = useMemoFirebase(() => {
-        if (!firestore || !teacherClassIds || teacherClassIds.length === 0) return null;
-        return query(collection(firestore, 'omluvenky'), where('tridaId', 'in', teacherClassIds));
-    }, [firestore, teacherClassIds]);
+        if (!firestore || !activeClassIds || activeClassIds.length === 0) return null;
+        return query(collection(firestore, 'omluvenky'), where('tridaId', 'in', activeClassIds));
+    }, [firestore, activeClassIds]);
     const { data: omluvenky, isLoading: omluvenkyLoading } = useCollection<Omluvenka>(omluvenkyQuery);
 
     const { data: studentsData, isLoading: studentsLoading } = useCollection<User>(useMemoFirebase(() => {
-        if (!firestore || teacherClassIds.length === 0) return null;
-        return query(collection(firestore, 'users'), where('tridaId', 'in', teacherClassIds));
-    }, [firestore, teacherClassIds]));
+        if (!firestore || activeClassIds.length === 0) return null;
+        return query(collection(firestore, 'users'), where('tridaId', 'in', activeClassIds));
+    }, [firestore, activeClassIds]));
 
     const handleUpdateStatus = async (id: string, status: 'approved' | 'rejected') => {
         if (!firestore) return;
@@ -371,7 +388,10 @@ function TeacherExcuseManagement() {
     const pendingOmluvenky = useMemo(() => omluvenky?.filter(o => o.status === 'pending') || [], [omluvenky]);
     const processedOmluvenky = useMemo(() => omluvenky?.filter(o => o.status !== 'pending') || [], [omluvenky]);
     
-    const isLoading = omluvenkyLoading || studentsLoading;
+    const isLoading = omluvenkyLoading || studentsLoading || teacherClassesLoading || substituteClassesLoading;
+
+    const isClassTeacher = teacherClasses && teacherClasses.length > 0;
+    const isSubstituteTeacher = substituteClasses && substituteClasses.length > 0;
 
     const statusBadge = (status: 'pending' | 'approved' | 'rejected') => {
         switch (status) {
@@ -380,72 +400,106 @@ function TeacherExcuseManagement() {
             case 'pending': return <Badge variant="secondary">Čeká na vyřízení</Badge>;
         }
     };
+    
+    if (isLoading) {
+        return (
+            <Card>
+                <CardHeader><CardTitle>Správa omluvenek</CardTitle></CardHeader>
+                <CardContent><p>Načítání...</p></CardContent>
+            </Card>
+        );
+    }
+
+    if (!isClassTeacher && !isSubstituteTeacher) {
+        return (
+            <Card>
+                <CardHeader><CardTitle>Správa omluvenek</CardTitle></CardHeader>
+                <CardContent><p className="text-muted-foreground">Tato sekce je určena pro třídní učitele a jejich zástupce.</p></CardContent>
+            </Card>
+        );
+    }
 
     return (
         <Card>
             <CardHeader>
                 <CardTitle>Správa omluvenek</CardTitle>
-                <CardDescription>Přehled omluvenek od rodičů pro vaše třídy.</CardDescription>
+                <CardDescription>Přehled omluvenek pro vaše třídy.</CardDescription>
             </CardHeader>
             <CardContent>
-                <Tabs defaultValue="pending">
-                    <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="pending">Nové žádosti ({pendingOmluvenky.length})</TabsTrigger>
-                        <TabsTrigger value="processed">Vyřízené</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="pending" className="mt-4">
-                        <Table>
-                             <TableHeader>
-                                <TableRow>
-                                    <TableHead>Žák</TableHead>
-                                    <TableHead>Datum</TableHead>
-                                    <TableHead>Důvod</TableHead>
-                                    <TableHead className="text-right">Akce</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {isLoading ? <TableRow><TableCell colSpan={4}>Načítání...</TableCell></TableRow> : null}
-                                {!isLoading && pendingOmluvenky.map(o => (
-                                    <TableRow key={o.id}>
-                                        <TableCell>{getStudentName(o.studentId)}</TableCell>
-                                        <TableCell>{format(new Date(o.datumOd), 'd.M.y')} - {format(new Date(o.datumDo), 'd.M.y')}</TableCell>
-                                        <TableCell className="max-w-xs truncate">{o.duvod}</TableCell>
-                                        <TableCell className="text-right">
-                                            <Button size="icon" variant="ghost" onClick={() => handleApproveClick(o)} className="text-green-600"><Check className="h-4 w-4" /></Button>
-                                            <Button size="icon" variant="ghost" onClick={() => handleUpdateStatus(o.id, 'rejected')} className="text-red-600"><X className="h-4 w-4" /></Button>
-                                        </TableCell>
+                {isSubstituteTeacher && (
+                    <div className="flex items-center space-x-2 mb-4 p-4 border rounded-lg bg-muted/50">
+                        <Switch
+                            id="show-substitute-classes"
+                            checked={showSubstituteClasses}
+                            onCheckedChange={setShowSubstituteClasses}
+                        />
+                        <Label htmlFor="show-substitute-classes">
+                            Zobrazit třídy, kde jsem zástupcem
+                        </Label>
+                    </div>
+                )}
+                
+                {(isClassTeacher || showSubstituteClasses) ? (
+                    <Tabs defaultValue="pending">
+                        <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="pending">Nové žádosti ({pendingOmluvenky.length})</TabsTrigger>
+                            <TabsTrigger value="processed">Vyřízené</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="pending" className="mt-4">
+                            <Table>
+                                 <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Žák</TableHead>
+                                        <TableHead>Datum</TableHead>
+                                        <TableHead>Důvod</TableHead>
+                                        <TableHead className="text-right">Akce</TableHead>
                                     </TableRow>
-                                ))}
-                                 {!isLoading && pendingOmluvenky.length === 0 && (
-                                     <TableRow><TableCell colSpan={4} className="text-center h-24">Žádné nové žádosti.</TableCell></TableRow>
-                                 )}
-                            </TableBody>
-                        </Table>
-                    </TabsContent>
-                     <TabsContent value="processed" className="mt-4">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Žák</TableHead>
-                                    <TableHead>Datum</TableHead>
-                                    <TableHead>Stav</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                             <TableBody>
-                                {processedOmluvenky.map(o => (
-                                    <TableRow key={o.id}>
-                                        <TableCell>{getStudentName(o.studentId)}</TableCell>
-                                        <TableCell>{format(new Date(o.datumOd), 'd.M.y')} - {format(new Date(o.datumDo), 'd.M.y')}</TableCell>
-                                        <TableCell>{statusBadge(o.status)}</TableCell>
+                                </TableHeader>
+                                <TableBody>
+                                    {pendingOmluvenky.map(o => (
+                                        <TableRow key={o.id}>
+                                            <TableCell>{getStudentName(o.studentId)}</TableCell>
+                                            <TableCell>{format(new Date(o.datumOd), 'd.M.y')} - {format(new Date(o.datumDo), 'd.M.y')}</TableCell>
+                                            <TableCell className="max-w-xs truncate">{o.duvod}</TableCell>
+                                            <TableCell className="text-right">
+                                                <Button size="icon" variant="ghost" onClick={() => handleApproveClick(o)} className="text-green-600"><Check className="h-4 w-4" /></Button>
+                                                <Button size="icon" variant="ghost" onClick={() => handleUpdateStatus(o.id, 'rejected')} className="text-red-600"><X className="h-4 w-4" /></Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                     {pendingOmluvenky.length === 0 && (
+                                         <TableRow><TableCell colSpan={4} className="text-center h-24">Žádné nové žádosti.</TableCell></TableRow>
+                                     )}
+                                </TableBody>
+                            </Table>
+                        </TabsContent>
+                         <TabsContent value="processed" className="mt-4">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Žák</TableHead>
+                                        <TableHead>Datum</TableHead>
+                                        <TableHead>Stav</TableHead>
                                     </TableRow>
-                                ))}
-                                {!isLoading && processedOmluvenky.length === 0 && (
-                                     <TableRow><TableCell colSpan={3} className="text-center h-24">Žádné vyřízené žádosti.</TableCell></TableRow>
-                                 )}
-                            </TableBody>
-                        </Table>
-                    </TabsContent>
-                </Tabs>
+                                </TableHeader>
+                                 <TableBody>
+                                    {processedOmluvenky.map(o => (
+                                        <TableRow key={o.id}>
+                                            <TableCell>{getStudentName(o.studentId)}</TableCell>
+                                            <TableCell>{format(new Date(o.datumOd), 'd.M.y')} - {format(new Date(o.datumDo), 'd.M.y')}</TableCell>
+                                            <TableCell>{statusBadge(o.status)}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {processedOmluvenky.length === 0 && (
+                                         <TableRow><TableCell colSpan={3} className="text-center h-24">Žádné vyřízené žádosti.</TableCell></TableRow>
+                                     )}
+                                </TableBody>
+                            </Table>
+                        </TabsContent>
+                    </Tabs>
+                ) : (
+                    <p className="text-muted-foreground text-center py-8">Zapněte přepínač výše pro zobrazení omluvenek ze tříd, kde jste zástupcem.</p>
+                )}
             </CardContent>
              {approvingExcuse && (
                 <ApproveExcuseDialog 
@@ -465,20 +519,21 @@ export default function OmluvenkyPage() {
     if (loading) {
         return <div>Načítání...</div>;
     }
+    
+    const isTeacher = hasRole('ucitel');
 
     return (
         <div className="space-y-6">
             <h1 className="text-3xl font-bold tracking-tight">Omluvenky</h1>
             {hasRole('rodic') && <ParentExcuseForm />}
             {hasRole('ziak') && <StudentExcuseForm />}
-            {(hasRole('ucitel') || hasRole('administrator')) && <TeacherExcuseManagement />}
-            {(!hasRole('rodic') && !hasRole('ziak') && !hasRole('ucitel') && !hasRole('administrator')) && (
+            {isTeacher && <TeacherExcuseManagement />}
+            {(!hasRole('rodic') && !hasRole('ziak') && !isTeacher) && (
                  <Card>
                     <CardHeader><CardTitle>Žádný obsah</CardTitle></CardHeader>
-                    <CardContent><p>Tato stránka je určena pro rodiče a učitele.</p></CardContent>
+                    <CardContent><p>Tato stránka je určena pro rodiče, žáky a učitele.</p></CardContent>
                 </Card>
             )}
         </div>
     );
 }
-    
