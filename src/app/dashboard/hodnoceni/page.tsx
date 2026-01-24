@@ -61,20 +61,10 @@ function TeacherView() {
 
     const gradingsQuery = useMemoFirebase(() => {
         if (!user?.id || !firestore) return null;
-        return query(collection(firestore, 'grades'), where('ucitelId', '==', user.id));
+        return query(collection(firestore, 'grades'), where('ucitelId', '==', user.id), orderBy('createdAt', 'desc'));
     }, [firestore, user?.id]);
 
     const { data: gradings, isLoading } = useCollection<Grading>(gradingsQuery);
-
-    const sortedGradings = useMemo(() => {
-        if (!gradings) return [];
-        return [...gradings].sort((a, b) => {
-            const timeA = a.createdAt ? (a.createdAt as Timestamp).toMillis() : 0;
-            const timeB = b.createdAt ? (b.createdAt as Timestamp).toMillis() : 0;
-            return timeB - timeA;
-        });
-    }, [gradings]);
-
 
     const teacherClassesQuery = useMemoFirebase(() => {
         if (!user || !firestore) return null;
@@ -169,11 +159,14 @@ function TeacherView() {
                 }
 
                 const classDoc = await getDoc(doc(firestore, 'tridy', student.tridaId));
-                if (!classDoc.exists() || !classDoc.data().organizationId) {
-                    toast({ variant: 'destructive', title: 'Chyba', description: 'Třída nebo organizace studenta nenalezena.' });
+                let organizationId = classDoc.exists() ? classDoc.data().organizationId : null;
+                if (!organizationId) {
+                    organizationId = user?.organizationId;
+                }
+                if (!classDoc.exists() || !organizationId) {
+                    toast({ variant: 'destructive', title: 'Chyba', description: 'Data o třídě nebo organizaci studenta nenalezena.' });
                     return;
                 }
-                const organizationId = classDoc.data().organizationId;
                 
                 const predmetDoc = await getDoc(doc(firestore, 'predmety', data.predmetId));
                 if (!predmetDoc.exists()) {
@@ -206,11 +199,14 @@ function TeacherView() {
                 }
 
                 const classDoc = await getDoc(doc(firestore, 'tridy', selectedClassId));
-                if (!classDoc.exists() || !classDoc.data().organizationId) {
+                let organizationId = classDoc.exists() ? classDoc.data().organizationId : null;
+                if (!organizationId) {
+                    organizationId = user?.organizationId;
+                }
+                if (!classDoc.exists() || !organizationId) {
                     toast({ variant: 'destructive', title: 'Chyba', description: 'Data o třídě nebo organizaci nebyla nalezena.' });
                     return;
                 }
-                const organizationId = classDoc.data().organizationId;
 
                 const predmetDoc = await getDoc(doc(firestore, 'predmety', data.predmetId));
                 if (!predmetDoc.exists()) {
@@ -299,10 +295,10 @@ function TeacherView() {
                         <TableBody>
                             {isLoading ? (
                                 <TableRow><TableCell colSpan={8} className="text-center h-24">Načítání hodnocení...</TableCell></TableRow>
-                            ) : sortedGradings?.length === 0 ? (
+                            ) : gradings?.length === 0 ? (
                                 <TableRow><TableCell colSpan={8} className="text-center h-24">Nebylo zadáno žádné hodnocení.</TableCell></TableRow>
                             ) : (
-                                sortedGradings?.map(g => (
+                                gradings?.map(g => (
                                     <TableRow key={g.id}>
                                         <TableCell>{g.datum}</TableCell>
                                         <TableCell>{g.cas}</TableCell>
@@ -468,7 +464,7 @@ function StudentParentView() {
         if (!firestore || !studentId) {
             return null;
         }
-        return query(collection(firestore, 'grades'), where('ziakId', '==', studentId));
+        return query(collection(firestore, 'grades'), where('ziakId', '==', studentId), orderBy('createdAt', 'desc'));
     }, [firestore, studentId]);
 
     const { data: gradings, isLoading } = useCollection<Grading>(gradesQuery);
@@ -505,11 +501,6 @@ function StudentParentView() {
         return averages;
     }, [gradesBySubject]);
     
-    const sortedGradings = useMemo(() => {
-        if (!gradings) return [];
-        return [...gradings].sort((a,b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis());
-    }, [gradings]);
-
     if (isLoading || teachersLoading) {
         return <div className="p-6 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto" /></div>;
     }
@@ -584,12 +575,12 @@ function StudentParentView() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {sortedGradings.length === 0 ? (
+                            {gradings.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={5} className="h-24 text-center">Nebyly nalezeny žádné známky.</TableCell>
                                 </TableRow>
                             ) : (
-                                sortedGradings.map(g => (
+                                gradings.map(g => (
                                     <TableRow key={g.id} onClick={() => router.push(`/dashboard/hodnoceni/${g.id}`)} className="cursor-pointer">
                                         <TableCell>{g.datum}</TableCell>
                                         <TableCell>{g.predmet}</TableCell>

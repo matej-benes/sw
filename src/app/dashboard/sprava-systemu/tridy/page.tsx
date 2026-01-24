@@ -276,8 +276,9 @@ function ClassRow({ classData, allUsers, onEdit, onDelete }: { classData: Class,
 
 function AdminClassManagement() {
   const firestore = useFirestore();
+  const { user } = useAuth();
   
-  const classesCollection = useMemoFirebase(() => (firestore) ? collection(firestore, 'tridy') : null, [firestore]);
+  const classesCollection = useMemoFirebase(() => (firestore ? collection(firestore, 'tridy') : null), [firestore]);
   const { data: classes, isLoading: classesLoading, error: classesError } = useCollection<Class>(classesCollection);
   
   const teachersQuery = useMemoFirebase(() => (firestore) ? query(collection(firestore, "users"), where("roles", "array-contains", "ucitel")) : null, [firestore]);
@@ -309,12 +310,10 @@ function AdminClassManagement() {
     };
     
     try {
-        const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
-        const orgsSnap = await getDocs(orgsQuery);
-        if (orgsSnap.empty) {
-            throw new Error("V databázi neexistuje žádná organizace.");
+        const organizationId = user?.organizationId;
+        if (!organizationId) {
+            throw new Error('Vašemu administrátorskému účtu chybí přiřazená organizace.');
         }
-        const organizationId = orgsSnap.docs[0].id;
         
         const dataToSave = {
             organizationId: organizationId,
@@ -322,7 +321,7 @@ function AdminClassManagement() {
             ucitelId: formData.ucitelId,
             zastupciIds: formData.zastupciIds || [],
             asistentiIds: formData.asistentiIds || [],
-        }
+        };
 
         if (editingClass) {
           const classRef = doc(firestore, 'tridy', editingClass.id);
