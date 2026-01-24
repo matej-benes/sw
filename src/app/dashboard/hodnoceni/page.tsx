@@ -46,7 +46,7 @@ const gradingSchema = z.object({
 type GradingFormData = z.infer<typeof gradingSchema>;
 
 function TeacherView() {
-    const { user } = useAuth();
+    const { user, hasRole } = useAuth();
     const firestore = useFirestore();
     const { toast } = useToast();
     const searchParams = useSearchParams();
@@ -61,8 +61,18 @@ function TeacherView() {
 
     const gradingsQuery = useMemoFirebase(() => {
         if (!user?.id || !firestore) return null;
-        return query(collection(firestore, 'grades'), where('ucitelId', '==', user.id), orderBy('createdAt', 'desc'));
-    }, [firestore, user?.id]);
+        
+        const gradesCollection = collection(firestore, 'grades');
+
+        if (hasRole('administrator')) {
+            // Admin sees all grades in their organization
+            if (!user.organizationId) return null; // Safety check
+            return query(gradesCollection, where('organizationId', '==', user.organizationId), orderBy('createdAt', 'desc'));
+        }
+        
+        // Teacher sees only their own grades
+        return query(gradesCollection, where('ucitelId', '==', user.id), orderBy('createdAt', 'desc'));
+    }, [firestore, user, hasRole]);
 
     const { data: gradings, isLoading } = useCollection<Grading>(gradingsQuery);
 
@@ -145,6 +155,24 @@ function TeacherView() {
         }
 
         try {
+            const classDocRef = doc(firestore, 'tridy', selectedClassId || data.tridaId);
+            const classDocSnap = await getDoc(classDocRef);
+            let organizationId: string | undefined;
+
+            if (classDocSnap.exists()) {
+                organizationId = classDocSnap.data().organizationId;
+            }
+
+            if (!organizationId) {
+                // Fallback to user's organizationId if class doesn't have one
+                organizationId = user.organizationId;
+            }
+            
+            if (!organizationId) {
+                toast({ variant: 'destructive', title: 'Chyba', description: 'Data o třídě nebo organizaci nebyla nalezena.' });
+                return;
+            }
+
             if (editingGrading) {
                 const studentDoc = await getDoc(doc(firestore, 'users', data.studentIds[0]));
                  if(!studentDoc.exists()) {
@@ -155,16 +183,6 @@ function TeacherView() {
                 
                 if (!student.tridaId) {
                     toast({ variant: 'destructive', title: 'Chyba', description: 'Student není přiřazen k žádné třídě.' });
-                    return;
-                }
-
-                const classDoc = await getDoc(doc(firestore, 'tridy', student.tridaId));
-                let organizationId = classDoc.exists() ? classDoc.data().organizationId : null;
-                if (!organizationId) {
-                    organizationId = user?.organizationId;
-                }
-                if (!classDoc.exists() || !organizationId) {
-                    toast({ variant: 'destructive', title: 'Chyba', description: 'Data o třídě nebo organizaci studenta nenalezena.' });
                     return;
                 }
                 
@@ -198,16 +216,6 @@ function TeacherView() {
                     return;
                 }
 
-                const classDoc = await getDoc(doc(firestore, 'tridy', selectedClassId));
-                let organizationId = classDoc.exists() ? classDoc.data().organizationId : null;
-                if (!organizationId) {
-                    organizationId = user?.organizationId;
-                }
-                if (!classDoc.exists() || !organizationId) {
-                    toast({ variant: 'destructive', title: 'Chyba', description: 'Data o třídě nebo organizaci nebyla nalezena.' });
-                    return;
-                }
-
                 const predmetDoc = await getDoc(doc(firestore, 'predmety', data.predmetId));
                 if (!predmetDoc.exists()) {
                     toast({ variant: 'destructive', title: 'Chyba', description: 'Vybraný předmět nebyl nalezen.' });
@@ -228,7 +236,7 @@ function TeacherView() {
                 studentsData.forEach(student => {
                     const newGradingDoc = doc(collection(firestore, 'grades'));
                     const gradingData: Omit<Grading, 'id'> = {
-                        organizationId: organizationId,
+                        organizationId: organizationId!,
                         predmetId: predmetDoc.id,
                         tridaId: student.tridaId || '',
                         ziakId: student.id,

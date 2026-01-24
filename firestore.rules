@@ -16,6 +16,11 @@ service cloud.firestore {
     function isSuperAdmin() {
       return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuperAdmin == true;
     }
+    
+    function isOrgMember(orgId) {
+        let userOrgId = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId;
+        return isAuthenticated() && userOrgId != null && userOrgId == orgId;
+    }
 
     function hasRole(role) {
       return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny([role]);
@@ -39,8 +44,9 @@ service cloud.firestore {
     }
     
     match /grades/{gradeId} {
-      allow get: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
-      allow list: if (hasAnyRole(['administrator'])) || 
+      allow get: if isOrgMember(resource.data.organizationId) && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
+      allow list: if 
+                  (hasRole('administrator') && request.query.where.organizationId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId) ||
                   (hasRole('ucitel') && request.query.where.ucitelId == request.auth.uid) ||
                   (hasRole('ziak') && request.query.where.ziakId == request.auth.uid) ||
                   (hasRole('rodic') && isMyStudent(request.query.where.ziakId));
@@ -122,8 +128,8 @@ service cloud.firestore {
     }
     
     match /organizations/{organizationId} {
-      allow read: if isAuthenticated();
       allow create: if isAuthenticated();
+      allow read: if isAuthenticated();
       allow update, delete: if isSuperAdmin();
     }
     
