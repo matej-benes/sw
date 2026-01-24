@@ -46,7 +46,7 @@ const gradingSchema = z.object({
 type GradingFormData = z.infer<typeof gradingSchema>;
 
 function TeacherView() {
-    const { user, activeOrganizationId } = useAuth();
+    const { user } = useAuth();
     const firestore = useFirestore();
     const { toast } = useToast();
     const searchParams = useSearchParams();
@@ -149,19 +149,12 @@ function TeacherView() {
     }, [tridaIdFromParams, predmetIdFromParams, handleOpenDialog]);
 
     const handleSaveGrading = async (data: GradingFormData) => {
-        if (!user || !firestore || !activeOrganizationId) {
+        if (!user || !firestore) {
             toast({ variant: 'destructive', title: 'Chyba', description: 'Nekompletní data pro uložení.' });
             return;
         }
 
         try {
-            const predmetDoc = await getDoc(doc(firestore, 'predmety', data.predmetId));
-            if (!predmetDoc.exists()) {
-                toast({ variant: 'destructive', title: 'Chyba', description: 'Vybraný předmět nebyl nalezen.' });
-                return;
-            }
-            const predmet = predmetDoc.data() as Predmet;
-
             if (editingGrading) {
                 const studentDoc = await getDoc(doc(firestore, 'users', data.studentIds[0]));
                  if(!studentDoc.exists()) {
@@ -170,9 +163,28 @@ function TeacherView() {
                 }
                 const student = studentDoc.data() as User;
                 
+                if (!student.tridaId) {
+                    toast({ variant: 'destructive', title: 'Chyba', description: 'Student není přiřazen k žádné třídě.' });
+                    return;
+                }
+
+                const classDoc = await getDoc(doc(firestore, 'tridy', student.tridaId));
+                if (!classDoc.exists() || !classDoc.data().organizationId) {
+                    toast({ variant: 'destructive', title: 'Chyba', description: 'Třída nebo organizace studenta nenalezena.' });
+                    return;
+                }
+                const organizationId = classDoc.data().organizationId;
+                
+                const predmetDoc = await getDoc(doc(firestore, 'predmety', data.predmetId));
+                if (!predmetDoc.exists()) {
+                    toast({ variant: 'destructive', title: 'Chyba', description: 'Vybraný předmět nebyl nalezen.' });
+                    return;
+                }
+                const predmet = predmetDoc.data() as Predmet;
+                
                 const gradingData: Partial<Grading> = {
                     ...data,
-                    organizationId: activeOrganizationId,
+                    organizationId: organizationId,
                     predmetId: predmetDoc.id,
                     tridaId: student.tridaId,
                     ziakId: student.id,
@@ -187,15 +199,40 @@ function TeacherView() {
                 await updateDoc(doc(firestore, 'grades', editingGrading.id), gradingData);
                 toast({ title: 'Hodnocení upraveno', description: 'Změny byly úspěšně uloženy.' });
             } else {
+                // Batch create
+                if (!selectedClassId) {
+                    toast({ variant: 'destructive', title: 'Chyba', description: 'Není vybrána žádná třída.' });
+                    return;
+                }
+
+                const classDoc = await getDoc(doc(firestore, 'tridy', selectedClassId));
+                if (!classDoc.exists() || !classDoc.data().organizationId) {
+                    toast({ variant: 'destructive', title: 'Chyba', description: 'Data o třídě nebo organizaci nebyla nalezena.' });
+                    return;
+                }
+                const organizationId = classDoc.data().organizationId;
+
+                const predmetDoc = await getDoc(doc(firestore, 'predmety', data.predmetId));
+                if (!predmetDoc.exists()) {
+                    toast({ variant: 'destructive', title: 'Chyba', description: 'Vybraný předmět nebyl nalezen.' });
+                    return;
+                }
+                const predmet = predmetDoc.data() as Predmet;
+
                 const studentsQuery = query(collection(firestore, 'users'), where(documentId(), 'in', data.studentIds));
                 const studentDocs = await getDocs(studentsQuery);
                 const studentsData = studentDocs.docs.map(d => ({id: d.id, ...d.data()}) as User);
+
+                if (studentsData.length === 0) {
+                     toast({ variant: 'destructive', title: 'Chyba', description: 'Vybraní studenti nebyli nalezeni.' });
+                    return;
+                }
 
                 const batch = writeBatch(firestore);
                 studentsData.forEach(student => {
                     const newGradingDoc = doc(collection(firestore, 'grades'));
                     const gradingData: Omit<Grading, 'id'> = {
-                        organizationId: activeOrganizationId,
+                        organizationId: organizationId,
                         predmetId: predmetDoc.id,
                         tridaId: student.tridaId || '',
                         ziakId: student.id,
