@@ -1,13 +1,14 @@
 'use client';
 import React, { useState } from 'react';
 import { cn } from "@/lib/utils";
-import type { LessonBlock, Udalost, Rozvrh, Substitution, ZapisHodiny } from "@/lib/types";
+import type { LessonBlock, Udalost, Rozvrh, Substitution, ZapisHodiny, User, Predmet } from "@/lib/types";
 import { useRouter } from 'next/navigation';
 import { format, parseISO, isSameDay } from 'date-fns';
 import { BookOpen, Info, XCircle, ChevronRight, PencilRuler, Pencil, StickyNote } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 
 function LessonActionSheet({ lesson, period, time, day, isOpen, onOpenChange, isTeacher }: { lesson: LessonBlock | null, period: number, time: string, day: Date, isOpen: boolean, onOpenChange: (isOpen: boolean) => void, isTeacher: boolean }) {
     const router = useRouter();
@@ -100,27 +101,40 @@ function LessonListItem({
     time,
     topic,
     onClick,
+    isSubstituted,
+    isSubstituting,
 }: {
     lesson: LessonBlock;
     period: number;
     time: string;
     topic?: string;
     onClick: () => void;
+    isSubstituted?: boolean;
+    isSubstituting?: boolean;
 }) {
 
     return (
         <div 
-            onClick={onClick}
-            className="flex items-start gap-4 p-3 rounded-lg border bg-card text-card-foreground cursor-pointer hover:bg-muted/50 transition-colors"
+            onClick={!isSubstituted ? onClick : undefined}
+            className={cn(
+                "flex items-start gap-4 p-3 rounded-lg border text-card-foreground transition-colors",
+                isSubstituted
+                    ? "bg-muted/30 border-dashed text-muted-foreground"
+                    : "bg-card cursor-pointer hover:bg-muted/50",
+                isSubstituting && "bg-destructive/90 text-destructive-foreground border-destructive"
+            )}
         >
-            <div className="flex flex-col items-center w-12">
+            <div className={cn("flex flex-col items-center w-12", isSubstituted && "opacity-50")}>
                 <span className="text-2xl font-bold">{period}</span>
-                <span className="text-xs text-muted-foreground">{time.replace('-', '\n')}</span>
+                <span className="text-xs">{time.replace('-', '\n')}</span>
             </div>
-            <div className="flex-grow">
-                <p className="font-semibold text-lg">{lesson.subjectName}</p>
-                <p className="text-sm text-muted-foreground">{lesson.className} | {lesson.ucebnaName || 'N/A'}</p>
-                {topic && (
+            <div className={cn("flex-grow", isSubstituted && "line-through opacity-50")}>
+                 <div className="flex items-center gap-2">
+                    {isSubstituting && <Badge variant="secondary" className="bg-white text-destructive font-bold">Supl</Badge>}
+                    <p className="font-semibold text-lg">{lesson.subjectName}</p>
+                </div>
+                <p className="text-sm">{lesson.className} | {lesson.ucebnaName || 'N/A'}</p>
+                {topic && !isSubstituted && (
                     <div className="flex items-center gap-2 mt-2 text-sm text-primary">
                         <BookOpen className="h-4 w-4" />
                         <span>{topic}</span>
@@ -128,7 +142,7 @@ function LessonListItem({
                 )}
             </div>
              <div className="self-center">
-                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                {!isSubstituted && <ChevronRight className="h-5 w-5 text-muted-foreground" />}
             </div>
         </div>
     );
@@ -173,6 +187,8 @@ export function MobileTimetableList({
     userId,
     userClassId,
     day,
+    teachers,
+    subjects,
 }: {
     dailySchedule: Rozvrh | null;
     eventsData: Udalost[];
@@ -182,6 +198,8 @@ export function MobileTimetableList({
     userId: string;
     userClassId?: string;
     day: Date;
+    teachers: User[];
+    subjects: Predmet[];
 }) {
     const router = useRouter();
     const [selectedLesson, setSelectedLesson] = useState<{ lesson: LessonBlock, period: number, time: string } | null>(null);
@@ -212,53 +230,83 @@ export function MobileTimetableList({
         }
     };
     
-    const items = hodiny.map((lesson, index) => {
+    const items = hodiny.flatMap((lesson, index) => {
         const time = timeSlots[index] || '';
         const period = index + 1;
-        
-        // Find events for this specific slot
+        const keyPrefix = `${day.toISOString()}-${index}`;
+
         const event = eventsData.find(e => {
             const eventDate = parseISO(e.datum);
             return isSameDay(eventDate, day) && e.cas === time.split('-')[0];
         });
 
         if (event && event.nahrazujeHodiny) {
-            return <EventListItem key={`event-${index}`} event={event} />;
+            return [<EventListItem key={`event-${keyPrefix}`} event={event} />];
         }
         
-        if (!lesson) return null; // No lesson in this slot
+        if (!lesson) return [];
         
-        // Find substitutions
         const substitution = substitutionsData.find(sub => {
              const subDate = parseISO(sub.date);
-             const isSame = isSameDay(subDate, day);
-             return isSame && sub.originalLesson.period === index && sub.originalLesson.classId === dailySchedule.tridaId;
+             return isSameDay(subDate, day) && sub.originalLesson.period === index && sub.originalLesson.classId === dailySchedule.tridaId;
         });
-
-        if (substitution?.changes.type.includes('zruseno')) {
-            return <CancelledLessonItem key={`sub-${index}`} substitution={substitution} period={period} time={time}/>;
-        }
-
-        const finalLesson = substitution ? { ...lesson, ...substitution.changes } : lesson;
         
         const zapis = zapisyData.find(z => z.datum === format(day, 'yyyy-MM-dd') && parseInt(z.hodina) === period);
+
+        if (substitution) {
+            if (substitution.changes.type.includes('zruseno')) {
+                return [<CancelledLessonItem key={`sub-cancelled-${keyPrefix}`} substitution={substitution} period={period} time={time}/>];
+            }
+
+            const newTeacher = teachers.find(t => t.id === substitution!.changes.teacherId);
+            const newSubject = subjects.find(s => s.id === substitution!.changes.subjectId);
+            
+            const finalLesson: LessonBlock = {
+                ...lesson,
+                teacherId: newTeacher ? newTeacher.id : lesson.teacherId,
+                teacherName: newTeacher ? newTeacher.name : lesson.teacherName,
+                subjectId: newSubject ? newSubject.id : lesson.subjectId,
+                subjectName: newSubject ? newSubject.name : lesson.subjectName,
+                subjectShortcut: newSubject ? newSubject.shortcut : lesson.subjectShortcut,
+            };
+
+            return [
+                <LessonListItem 
+                    key={`sub-new-${keyPrefix}`} 
+                    lesson={finalLesson} 
+                    period={period} 
+                    time={time}
+                    topic={zapis?.topic}
+                    onClick={() => handleLessonClick(finalLesson, index)}
+                    isSubstituting
+                />,
+                <LessonListItem 
+                    key={`sub-old-${keyPrefix}`} 
+                    lesson={lesson} 
+                    period={period} 
+                    time={time}
+                    onClick={() => {}}
+                    isSubstituted
+                />
+            ];
+        }
         
-        return (
+        return [
             <LessonListItem 
-                key={`lesson-${index}`} 
-                lesson={finalLesson} 
+                key={`lesson-${keyPrefix}`} 
+                lesson={lesson} 
                 period={period} 
                 time={time}
                 topic={zapis?.topic}
-                onClick={() => handleLessonClick(finalLesson, index)}
+                onClick={() => handleLessonClick(lesson, index)}
             />
-        );
+        ];
     });
 
     return (
         <>
             <div className="space-y-3">
-                {items.filter(Boolean).length > 0 ? items : <p className="text-center text-muted-foreground py-8">Dnes není žádná výuka.</p>}
+                {items.filter(Boolean).length > 0 ? items.flat() : <p className="text-center text-muted-foreground py-8">Dnes není žádná výuka.</p>}
             </div>
             <LessonActionSheet 
                 lesson={selectedLesson?.lesson || null}

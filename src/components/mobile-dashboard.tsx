@@ -43,6 +43,7 @@ import type {
   Substitution,
   ScheduleTemplate,
   ZapisHodiny,
+  Predmet,
 } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -106,12 +107,22 @@ export function MobileDashboard() {
   const { data: eventsData, isLoading: eventsLoading } = useCollection<Udalost>(eventsQuery);
   const { data: substitutionsData, isLoading: subsLoading } = useCollection<Substitution>(substitutionsQuery);
   const { data: zapisyData, isLoading: zapisyLoading } = useCollection<ZapisHodiny>(zapisyQuery);
+  
+  const { data: teachers, isLoading: teachersLoading } = useCollection<User>(useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, "users"), where("roles", "array-contains", "ucitel"));
+  }, [firestore]));
+
+  const { data: subjects, isLoading: subjectsLoading } = useCollection<Predmet>(useMemoFirebase(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'predmety');
+  }, [firestore]));
 
   const handlePrevDay = () => setCurrentDate(prev => subDays(prev, 1));
   const handleNextDay = () => setCurrentDate(prev => addDays(prev, 1));
   const handleSetToday = () => setCurrentDate(new Date());
 
-  const isDataLoading = dailySchedule.isLoading || eventsLoading || subsLoading || zapisyLoading || isUserLoading || (hasRole('ucitel') && teacherClassesLoading);
+  const isDataLoading = dailySchedule.isLoading || eventsLoading || subsLoading || zapisyLoading || isUserLoading || (hasRole('ucitel') && teacherClassesLoading) || teachersLoading || subjectsLoading;
 
   if (isDataLoading) {
     return <div className="flex h-full w-full items-center justify-center">Načítání...</div>;
@@ -165,6 +176,8 @@ export function MobileDashboard() {
             userId={user.id}
             userClassId={targetClassId}
             day={currentDate}
+            teachers={teachers || []}
+            subjects={subjects || []}
           />
         </CardContent>
       </Card>
