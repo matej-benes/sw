@@ -45,7 +45,7 @@ const gradingSchema = z.object({
 type GradingFormData = z.infer<typeof gradingSchema>;
 
 export default function HodnoceniPage() {
-    const { user, loading: userLoading, hasRole } = useAuth();
+    const { user, loading: userLoading, hasRole, isSuperAdmin } = useAuth();
     const firestore = useFirestore();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -108,18 +108,32 @@ export default function HodnoceniPage() {
     
     // Fetch subjects
     useEffect(() => {
-        if (!firestore || !user?.organizationId) {
+        if (!firestore || !user) {
             setPredmetyLoading(false);
             return;
         }
-        const q = query(collection(firestore, 'predmety'), where('organizationId', '==', user.organizationId));
+        
+        let q;
+        if (isSuperAdmin()) {
+            q = query(collection(firestore, 'predmety'));
+        } else if (user.organizationId) {
+            q = query(collection(firestore, 'predmety'), where('organizationId', '==', user.organizationId));
+        } else {
+            setPredmety([]);
+            setPredmetyLoading(false);
+            return;
+        }
+
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const results = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Predmet[];
             setPredmety(results);
             setPredmetyLoading(false);
+        }, (error) => {
+            console.error("Error fetching subjects: ", error);
+            setPredmetyLoading(false);
         });
         return () => unsubscribe();
-    }, [firestore, user?.organizationId]);
+    }, [firestore, user, isSuperAdmin]);
 
     // Fetch grades based on role
     useEffect(() => {
@@ -330,7 +344,7 @@ export default function HodnoceniPage() {
        return <div className="flex h-full w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
     }
     
-    if (hasRole('administrator') && !user?.organizationId) {
+    if (hasRole('administrator') && !user?.organizationId && !isSuperAdmin()) {
         return <div className="flex h-full w-full items-center justify-center">Načítání dat organizace...</div>;
     }
     
@@ -345,9 +359,6 @@ export default function HodnoceniPage() {
                         <h1 className="text-3xl font-bold">Klasifikace</h1>
                         <p className="text-muted-foreground">Chronologický přehled zadaného hodnocení.</p>
                     </div>
-                    <Button onClick={() => handleOpenDialog(null)}>
-                        <PlusCircle className="mr-2 h-4 w-4" /> Nové hodnocení
-                    </Button>
                 </div>
 
                 <Card>
@@ -430,7 +441,7 @@ export default function HodnoceniPage() {
                                 <div className="grid gap-2">
                                     <Label>Předmět</Label>
                                     <Controller name="predmetId" control={control} render={({ field }) => (
-                                        <Select onValueChange={field.onChange} value={field.value} disabled={predmetyLoading}><SelectTrigger><SelectValue placeholder="Předmět"/></SelectTrigger><SelectContent>{predmety.map(p=><SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select>
+                                        <Select onValueChange={field.onChange} value={field.value} disabled={predmetyLoading || !!predmetIdFromParams || !!editingGrading}><SelectTrigger><SelectValue placeholder="Předmět"/></SelectTrigger><SelectContent>{predmety.map(p=><SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select>
                                     )} />
                                     {errors.predmetId && <p className="text-sm text-destructive">{errors.predmetId.message}</p>}
                                 </div>
