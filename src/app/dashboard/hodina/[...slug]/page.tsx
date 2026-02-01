@@ -4,13 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, BookOpen, User, Home, Clock, FileText } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase';
 import { doc, query, where, collection } from 'firebase/firestore';
-import type { Rozvrh, LessonBlock, User as AppUser, Trida, ZapisHodiny } from '@/lib/types';
+import type { Rozvrh, LessonBlock, User as AppUser, Trida, ZapisHodiny, Substitution, Predmet } from '@/lib/types';
 import { isSameDay, parseISO } from 'date-fns';
 import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { useAuth } from '@/hooks/use-auth';
+import { useMemo } from 'react';
 
 export default function LessonDetailPage() {
     const router = useRouter();
@@ -26,25 +27,73 @@ export default function LessonDetailPage() {
         return doc(firestore, 'rozvrhy', `${classId}-${dateStr}`);
     }, [firestore, dateStr, classId]);
 
+    const { data: schedule, isLoading: scheduleLoading } = useDoc<Rozvrh>(rozvrhRef);
+
+    // Fetch substitution
+    const subId = `${classId}-${dateStr}-${parseInt(periodStr, 10)}`;
+    const subRef = useMemoFirebase(() => {
+        if (!firestore || !subId) return null;
+        return doc(firestore, 'suplovani', subId);
+    }, [firestore, subId]);
+    const { data: substitution, isLoading: substitutionLoading } = useDoc<Substitution>(subRef);
+
+    // Fetch all teachers and subjects to resolve names for substituted lesson
+    const { data: allTeachers, isLoading: teachersLoading } = useCollection<AppUser>(
+        useMemoFirebase(() => firestore ? query(collection(firestore, 'users'), where('roles', 'array-contains', 'ucitel')) : null, [firestore])
+    );
+    const { data: allSubjects, isLoading: subjectsLoading } = useCollection<Predmet>(
+        useMemoFirebase(() => firestore ? collection(firestore, 'predmety') : null, [firestore])
+    );
+
+    const lesson = useMemo<LessonBlock | null>(() => {
+        const originalLesson = schedule?.hodiny[parseInt(periodStr, 10)];
+        if (!originalLesson) return null;
+        if (!substitution || (substitution.changes.type && Array.isArray(substitution.changes.type) && substitution.changes.type.includes('zruseno'))) {
+            return originalLesson;
+        }
+
+        const newTeacherIds = substitution.changes.teacherIds;
+        const newSubjectId = substitution.changes.subjectId;
+
+        const substitutedLesson = { ...originalLesson };
+
+        if (newTeacherIds && newTeacherIds.length > 0 && allTeachers) {
+            substitutedLesson.teacherId = newTeacherIds[0];
+            substitutedLesson.teacherName = newTeacherIds
+                .map(id => allTeachers.find(t => t.id === id)?.name)
+                .filter(Boolean)
+                .join(', ');
+        }
+
+        if (newSubjectId && allSubjects) {
+            const newSubject = allSubjects.find(s => s.id === newSubjectId);
+            if (newSubject) {
+                substitutedLesson.subjectId = newSubject.id;
+                substitutedLesson.subjectName = newSubject.name;
+                substitutedLesson.subjectShortcut = newSubject.shortcut;
+            }
+        }
+        
+        return substitutedLesson;
+
+    }, [schedule, periodStr, substitution, allTeachers, allSubjects]);
+
+
     const zapisId = `${classId}-${dateStr}-${parseInt(periodStr, 10) + 1}`;
     const zapisRef = useMemoFirebase(() => {
         if (!firestore || !zapisId) return null;
         return doc(firestore, 'zapisyHodin', zapisId);
     }, [firestore, zapisId]);
 
-    const { data: schedule, isLoading: scheduleLoading } = useDoc<Rozvrh>(rozvrhRef);
+    
     const { data: zapis, isLoading: zapisLoading } = useDoc<ZapisHodiny>(zapisRef);
-
-    const lesson: LessonBlock | null | undefined = schedule?.hodiny[parseInt(periodStr, 10)];
+    
     const timeSlot = schedule?.timeSlots[parseInt(periodStr, 10)];
-
+    
     const classRef = useMemoFirebase(() => lesson ? doc(firestore, 'tridy', lesson.classId) : null, [firestore, lesson]);
     const {data: classData} = useDoc<Trida>(classRef);
-
-    const teacherRef = useMemoFirebase(() => lesson ? doc(firestore, 'users', lesson.teacherId) : null, [firestore, lesson]);
-    const {data: teacherData} = useDoc<AppUser>(teacherRef);
-
-    const isLoading = scheduleLoading || zapisLoading;
+    
+    const isLoading = scheduleLoading || zapisLoading || substitutionLoading || teachersLoading || subjectsLoading;
 
     if (isLoading) {
         return (
@@ -104,7 +153,7 @@ export default function LessonDetailPage() {
                             <User className="h-5 w-5 mt-0.5 text-muted-foreground" />
                             <div>
                                 <p className="text-muted-foreground">Vyučující</p>
-                                <p className="font-medium">{teacherData?.name || 'N/A'}</p>
+                                <p className="font-medium">{lesson.teacherName || 'N/A'}</p>
                             </div>
                         </div>
                          <div className="flex items-start gap-3">
