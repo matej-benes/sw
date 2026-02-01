@@ -37,6 +37,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { doc, getDocs, query, collection, limit } from 'firebase/firestore';
 import { Badge } from './ui/badge';
+import { MultiSelect } from './ui/multi-select';
 
 
 const defaultTimeSlots = [
@@ -65,14 +66,14 @@ function SubstitutionDialog({
     onSave: (subData: any) => void;
 }) {
     const [subType, setSubType] = useState('suplovat');
-    const [subTeacherId, setSubTeacherId] = useState('');
+    const [subTeacherIds, setSubTeacherIds] = useState<string[]>([]);
     const [subSubjectId, setSubSubjectId] = useState('');
     const [note, setNote] = useState('');
 
     useEffect(() => {
         if (isOpen && lessonInfo) {
             setSubType('suplovat');
-            setSubTeacherId('');
+            setSubTeacherIds(lessonInfo ? [lessonInfo.lesson.teacherId] : []);
             setSubSubjectId(lessonInfo.lesson.subjectId);
             setNote('');
         }
@@ -88,10 +89,15 @@ function SubstitutionDialog({
             type.push('zruseno');
             changes = { type, note };
         } else {
-            if (subTeacherId && subTeacherId !== lessonInfo.lesson.teacherId) {
+            const originalTeacherIds = [lessonInfo.lesson.teacherId];
+            const sortedOriginal = [...originalTeacherIds].sort();
+            const sortedNew = [...subTeacherIds].sort();
+
+            if (JSON.stringify(sortedOriginal) !== JSON.stringify(sortedNew)) {
                 type.push('zmena-ucitele');
-                changes.teacherId = subTeacherId;
+                changes.teacherIds = subTeacherIds;
             }
+            
             if (subSubjectId && subSubjectId !== lessonInfo.lesson.subjectId) {
                 changes.subjectId = subSubjectId;
                 if (!type.includes('zmena-predmetu')) type.push('zmena-predmetu' as any); // Custom type
@@ -99,7 +105,9 @@ function SubstitutionDialog({
             if (note) {
                  changes.note = note;
             }
-            changes.type = type;
+            if (type.length > 0) {
+                 changes.type = type;
+            }
         }
 
         onSave({
@@ -118,6 +126,7 @@ function SubstitutionDialog({
     if (!lessonInfo) return null;
     
     const { lesson, dayInfo, period } = lessonInfo;
+    const teacherOptions = teachers.map(t => ({ value: t.id, label: t.name }));
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -143,15 +152,13 @@ function SubstitutionDialog({
                     {subType === 'suplovat' && (
                         <div className="space-y-4 pt-4 border-t">
                             <div className="grid gap-2">
-                                <Label>Suplující učitel (nepovinné)</Label>
-                                <Select value={subTeacherId} onValueChange={setSubTeacherId}>
-                                    <SelectTrigger><SelectValue placeholder="Vyberte učitele" /></SelectTrigger>
-                                    <SelectContent>
-                                        {teachers.filter(t => t.id !== lesson.teacherId).map(t => (
-                                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                <Label>Suplující učitel/é</Label>
+                                <MultiSelect
+                                    options={teacherOptions}
+                                    onValueChange={setSubTeacherIds}
+                                    defaultValue={subTeacherIds}
+                                    placeholder="Vyberte učitele..."
+                                />
                             </div>
                             <div className="grid gap-2">
                                 <Label>Nový předmět (nepovinné)</Label>
@@ -309,13 +316,14 @@ function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, onSubstit
          <div 
             className={cn(
                 "h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer relative",
-                isSubstituted && 'opacity-70'
+                isSubstituted && 'line-through opacity-70'
             )}
             style={{
-                backgroundColor: isNewSubstitutedLesson ? 'hsl(var(--destructive) / 0.15)' : isSubstituted ? 'hsl(var(--muted))' : getSubjectColor(lesson.subjectId),
-                color: isNewSubstitutedLesson ? 'hsl(var(--card-foreground))' : isSubstituted ? 'hsl(var(--muted-foreground))' : undefined,
+                backgroundColor: isNewSubstitutedLesson ? 'hsl(346.8, 77.2%, 49.8%, 0.5)' : isSubstituted ? 'hsl(var(--muted))' : getSubjectColor(lesson.subjectId),
+                color: isSubstituted ? 'hsl(var(--muted-foreground))' : undefined,
              }}
         >
+            {isNewSubstitutedLesson && <Badge variant="destructive" className="absolute -top-1 -right-1 text-xs p-0.5">SUPL</Badge>}
             <div className="font-bold">{lesson.subjectShortcut}</div>
             <div>{isTeacher ? lesson.className : lesson.teacherName}</div>
             <div className={cn("text-muted-foreground", isNewSubstitutedLesson && 'text-card-foreground/80', isSubstituted && 'text-muted-foreground/80')}>{lesson.ucebnaName}</div>
@@ -497,12 +505,18 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
 
                         let substitutedLesson: LessonBlock | null = null;
                         if (isSubstituted && !isCancelledBySub && lesson) {
-                            const newTeacher = teachers.find(t => t.id === substitution!.changes.teacherId);
+                            let newTeacherName = lesson.teacherName;
+                            if (substitution!.changes.teacherIds && substitution!.changes.teacherIds.length > 0) {
+                                newTeacherName = substitution!.changes.teacherIds
+                                    .map(id => teachers.find(t => t.id === id)?.name)
+                                    .filter(Boolean)
+                                    .join(', ');
+                            }
+                            
                             const newSubject = subjects.find(s => s.id === substitution!.changes.subjectId);
                             substitutedLesson = { 
                                 ...lesson, 
-                                teacherId: newTeacher ? newTeacher.id : lesson.teacherId,
-                                teacherName: newTeacher ? newTeacher.name : lesson.teacherName,
+                                teacherName: newTeacherName,
                                 subjectId: newSubject ? newSubject.id : lesson.subjectId,
                                 subjectName: newSubject ? newSubject.name : lesson.subjectName,
                                 subjectShortcut: newSubject ? newSubject.shortcut : lesson.subjectShortcut,

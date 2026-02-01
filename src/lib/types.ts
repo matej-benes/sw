@@ -191,7 +191,7 @@ export interface Substitution {
         lessonBlock: LessonBlock;
     };
     changes: {
-        teacherId?: string;
+        teacherIds?: string[];
         ucebnaId?: string;
         subjectId?: string;
         note?: string;
