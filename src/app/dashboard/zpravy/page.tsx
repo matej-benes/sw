@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { Loader2, Send, UserPlus, Inbox, Send as SendIcon, Pencil, CheckCircle, Eye, Reply } from 'lucide-react';
 import { useFirestore, useCollection, useDoc, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
-import { collection, doc, query, where, Timestamp, updateDoc, arrayUnion } from 'firebase/firestore';
+import { collection, doc, query, where, Timestamp, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
 import type { Trida, User, Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import {
@@ -37,6 +37,7 @@ import { Separator } from '@/components/ui/separator';
 import { Label } from '@/components/ui/label';
 
 function getInitials(name: string) {
+    if (!name) return '';
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
 }
 
@@ -214,31 +215,47 @@ export default function ZpravyPage() {
   const { data: allUsers, isLoading: usersLoading } = useCollection<User>(useMemoFirebase(() => firestore ? collection(firestore, "users") : null, [firestore]));
   const { data: allClasses, isLoading: classesLoading } = useCollection<Trida>(useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]));
   
-  const receivedMessagesQuery = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
-    return query(collection(firestore, 'messages'), where('recipientIds', 'array-contains', user.id));
-  }, [firestore, user]);
-
-  const sentMessagesQuery = useMemoFirebase(() => {
-      if (!firestore || !user) return null;
-      return query(collection(firestore, 'messages'), where('senderId', '==', user.id));
-  }, [firestore, user]);
-  
-  const { data: receivedMessagesData, isLoading: receivedLoading } = useCollection<Message>(receivedMessagesQuery);
-  const { data: sentMessagesData, isLoading: sentLoading } = useCollection<Message>(sentMessagesQuery);
-
-  const receivedMessages = useMemo(() => 
-    receivedMessagesData?.sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis()) || [], 
-  [receivedMessagesData]);
-
-  const sentMessages = useMemo(() => 
-    sentMessagesData?.sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis()) || [],
-  [sentMessagesData]);
+  const [receivedMessages, setReceivedMessages] = useState<Message[]>([]);
+  const [sentMessages, setSentMessages] = useState<Message[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(true);
 
   const unreadMessagesCount = useMemo(() => {
     if (!user || !receivedMessages) return 0;
     return receivedMessages.filter(msg => !msg.readBy.includes(user.id)).length;
   }, [user, receivedMessages]);
+
+  useEffect(() => {
+    if (!firestore || !user?.id) {
+      setMessagesLoading(false);
+      return;
+    }
+    setMessagesLoading(true);
+
+    const receivedQuery = query(collection(firestore, 'messages'), where('recipientIds', 'array-contains', user.id));
+    const sentQuery = query(collection(firestore, 'messages'), where('senderId', '==', user.id));
+
+    const unsubscribeReceived = onSnapshot(receivedQuery, (snapshot) => {
+      const messages = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Message[];
+      setReceivedMessages(messages.sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis()));
+      setMessagesLoading(false);
+    }, (error) => {
+      console.error("Error fetching received messages: ", error);
+      setMessagesLoading(false);
+    });
+
+    const unsubscribeSent = onSnapshot(sentQuery, (snapshot) => {
+      const messages = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Message[];
+      setSentMessages(messages.sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis()));
+    }, (error) => {
+        console.error("Error fetching sent messages: ", error);
+        // Loading state is handled by received messages listener
+    });
+
+    return () => {
+      unsubscribeReceived();
+      unsubscribeSent();
+    };
+  }, [firestore, user?.id]);
 
 
   const handleSendMessage = async () => {
@@ -335,7 +352,7 @@ export default function ZpravyPage() {
     }
   };
 
-  const isDataLoading = userLoading || usersLoading || classesLoading || receivedLoading || sentLoading;
+  const isDataLoading = userLoading || usersLoading || classesLoading || messagesLoading;
 
   const getSenderName = useCallback((senderId: string) => {
     return allUsers?.find(u => u.id === senderId)?.name || 'Neznámý';
@@ -498,5 +515,3 @@ export default function ZpravyPage() {
     </>
   );
 }
-
-    
