@@ -35,6 +35,7 @@ import { Button } from './ui/button';
 import { useFirestore, setDocumentNonBlocking, useAuth } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { doc, getDocs, query, collection, limit } from 'firebase/firestore';
+import { Badge } from './ui/badge';
 
 
 const defaultTimeSlots = [
@@ -292,7 +293,7 @@ function EmptySlotContextMenu({ children }: { children: React.ReactNode }) {
 }
 
 
-function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, onSubstitute, isSubstituted = false, substitutionNote }: { lesson: LessonBlock; isTeacher: boolean, dayInfo: DayMappingInfo, period: number, classId: string, onSubstitute: () => void, isSubstituted?: boolean, substitutionNote?: string }) {
+function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, onSubstitute, isSubstituted = false, substitutionNote, isNewSubstitutedLesson = false }: { lesson: LessonBlock; isTeacher: boolean, dayInfo: DayMappingInfo, period: number, classId: string, onSubstitute: () => void, isSubstituted?: boolean, substitutionNote?: string, isNewSubstitutedLesson?: boolean }) {
     const getSubjectColor = (subjectId: string) => {
         if (!subjectId) return `hsl(0, 0%, 85%)`;
         let hash = 0;
@@ -305,12 +306,21 @@ function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, onSubstit
 
     const blockContent = (
          <div 
-            className={cn("h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer", isSubstituted && 'opacity-50 line-through')}
-            style={{ backgroundColor: getSubjectColor(lesson.subjectId) }}
+            className={cn(
+                "h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer relative",
+                isSubstituted && 'opacity-50 line-through'
+            )}
+            style={{
+                backgroundColor: isNewSubstitutedLesson ? 'hsl(var(--destructive) / 0.2)' : getSubjectColor(lesson.subjectId),
+                color: isNewSubstitutedLesson ? 'hsl(var(--destructive-foreground))' : undefined,
+             }}
         >
+            {isNewSubstitutedLesson && (
+                <Badge variant="destructive" className="absolute top-0.5 right-0.5 text-[10px] px-1 h-4 leading-none">SUPL</Badge>
+            )}
             <div className="font-bold">{lesson.subjectShortcut}</div>
             <div>{isTeacher ? lesson.className : lesson.teacherName}</div>
-            <div className="text-muted-foreground">{lesson.ucebnaName}</div>
+            <div className={cn("text-muted-foreground", isNewSubstitutedLesson && 'text-destructive-foreground/80')}>{lesson.ucebnaName}</div>
         </div>
     );
     
@@ -515,7 +525,7 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                                         )}
                                         {substitutedLesson && dayInfo && classId && (
                                             <div className="absolute inset-0.5">
-                                                <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} substitutionNote={substitution?.changes.note} onSubstitute={() => { setEditingSubFor({ lesson: substitutedLesson, dayInfo, period: periodIndex + 1, classId }); setIsSubDialogOpen(true); }}/>
+                                                <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} substitutionNote={substitution?.changes.note} isNewSubstitutedLesson={true} onSubstitute={() => { setEditingSubFor({ lesson: substitutedLesson, dayInfo, period: periodIndex + 1, classId }); setIsSubDialogOpen(true); }}/>
                                             </div>
                                         )}
                                         
