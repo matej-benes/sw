@@ -97,19 +97,19 @@ export function DesktopDashboard() {
   const [isFullWeekView, setIsFullWeekView] = useState(false);
 
   const targetClassId = useMemo(() => {
-    if (hasRole('ucitel')) return selectedClassId;
+    if (hasRole('ucitel') || isSuperAdmin()) return selectedClassId;
     if (hasRole('ziak')) return user?.tridaId;
     if (hasRole('rodic')) return studentData?.tridaId;
     return undefined;
-  }, [hasRole, user, studentData, selectedClassId]);
+  }, [hasRole, isSuperAdmin, user, studentData, selectedClassId]);
   
   useEffect(() => {
-    if (hasRole('ucitel') && tridy && tridy.length > 0 && !selectedClassId) {
+    if ((hasRole('ucitel') || isSuperAdmin()) && tridy && tridy.length > 0 && !selectedClassId) {
       setSelectedClassId(tridy[0].id);
-    } else if (!hasRole('ucitel')) {
+    } else if (!hasRole('ucitel') && !isSuperAdmin()) {
       setSelectedClassId(user?.tridaId || studentData?.tridaId);
     }
-  }, [tridy, selectedClassId, hasRole, user?.tridaId, studentData?.tridaId]);
+  }, [tridy, selectedClassId, hasRole, isSuperAdmin, user?.tridaId, studentData?.tridaId]);
 
 
   const schedulesQuery = useMemoFirebase(() => {
@@ -246,17 +246,6 @@ export function DesktopDashboard() {
         </Card>
     );
   }
-  
-  if(isSuperAdmin()) {
-    return (
-        <div className="space-y-6">
-            <h1 className="text-3xl font-bold tracking-tight">Vítejte, Super Administrátore</h1>
-            <p className="text-muted-foreground">
-                Pro správu systému použijte navigační panel vlevo.
-            </p>
-        </div>
-    )
-  }
 
   return (
     <>
@@ -282,7 +271,7 @@ export function DesktopDashboard() {
         <Card>
           <CardHeader className="flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-4">
-              {hasRole('ucitel') && (
+              {(hasRole('ucitel') || isSuperAdmin()) && (
                 <>
                   <Select value={viewMode} onValueChange={setViewMode}>
                     <SelectTrigger className="w-[180px]">
@@ -357,7 +346,7 @@ export function DesktopDashboard() {
                   dailySchedule={schedulesData?.find(s => isSameDay(parseISO(s.datum), day))}
                   eventsData={eventsData || []}
                   substitutionsData={substitutionsData || []}
-                  isTeacher={hasRole('ucitel')}
+                  isTeacher={hasRole('ucitel') || isSuperAdmin()}
                   userId={user.id}
                   userClassId={targetClassId}
                   day={day}
