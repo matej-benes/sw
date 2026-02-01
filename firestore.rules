@@ -45,22 +45,7 @@ service cloud.firestore {
     
     match /grades/{gradeId} {
       allow get: if isOrgMember(resource.data.organizationId) && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
-      allow list: if 
-                  (
-                    hasRole('administrator') && request.query.organizationId != null
-                  ) ||
-                  (
-                    hasRole('ucitel') &&
-                    request.query.ucitelId == request.auth.uid
-                  ) ||
-                  (
-                    hasRole('ziak') &&
-                    request.query.ziakId == request.auth.uid
-                  ) ||
-                  (
-                    hasRole('rodic') && 
-                    isMyStudent(request.query.ziakId)
-                  );
+      allow list: if isAuthenticated();
       allow create, update, delete: if hasAnyRole(['ucitel', 'administrator']);
     }
 
@@ -95,22 +80,7 @@ service cloud.firestore {
           resource.data.studentId == request.auth.uid || 
           isMyStudent(resource.data.studentId)
         );
-        allow list: if 
-                    (
-                      hasRole('administrator') && request.query.organizationId != null
-                    ) ||
-                    (
-                      hasRole('ucitel') &&
-                      request.query.ucitelId == request.auth.uid
-                    ) ||
-                    (
-                      hasRole('ziak') &&
-                      request.query.studentId == request.auth.uid
-                    ) ||
-                    (
-                      hasRole('rodic') &&
-                      isMyStudent(request.query.studentId)
-                    );
+        allow list: if isAuthenticated();
         allow write: if hasAnyRole(['ucitel', 'administrator']);
     }
 

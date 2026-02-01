@@ -65,8 +65,9 @@ function TeacherView() {
         const gradesCollection = collection(firestore, 'grades');
 
         if (hasRole('administrator')) {
+            if (!user.organizationId) return null; // Prevent query if org ID is missing
             // Admin sees all grades in their organization
-            return query(gradesCollection, where('organizationId', '==', user.organizationId!), orderBy('createdAt', 'desc'));
+            return query(gradesCollection, where('organizationId', '==', user.organizationId), orderBy('createdAt', 'desc'));
         }
         
         // Teacher sees only their own grades
