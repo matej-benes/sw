@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useFirestore, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy, onSnapshot, doc, writeBatch, getDocs, limit, Timestamp, getDoc, documentId, Query as FirestoreQuery } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, doc, writeBatch, getDocs, limit, Timestamp, getDoc, documentId, Query as FirestoreQuery, DocumentData } from 'firebase/firestore';
 import type { Grading, User, Trida, Predmet } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -76,6 +76,134 @@ export default function HodnoceniPage() {
 
     const tridaIdFromParams = searchParams.get('tridaId');
     const predmetIdFromParams = searchParams.get('predmetId');
+    
+    // Fetch classes based on role
+    useEffect(() => {
+        if (!firestore || !user) {
+            setClassesLoading(false);
+            return;
+        }
+
+        let q: FirestoreQuery<DocumentData> | null = null;
+        
+        if (hasRole('administrator') && user.organizationId) {
+            q = query(collection(firestore, 'tridy'), where('organizationId', '==', user.organizationId));
+        } else if (hasRole('ucitel')) {
+            q = query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
+        } else {
+             setClassesLoading(false);
+             return;
+        }
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const results = snapshot.docs.map(doc => ({...doc.data(), id: doc.id})) as Trida[];
+            setTeacherClasses(results);
+            setClassesLoading(false);
+        }, (error) => {
+            console.error("Error fetching classes: ", error);
+            setClassesLoading(false);
+        });
+        return () => unsubscribe();
+    }, [firestore, user, hasRole]);
+    
+    // Fetch subjects
+    useEffect(() => {
+        if (!firestore || !user?.organizationId) {
+            setPredmetyLoading(false);
+            return;
+        }
+        const q = query(collection(firestore, 'predmety'), where('organizationId', '==', user.organizationId));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const results = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Predmet[];
+            setPredmety(results);
+            setPredmetyLoading(false);
+        });
+        return () => unsubscribe();
+    }, [firestore, user?.organizationId]);
+
+    // Fetch grades based on role
+    useEffect(() => {
+        if (!firestore || !user) {
+            setGradingsLoading(false);
+            return;
+        }
+
+        let q: FirestoreQuery | null = null;
+        
+        if (hasRole('administrator') && user.organizationId) {
+            q = query(
+                collection(firestore, 'grades'), 
+                where('organizationId', '==', user.organizationId),
+                orderBy('datum', 'desc'),
+                limit(50) 
+            );
+        } else if (hasRole('ucitel')) {
+             q = query(
+                collection(firestore, 'grades'),
+                where('ucitelId', '==', user.id),
+                orderBy('datum', 'desc'),
+                limit(50)
+            );
+        } else if (hasRole('ziak') && user.id) {
+             q = query(
+                collection(firestore, 'grades'),
+                where('ziakId', '==', user.id),
+                orderBy('datum', 'desc')
+            );
+        } else if (hasRole('rodic') && user.studentId) {
+            q = query(
+                collection(firestore, 'grades'),
+                where('ziakId', '==', user.studentId),
+                orderBy('datum', 'desc')
+            );
+        } else {
+             setGradingsLoading(false);
+             return;
+        }
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const results = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Grading[];
+            setGradings(results);
+            setGradingsLoading(false);
+        }, (error) => {
+            console.error("Error fetching gradings: ", error);
+            setGradingsLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [firestore, user, hasRole]);
+
+    // Fetch students when a class is selected
+    useEffect(() => {
+        if (!firestore || !selectedClassId) {
+            setStudentsLoading(false);
+            setStudents([]);
+            return;
+        }
+        const q = query(collection(firestore, 'users'), where('tridaId', '==', selectedClassId), where('roles', 'array-contains', 'ziak'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const results = snapshot.docs.map(doc => ({...doc.data(), id: doc.id})) as User[];
+            setStudents(results);
+            setStudentsLoading(false);
+        });
+        return () => unsubscribe();
+    }, [firestore, selectedClassId]);
+
+    // Fetch all teachers for displaying names
+    useEffect(() => {
+        if (!firestore) {
+            setTeachersLoading(false);
+            return;
+        }
+        const q = query(collection(firestore, 'users'), where('roles', 'array-contains', 'ucitel'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const results = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as User[];
+            setAllTeachers(results);
+            setTeachersLoading(false);
+        });
+        return () => unsubscribe();
+    }, [firestore]);
+
 
     const handleOpenDialog = useCallback((grading: Grading | null) => {
         setEditingGrading(grading);
@@ -86,10 +214,15 @@ export default function HodnoceniPage() {
             setValue('vaha', grading.vaha);
             setValue('komentar', grading.komentar || '');
             const studentClassId = students?.find(s => s.id === grading.ziakId)?.tridaId;
-            if(studentClassId) setSelectedClassId(studentClassId);
-            else if (allTeachers) {
-                 const studentUser = allTeachers.find(u => u.id === grading.ziakId);
-                 if (studentUser?.tridaId) setSelectedClassId(studentUser.tridaId);
+            if(studentClassId) {
+                setSelectedClassId(studentClassId);
+            } else {
+                // Fallback for finding the class if not in current student list
+                getDoc(doc(firestore, 'users', grading.ziakId)).then(docSnap => {
+                    if (docSnap.exists()) {
+                        setSelectedClassId(docSnap.data().tridaId || null);
+                    }
+                });
             }
         } else {
             reset({
@@ -104,7 +237,7 @@ export default function HodnoceniPage() {
             }
         }
         setIsDialogOpen(true);
-    }, [reset, setValue, tridaIdFromParams, predmetIdFromParams, students, allTeachers]);
+    }, [reset, setValue, tridaIdFromParams, predmetIdFromParams, students, firestore]);
 
 
     useEffect(() => {
@@ -148,7 +281,7 @@ export default function HodnoceniPage() {
             const studentData = students.find(s => s.id === studentId);
             if (!studentData) continue;
 
-            const gradeData = {
+            const gradeData: Omit<Grading, 'id' | 'createdAt'> & { updatedAt?: Timestamp } = {
                 organizationId: user.organizationId,
                 tridaId: studentData.tridaId || '',
                 ziakId: studentId,
@@ -165,7 +298,8 @@ export default function HodnoceniPage() {
 
             if (editingGrading) {
                 const gradeRef = doc(firestore, 'grades', editingGrading.id);
-                batch.update(gradeRef, { ...gradeData, updatedAt: now });
+                gradeData.updatedAt = now;
+                batch.update(gradeRef, gradeData);
             } else {
                 const gradeRef = doc(collection(firestore, 'grades'));
                 batch.set(gradeRef, { ...gradeData, createdAt: now });
@@ -189,12 +323,11 @@ export default function HodnoceniPage() {
         }
     };
 
-    const isTeacherAdminDataLoading = gradingsLoading || classesLoading || studentsLoading || predmetyLoading;
-    const isStudentParentDataLoading = gradingsLoading || teachersLoading;
+    const isDataLoading = userLoading || gradingsLoading || classesLoading || studentsLoading || predmetyLoading || teachersLoading;
 
     // RENDER LOGIC
     if (userLoading) {
-       return <div className="flex h-full w-full items-center justify-center">Načítání...</div>;
+       return <div className="flex h-full w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
     }
     
     if (hasRole('administrator') && !user?.organizationId) {
@@ -232,7 +365,7 @@ export default function HodnoceniPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {isTeacherAdminDataLoading ? (
+                                {isDataLoading ? (
                                     <TableRow><TableCell colSpan={7} className="text-center h-24">Načítání hodnocení...</TableCell></TableRow>
                                 ) : gradings?.length === 0 ? (
                                     <TableRow><TableCell colSpan={7} className="text-center h-24">Nebylo zadáno žádné hodnocení.</TableCell></TableRow>
@@ -263,7 +396,7 @@ export default function HodnoceniPage() {
                         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                             <div className="grid gap-2">
                                 <Label>Třída</Label>
-                                <Select onValueChange={setSelectedClassId} value={selectedClassId || ''}>
+                                <Select onValueChange={setSelectedClassId} value={selectedClassId || ''} disabled={classesLoading}>
                                     <SelectTrigger><SelectValue placeholder="Vyberte třídu" /></SelectTrigger>
                                     <SelectContent>{teacherClasses.map(c => <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>)}</SelectContent>
                                 </Select>
@@ -297,7 +430,7 @@ export default function HodnoceniPage() {
                                 <div className="grid gap-2">
                                     <Label>Předmět</Label>
                                     <Controller name="predmetId" control={control} render={({ field }) => (
-                                        <Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue placeholder="Předmět"/></SelectTrigger><SelectContent>{predmety.map(p=><SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select>
+                                        <Select onValueChange={field.onChange} value={field.value} disabled={predmetyLoading}><SelectTrigger><SelectValue placeholder="Předmět"/></SelectTrigger><SelectContent>{predmety.map(p=><SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select>
                                     )} />
                                     {errors.predmetId && <p className="text-sm text-destructive">{errors.predmetId.message}</p>}
                                 </div>
@@ -363,7 +496,7 @@ export default function HodnoceniPage() {
         return (
             <div className="p-4 md:p-6 space-y-8">
                  <h1 className="text-3xl font-bold">Klasifikace</h1>
-                 {isStudentParentDataLoading ? <div>Načítání známek...</div> : Object.keys(gradesBySubject).length === 0 ? <p>Nebyly nalezeny žádné známky.</p> : Object.keys(gradesBySubject).map(subject => (
+                 {isDataLoading ? <div>Načítání známek...</div> : Object.keys(gradesBySubject).length === 0 ? <p>Nebyly nalezeny žádné známky.</p> : Object.keys(gradesBySubject).map(subject => (
                     <Card key={subject}>
                         <CardHeader className="flex flex-row justify-between items-center">
                             <div>
@@ -401,4 +534,3 @@ export default function HodnoceniPage() {
 
     return <div>Nemáte roli pro zobrazení této stránky.</div>;
 }
-    
