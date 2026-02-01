@@ -1,8 +1,8 @@
 'use client';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { useFirestore, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, writeBatch, limit, getDocs, Timestamp, getDoc, documentId, Query } from 'firebase/firestore';
+import { useFirestore, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking, useMemoFirebase } from '@/firebase';
+import { collection, query, where, orderBy, onSnapshot, doc, writeBatch, getDocs, limit, Timestamp, getDoc, documentId, Query as FirestoreQuery } from 'firebase/firestore';
 import type { Grading, User, Trida, Predmet } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -33,8 +33,6 @@ import { Separator } from '@/components/ui/separator';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { useMemoFirebase } from '@/firebase';
-
 
 const gradingSchema = z.object({
   studentIds: z.array(z.string()).min(1, 'Je třeba vybrat alespoň jednoho žáka.'),
@@ -58,97 +56,126 @@ export default function HodnoceniPage() {
     const [editingGrading, setEditingGrading] = useState<Grading | null>(null);
     const [deletingGrading, setDeletingGrading] = useState<Grading | null>(null);
     const [selectedClassId, setSelectedClassId] = useState<string | null>(searchParams.get('tridaId'));
-    const [gradings, setGradings] = useState<Grading[] | null>(null);
+
+    // --- Data States ---
+    const [gradings, setGradings] = useState<Grading[]>([]);
     const [gradingsLoading, setGradingsLoading] = useState(true);
+    const [teacherClasses, setTeacherClasses] = useState<Trida[]>([]);
+    const [classesLoading, setClassesLoading] = useState(true);
+    const [students, setStudents] = useState<User[]>([]);
+    const [studentsLoading, setStudentsLoading] = useState(true);
+    const [predmety, setPredmety] = useState<Predmet[]>([]);
+    const [predmetyLoading, setPredmetyLoading] = useState(true);
+    const [allTeachers, setAllTeachers] = useState<User[]>([]);
+    const [teachersLoading, setTeachersLoading] = useState(true);
 
-    // --- Data Fetching ---
-    const teacherClassesQuery = useMemoFirebase(() => {
-        if (!user || !firestore || !hasRole('ucitel')) return null;
-        return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
-    }, [firestore, user, hasRole]);
-    const { data: teacherClasses, isLoading: classesLoading } = useCollection<Trida>(teacherClassesQuery);
+    // --- Manual Data Fetching ---
 
-    const studentsQuery = useMemoFirebase(() => {
-        if (!firestore || !selectedClassId || !(hasRole('ucitel') || hasRole('administrator'))) return null;
-        return query(collection(firestore, 'users'), where('tridaId', '==', selectedClassId), where('roles', 'array-contains', 'ziak'));
-    }, [firestore, selectedClassId, hasRole]);
-    const { data: students, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
-
-    const predmetyQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
-        return collection(firestore, 'predmety');
-    }, [firestore]);
-    const { data: predmety, isLoading: predmetyLoading } = useCollection<Predmet>(predmetyQuery);
-
-    const { data: allTeachers, isLoading: teachersLoading } = useCollection<User>(useMemoFirebase(() => {
-        if(!firestore || !(hasRole('ziak') || hasRole('rodic'))) return null;
-        return query(collection(firestore, 'users'), where('roles', 'array-contains', 'ucitel'))
-    }, [firestore, hasRole]));
-
-    // --- Manual Data Fetching for Gradings ---
+    // Gradings
     useEffect(() => {
-        if (userLoading || !user || !firestore) {
+        if (!firestore || !user) {
+             setGradingsLoading(false);
             return;
         }
 
+        const { id: userId, studentId, organizationId } = user;
+        let q: FirestoreQuery | null = null;
         setGradingsLoading(true);
 
-        const isAdmin = hasRole('administrator');
-        const isTeacher = hasRole('ucitel');
-        const isStudentOrParent = hasRole('ziak') || hasRole('rodic');
-        const gradesCollection = collection(firestore, 'grades');
-        let q: Query | null = null;
-
-        if (isAdmin) {
-            if (!user.organizationId) {
-                setGradingsLoading(false);
-                setGradings([]);
-                return;
-            }
-            q = query(gradesCollection, where('organizationId', '==', user.organizationId), orderBy('createdAt', 'desc'));
-        } else if (isTeacher) {
-            q = query(gradesCollection, where('ucitelId', '==', user.id), orderBy('createdAt', 'desc'));
-        } else if (isStudentOrParent) {
-            const studentId = hasRole('ziak') ? user.id : user.studentId;
-            if (!studentId) {
-                setGradingsLoading(false);
-                setGradings([]);
-                return;
-            }
-            q = query(gradesCollection, where('ziakId', '==', studentId), orderBy('createdAt', 'desc'));
+        if (hasRole('administrator') && organizationId) {
+            q = query(collection(firestore, 'grades'), where('organizationId', '==', organizationId), orderBy('createdAt', 'desc'));
+        } else if (hasRole('ucitel')) {
+            q = query(collection(firestore, 'grades'), where('ucitelId', '==', userId), orderBy('createdAt', 'desc'));
+        } else if (hasRole('ziak')) {
+            q = query(collection(firestore, 'grades'), where('ziakId', '==', userId), orderBy('createdAt', 'desc'));
+        } else if (hasRole('rodic') && studentId) {
+            q = query(collection(firestore, 'grades'), where('ziakId', '==', studentId), orderBy('createdAt', 'desc'));
         }
 
-        if (!q) {
-            setGradingsLoading(false);
+        if (q) {
+            const unsubscribe = onSnapshot(q,
+                (snapshot) => {
+                    const results = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Grading));
+                    setGradings(results);
+                    setGradingsLoading(false);
+                },
+                (error) => {
+                    console.error("Error fetching gradings:", error);
+                    toast({ variant: 'destructive', title: 'Chyba načítání klasifikace', description: 'Nepodařilo se načíst data o klasifikaci.' });
+                    setGradings([]);
+                    setGradingsLoading(false);
+                }
+            );
+            return () => unsubscribe();
+        } else {
             setGradings([]);
+            setGradingsLoading(false);
+        }
+    }, [firestore, user, hasRole, toast]);
+
+    // Teacher Classes
+    useEffect(() => {
+        if (!firestore || !user || !hasRole('ucitel')) {
+            setClassesLoading(false);
             return;
         }
-
-        const unsubscribe = onSnapshot(q,
-            (snapshot) => {
-                const results = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Grading[];
-                setGradings(results);
-                setGradingsLoading(false);
-            },
-            (error) => {
-                console.error("Error fetching gradings:", error);
-                toast({ variant: 'destructive', title: 'Chyba načítání dat', description: 'Nepodařilo se načíst data o klasifikaci.' });
-                setGradings(null);
-                setGradingsLoading(false);
-            }
-        );
-
+        setClassesLoading(true);
+        const q = query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setTeacherClasses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trida)));
+            setClassesLoading(false);
+        }, () => setClassesLoading(false));
         return () => unsubscribe();
-    }, [firestore, user, userLoading, hasRole, toast]);
+    }, [firestore, user, hasRole]);
+
+    // Students in Class
+    useEffect(() => {
+        if (!firestore || !selectedClassId || !(hasRole('ucitel') || hasRole('administrator'))) {
+            setStudents([]);
+            setStudentsLoading(false);
+            return;
+        }
+        setStudentsLoading(true);
+        const q = query(collection(firestore, 'users'), where('tridaId', '==', selectedClassId), where('roles', 'array-contains', 'ziak'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setStudents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)));
+            setStudentsLoading(false);
+        }, () => setStudentsLoading(false));
+        return () => unsubscribe();
+    }, [firestore, selectedClassId, hasRole]);
+
+    // Predmety (Subjects)
+    useEffect(() => {
+        if (!firestore) { setPredmetyLoading(false); return; };
+        setPredmetyLoading(true);
+        const unsubscribe = onSnapshot(collection(firestore, 'predmety'), (snapshot) => {
+            setPredmety(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Predmet)));
+            setPredmetyLoading(false);
+        }, () => setPredmetyLoading(false));
+        return () => unsubscribe();
+    }, [firestore]);
+
+    // All Teachers (for student/parent view)
+    useEffect(() => {
+        if (!firestore || !(hasRole('ziak') || hasRole('rodic'))) {
+            setTeachersLoading(false);
+            return;
+        }
+        setTeachersLoading(true);
+        const q = query(collection(firestore, 'users'), where('roles', 'array-contains', 'ucitel'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setAllTeachers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)));
+            setTeachersLoading(false);
+        }, () => setTeachersLoading(false));
+        return () => unsubscribe();
+    }, [firestore, hasRole]);
 
 
-    // --- Form Handling ---
     const { register, handleSubmit, control, reset, setValue, watch } = useForm<GradingFormData>({
         resolver: zodResolver(gradingSchema),
         defaultValues: { studentIds: [], vaha: 1.0, znamka: 1 }
     });
 
-    // --- Effects ---
     const tridaIdFromParams = searchParams.get('tridaId');
     const predmetIdFromParams = searchParams.get('predmetId');
 
@@ -191,35 +218,93 @@ export default function HodnoceniPage() {
     }, [teacherClasses, selectedClassId, tridaIdFromParams]);
 
     useEffect(() => {
-        if (tridaIdFromParams || predmetIdFromParams) {
+        if ((tridaIdFromParams || predmetIdFromParams) && !isDialogOpen) {
             handleOpenDialog(null);
         }
-    }, [tridaIdFromParams, predmetIdFromParams, handleOpenDialog]);
+    }, [tridaIdFromParams, predmetIdFromParams, handleOpenDialog, isDialogOpen]);
 
-    // === RENDER LOGIC ===
-    const isDataReady = !userLoading && user;
-    const showTeacherAdminView = isDataReady && (hasRole('ucitel') || hasRole('administrator'));
-    const showStudentParentView = isDataReady && (hasRole('ziak') || hasRole('rodic'));
+    const handleDelete = async () => {
+        if (!deletingGrading || !firestore) return;
+        try {
+            await deleteDocumentNonBlocking(doc(firestore, 'grades', deletingGrading.id));
+            toast({ title: 'Hodnocení smazáno' });
+            setDeletingGrading(null);
+        } catch (e) {
+            toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se smazat hodnocení.' });
+        }
+    };
+    
+    const onSubmit = async (data: GradingFormData) => {
+        if (!firestore || !user || !user.organizationId) return;
 
-    if (!isDataReady) {
-       return (
-            <div className="flex h-full w-full items-center justify-center p-4">
-                <Card className="max-w-lg w-full">
-                    <CardHeader>
-                        <CardTitle>Načítání dat...</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex items-center gap-4">
-                             <Loader2 className="h-8 w-8 animate-spin" />
-                             <p>Ověřování oprávnění a příprava modulu klasifikace...</p>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-        );
+        const batch = writeBatch(firestore);
+        const now = Timestamp.now();
+        const selectedPredmet = predmety.find(p => p.id === data.predmetId);
+
+        if (!selectedPredmet) {
+            toast({ variant: 'destructive', title: 'Chyba', description: 'Vybraný předmět nebyl nalezen.' });
+            return;
+        }
+
+        for (const studentId of data.studentIds) {
+            const studentData = students.find(s => s.id === studentId);
+            if (!studentData) continue;
+
+            const gradeData = {
+                organizationId: user.organizationId,
+                tridaId: studentData.tridaId || '',
+                ziakId: studentId,
+                ziakJmeno: studentData.name,
+                predmetId: data.predmetId,
+                predmet: selectedPredmet.name,
+                znamka: data.znamka,
+                vaha: data.vaha,
+                komentar: data.komentar || '',
+                ucitelId: user.id,
+                datum: format(now.toDate(), 'yyyy-MM-dd'),
+                cas: format(now.toDate(), 'HH:mm'),
+            };
+
+            if (editingGrading) {
+                const gradeRef = doc(firestore, 'grades', editingGrading.id);
+                batch.update(gradeRef, { ...gradeData, updatedAt: now });
+            } else {
+                const gradeRef = doc(collection(firestore, 'grades'));
+                batch.set(gradeRef, { ...gradeData, createdAt: now });
+            }
+        }
+
+        try {
+            await batch.commit();
+            toast({
+                title: editingGrading ? 'Hodnocení upraveno' : 'Hodnocení uloženo',
+                description: `Změny byly úspěšně uloženy.`,
+            });
+            setIsDialogOpen(false);
+        } catch (e) {
+            console.error(e);
+            toast({
+                variant: 'destructive',
+                title: 'Chyba ukládání',
+                description: 'Při ukládání hodnocení došlo k chybě.',
+            });
+        }
+    };
+
+    const isTeacherAdminDataLoading = gradingsLoading || classesLoading || studentsLoading || predmetyLoading;
+    const isStudentParentDataLoading = gradingsLoading || teachersLoading;
+
+    // RENDER LOGIC
+    if (userLoading) {
+       return <div className="flex h-full w-full items-center justify-center">Načítání...</div>;
     }
     
-    if (!user) return <div className="flex h-full w-full items-center justify-center">Přístup odepřen.</div>;
+    if (hasRole('administrator') && !user?.organizationId) {
+        return <div className="flex h-full w-full items-center justify-center">Načítání dat organizace...</div>;
+    }
+    
+    const showTeacherAdminView = hasRole('ucitel') || hasRole('administrator');
+    const showStudentParentView = hasRole('ziak') || hasRole('rodic');
 
     if (showTeacherAdminView) {
         return (
@@ -249,7 +334,7 @@ export default function HodnoceniPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {gradingsLoading ? (
+                                {isTeacherAdminDataLoading ? (
                                     <TableRow><TableCell colSpan={7} className="text-center h-24">Načítání hodnocení...</TableCell></TableRow>
                                 ) : gradings?.length === 0 ? (
                                     <TableRow><TableCell colSpan={7} className="text-center h-24">Nebylo zadáno žádné hodnocení.</TableCell></TableRow>
@@ -274,7 +359,81 @@ export default function HodnoceniPage() {
                     </CardContent>
                 </Card>
 
-                {/* Dialogs need to be here */}
+                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                     <DialogContent>
+                        <DialogHeader><DialogTitle>{editingGrading ? 'Upravit hodnocení' : 'Nové hodnocení'}</DialogTitle></DialogHeader>
+                        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                            <div className="grid gap-2">
+                                <Label>Třída</Label>
+                                <Select onValueChange={setSelectedClassId} value={selectedClassId || ''}>
+                                    <SelectTrigger><SelectValue placeholder="Vyberte třídu" /></SelectTrigger>
+                                    <SelectContent>{teacherClasses.map(c => <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>)}</SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Žáci</Label>
+                                <Controller
+                                    name="studentIds"
+                                    control={control}
+                                    render={({ field }) => (
+                                        <div className="border rounded-md p-2 max-h-40 overflow-y-auto">
+                                            {studentsLoading ? <p>Načítání žáků...</p> : students.map(s => (
+                                                <div key={s.id} className="flex items-center gap-2">
+                                                    <Checkbox
+                                                        id={`student-${s.id}`}
+                                                        checked={field.value.includes(s.id)}
+                                                        onCheckedChange={(checked) => {
+                                                            const newValue = checked ? [...field.value, s.id] : field.value.filter(id => id !== s.id);
+                                                            field.onChange(newValue);
+                                                        }}
+                                                    />
+                                                    <Label htmlFor={`student-${s.id}`}>{s.name}</Label>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                />
+                                {errors.studentIds && <p className="text-sm text-destructive">{errors.studentIds.message}</p>}
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="grid gap-2">
+                                    <Label>Předmět</Label>
+                                    <Controller name="predmetId" control={control} render={({ field }) => (
+                                        <Select onValueChange={field.onChange} value={field.value}><SelectTrigger><SelectValue placeholder="Předmět"/></SelectTrigger><SelectContent>{predmety.map(p=><SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select>
+                                    )} />
+                                    {errors.predmetId && <p className="text-sm text-destructive">{errors.predmetId.message}</p>}
+                                </div>
+                                 <div className="grid gap-2">
+                                    <Label>Známka</Label>
+                                    <Controller name="znamka" control={control} render={({ field }) => (
+                                        <Select onValueChange={(val) => field.onChange(Number(val))} value={String(field.value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{[1,2,3,4,5].map(z=><SelectItem key={z} value={String(z)}>{z}</SelectItem>)}</SelectContent></Select>
+                                    )} />
+                                </div>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Váha</Label>
+                                <Input type="number" step="0.1" {...register('vaha')} />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Komentář</Label>
+                                <Textarea {...register('komentar')} />
+                            </div>
+                            <DialogFooter>
+                                <DialogClose asChild><Button variant="outline">Zrušit</Button></DialogClose>
+                                <Button type="submit">Uložit</Button>
+                            </DialogFooter>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+                
+                 {deletingGrading && (
+                    <AlertDialog open={!!deletingGrading} onOpenChange={() => setDeletingGrading(null)}>
+                        <AlertDialogContent>
+                            <AlertDialogHeader><AlertDialogTitle>Smazat hodnocení?</AlertDialogTitle><AlertDialogDescription>Tato akce je nevratná.</AlertDialogDescription></AlertDialogHeader>
+                            <AlertDialogFooter><AlertDialogCancel>Zrušit</AlertDialogCancel><AlertDialogAction onClick={handleDelete}>Smazat</AlertDialogAction></AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                 )}
             </div>
         );
     }
@@ -296,8 +455,8 @@ export default function HodnoceniPage() {
         const subjectAverages = useMemo(() => {
             return Object.keys(gradesBySubject).reduce((acc, subject) => {
                 const grades = gradesBySubject[subject];
-                const weightedSum = grades.reduce((sum, g) => sum + (g.znamka * (g.vaha || 1)), 0);
-                const totalWeight = grades.reduce((sum, g) => sum + (g.vaha || 1), 0);
+                const weightedSum = grades.reduce((sum, g) => sum + (g.znamka * (Number.isFinite(g.vaha) ? g.vaha : 1)), 0);
+                const totalWeight = grades.reduce((sum, g) => sum + (Number.isFinite(g.vaha) ? g.vaha : 1), 0);
                 acc[subject] = totalWeight > 0 ? (weightedSum / totalWeight).toFixed(2) : 'N/A';
                 return acc;
             }, {} as Record<string, string>);
@@ -306,8 +465,7 @@ export default function HodnoceniPage() {
         return (
             <div className="p-4 md:p-6 space-y-8">
                  <h1 className="text-3xl font-bold">Klasifikace</h1>
-                 {gradingsLoading && <div>Načítání známek...</div>}
-                 {!gradingsLoading && Object.keys(gradesBySubject).map(subject => (
+                 {isStudentParentDataLoading ? <div>Načítání známek...</div> : Object.keys(gradesBySubject).length === 0 ? <p>Nebyly nalezeny žádné známky.</p> : Object.keys(gradesBySubject).map(subject => (
                     <Card key={subject}>
                         <CardHeader className="flex flex-row justify-between items-center">
                             <div>
@@ -330,7 +488,7 @@ export default function HodnoceniPage() {
                                         <TableRow key={g.id} onClick={() => router.push(`/dashboard/hodnoceni/${g.id}`)} className="cursor-pointer">
                                             <TableCell>{format(parseISO(g.datum), 'd. M. yyyy')}</TableCell>
                                             <TableCell className="font-bold text-2xl">{g.znamka}</TableCell>
-                                            <TableCell>{(typeof g.vaha === 'number' && !isNaN(g.vaha) ? g.vaha : 1.0).toFixed(1)}</TableCell>
+                                            <TableCell>{(Number.isFinite(g.vaha) ? g.vaha : 1.0).toFixed(1)}</TableCell>
                                             <TableCell>{g.komentar}</TableCell>
                                         </TableRow>
                                     ))}
@@ -345,3 +503,4 @@ export default function HodnoceniPage() {
 
     return <div>Nemáte roli pro zobrazení této stránky.</div>;
 }
+    
