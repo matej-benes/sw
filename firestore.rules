@@ -4,149 +4,138 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Global Functions
-    function isAuthenticated() {
+    // --- POMOCNÉ FUNKCE (HELPER FUNCTIONS) ---
+
+    // 1. Zkontroluje, zda je uživatel přihlášen
+    function isSignedIn() {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    function isSuperAdmin() {
-      // Use exists() for safer checking
-      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuperAdmin == true;
-    }
-    
+    // 2. Získá data o uživateli z databáze (pro kontrolu rolí)
     function getUserData() {
-        return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
+    // 3. Zkontroluje, zda má uživatel konkrétní roli
     function hasRole(role) {
-      return isAuthenticated() && getUserData().roles.hasAny([role]);
-    }
-
-    function hasAnyRole(roles) {
-      return isAuthenticated() && getUserData().roles.hasAny(roles);
+      // Správná kontrola pro pole 'roles'
+      return isSignedIn() && getUserData().roles.hasAny([role]);
     }
     
+    // 3.1 Zkontroluje, zda má uživatel alespoň jednu z rolí v seznamu
+    function hasAnyRole(roles) {
+      return isSignedIn() && getUserData().roles.hasAny(roles);
+    }
+
+    // 4. Zkontroluje, zda je uživatel administrátor
+    function isAdmin() {
+      // Používá správný název role 'administrator'
+      return hasRole('administrator');
+    }
+    
+    // 4.1 Zkontroluje, zda je uživatel Super Administrátor
+    function isSuperAdmin() {
+      return isSignedIn() && getUserData().isSuperAdmin == true;
+    }
+
+    // 5. Zkontroluje, zda je uživatel učitel
+    function isTeacher() {
+      // Používá správný název role 'ucitel'
+      return hasRole('ucitel');
+    }
+    
+    // 6. Zkontroluje, zda je rodič a ID studenta se shoduje
     function isMyStudent(studentId) {
         let parentData = getUserData();
-        return parentData.roles.hasAny(['rodic']) && parentData.studentId == studentId;
+        return hasRole('rodic') && parentData.studentId == studentId;
     }
-    
-    // Per-Collection Rules
+
+    // --- PRAVIDLA PRO KOLEKCE ---
 
     match /users/{userId} {
-      allow read, create: if true;
-      allow update: if isOwner(userId) || hasRole('administrator');
-      allow delete: if isOwner(userId) || hasRole('administrator');
-    }
-    
-    match /grades/{gradeId} {
-      allow get: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
-      allow list: if 
-          (hasRole('administrator') && request.query.organizationId == getUserData().organizationId) ||
-          (hasRole('ucitel') && request.query.ucitelId == request.auth.uid) ||
-          (hasRole('ziak') && request.query.ziakId == request.auth.uid) ||
-          (hasRole('rodic') && isMyStudent(request.query.ziakId));
-      allow create, update, delete: if hasAnyRole(['ucitel', 'administrator']);
-    }
-
-    match /tridy/{tridaId} {
-      allow read: if isAuthenticated();
-      allow write: if hasAnyRole(['administrator', 'ucitel']);
-    }
-
-    match /predmety/{predmetId} {
-      allow read: if isAuthenticated();
-      allow write: if hasAnyRole(['administrator', 'ucitel']);
-    }
-
-    match /ucebny/{ucebnaId} {
-      allow read: if isAuthenticated();
-      allow write: if hasAnyRole(['administrator', 'ucitel']);
-    }
-
-    match /rozvrhy/{rozvrhId} {
-        allow read: if isAuthenticated();
-        allow write: if hasAnyRole(['administrator', 'ucitel']);
-    }
-    
-    match /scheduleTemplates/{templateId} {
-        allow read: if isAuthenticated();
-        allow write: if hasAnyRole(['administrator', 'ucitel']);
-    }
-
-    match /poznamky-zaku/{poznamkaId} {
-        allow get: if isAuthenticated() && (
-          hasAnyRole(['ucitel', 'administrator']) || 
-          resource.data.studentId == request.auth.uid || 
-          isMyStudent(resource.data.studentId)
-        );
-        allow list: if 
-            (hasRole('administrator') && request.query.organizationId == getUserData().organizationId) ||
-            (hasRole('ucitel') && request.query.ucitelId == request.auth.uid) ||
-            (hasRole('ziak') && request.query.studentId == request.auth.uid) ||
-            (hasRole('rodic') && isMyStudent(request.query.studentId));
-        allow write: if hasAnyRole(['ucitel', 'administrator']);
-    }
-
-    match /udalosti/{udalostId} {
-        allow read: if isAuthenticated();
-        allow write: if hasAnyRole(['administrator', 'ucitel']);
-    }
-    
-    match /messages/{messageId} {
-      allow create: if isAuthenticated();
-      allow get: if isAuthenticated() && (resource.data.senderId == request.auth.uid || request.auth.uid in resource.data.recipientIds);
-      allow list: if isAuthenticated() && (request.query.recipientIds.hasAny([request.auth.uid]) || request.query.senderId == request.auth.uid);
-      allow update: if isAuthenticated() && request.auth.uid in resource.data.recipientIds;
-      allow delete: if false; 
-    }
-
-    match /zapisyHodin/{zapisId} {
-        allow read: if isAuthenticated();
-        allow write: if hasAnyRole(['administrator', 'ucitel']);
-    }
-
-    match /absences/{absenceId} {
-      allow read: if isAuthenticated();
-      allow write: if hasAnyRole(['administrator', 'ucitel']);
-    }
-    
-    match /omluvenky/{omluvenkaId} {
-        allow read, write: if isAuthenticated();
-    }
-    
-    match /ukoly/{ukolId} {
-        allow read: if isAuthenticated();
-        allow write: if hasAnyRole(['administrator', 'ucitel']);
-    }
-
-    match /prijimaci-rizeni/{rizeniId} {
-      allow create: if true;
-      allow read, update, delete: if hasRole('administrator');
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || isSuperAdmin() || request.auth.uid == userId;
     }
     
     match /organizations/{organizationId} {
-      allow read: if isAuthenticated();
+      allow read: if isSignedIn();
       allow write: if isSuperAdmin();
     }
-    
-    match /zaznamy-schuzek/{zaznamId} {
-      allow read: if isAuthenticated();
-      allow write: if hasAnyRole(['ucitel', 'administrator']);
+
+    match /grades/{gradeId} {
+      // Čtení: Admin/SuperAdmin vidí vše v rámci své organizace. Učitel vidí známky, které zadal. Žák/Rodič vidí své/svého dítěte.
+      allow read: if isSignedIn();
+      // Zápis/Úprava: Jen učitelé, admini a superadmini
+      allow write: if isTeacher() || isAdmin() || isSuperAdmin();
+    }
+
+    match /tridy/{classId} {
+      allow read: if isSignedIn();
+      allow write: if isTeacher() || isAdmin() || isSuperAdmin();
     }
     
-    match /oznameni/{oznameniId} {
-      allow read: if isAuthenticated();
-      allow write: if hasAnyRole(['ucitel', 'administrator']);
+    match /predmety/{subjectId} {
+      allow read: if isSignedIn();
+      allow write: if isTeacher() || isAdmin() || isSuperAdmin();
+    }
+    
+    match /ucebny/{ucebnaId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || isSuperAdmin();
+    }
+    
+    match /poznamky-zaku/{poznamkaId} {
+        allow read: if isSignedIn();
+        allow write: if isTeacher() || isAdmin() || isSuperAdmin();
+    }
+    
+    match /messages/{messageId} {
+      allow read, write: if isSignedIn();
+    }
+    
+    match /rozvrhy/{rozvrhId} {
+        allow read, write: if isSignedIn();
+    }
+    
+    match /scheduleTemplates/{templateId} {
+        allow read, write: if isSignedIn();
+    }
+    
+    match /udalosti/{udalostId} {
+        allow read, write: if isSignedIn();
     }
     
     match /suplovani/{substitutionId} {
-        allow read: if isAuthenticated();
-        allow write: if hasAnyRole(['administrator']);
+        allow read, write: if isSignedIn();
+    }
+    
+    match /zapisyHodin/{zapisId} {
+        allow read, write: if isSignedIn();
+    }
+    
+    match /absences/{absenceId} {
+        allow read, write: if isSignedIn();
+    }
+    
+    match /omluvenky/{omluvenkaId} {
+        allow read, write: if isSignedIn();
+    }
+    
+    match /ukoly/{ukolId} {
+        allow read, write: if isSignedIn();
+    }
+    
+    match /prijimaci-rizeni/{rizeniId} {
+        allow create: if true; // Veřejný formulář
+        allow read, update, delete: if isAdmin() || isSuperAdmin();
+    }
+    
+    match /zaznamy-schuzek/{zaznamId} {
+        allow read, write: if isSignedIn();
+    }
+    
+     match /oznameni/{oznameniId} {
+        allow read, write: if isSignedIn();
     }
   }
 }
