@@ -1,7 +1,7 @@
 'use client';
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { cn } from "@/lib/utils";
-import type { LessonBlock, Udalost, Rozvrh, Substitution } from "@/lib/types";
+import type { LessonBlock, Udalost, Rozvrh, Substitution, User, Predmet } from "@/lib/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,7 +9,19 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { PlusCircle, Info, XCircle } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { PlusCircle, Info, XCircle, VenetianMask, Save } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   Tooltip,
@@ -19,6 +31,10 @@ import {
 } from '@/components/ui/tooltip';
 import { format, getDay, parse, parseISO, startOfWeek, addDays, isSameDay } from 'date-fns';
 import { cs } from 'date-fns/locale';
+import { Button } from './ui/button';
+import { useFirestore, setDocumentNonBlocking, useAuth } from '@/firebase';
+import { useToast } from '@/hooks/use-toast';
+import { doc, getDocs, query, collection, limit } from 'firebase/firestore';
 
 
 const defaultTimeSlots = [
@@ -30,6 +46,137 @@ const dayNames = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pá
 
 type DayMappingInfo = { short: string; date: string; fullDate: Date };
 
+
+function SubstitutionDialog({
+    isOpen,
+    onOpenChange,
+    lessonInfo,
+    teachers,
+    subjects,
+    onSave,
+}: {
+    isOpen: boolean;
+    onOpenChange: (isOpen: boolean) => void;
+    lessonInfo: { lesson: LessonBlock; dayInfo: DayMappingInfo; period: number; classId: string } | null;
+    teachers: User[];
+    subjects: Predmet[];
+    onSave: (subData: any) => void;
+}) {
+    const [subType, setSubType] = useState('suplovat');
+    const [subTeacherId, setSubTeacherId] = useState('');
+    const [subSubjectId, setSubSubjectId] = useState('');
+    const [note, setNote] = useState('');
+
+    useEffect(() => {
+        if (isOpen && lessonInfo) {
+            setSubType('suplovat');
+            setSubTeacherId('');
+            setSubSubjectId(lessonInfo.lesson.subjectId);
+            setNote('');
+        }
+    }, [isOpen, lessonInfo]);
+
+    const handleSave = () => {
+        if (!lessonInfo) return;
+
+        let changes: any = {};
+        let type: string[] = [];
+
+        if (subType === 'odpada') {
+            type.push('zruseno');
+            changes = { type, note };
+        } else {
+            if (subTeacherId && subTeacherId !== lessonInfo.lesson.teacherId) {
+                type.push('zmena-ucitele');
+                changes.teacherId = subTeacherId;
+            }
+            if (subSubjectId && subSubjectId !== lessonInfo.lesson.subjectId) {
+                changes.subjectId = subSubjectId;
+                if (!type.includes('zmena-predmetu')) type.push('zmena-predmetu' as any); // Custom type
+            }
+            if (note) {
+                 changes.note = note;
+            }
+            changes.type = type;
+        }
+
+        onSave({
+            originalLesson: {
+                day: format(lessonInfo.dayInfo.fullDate, 'EEEE', { locale: cs }),
+                period: lessonInfo.period - 1, // 0-indexed
+                classId: lessonInfo.classId,
+                lessonBlock: lessonInfo.lesson,
+            },
+            changes: changes,
+            date: format(lessonInfo.dayInfo.fullDate, 'yyyy-MM-dd'),
+        });
+        onOpenChange(false);
+    };
+
+    if (!lessonInfo) return null;
+    
+    const { lesson, dayInfo, period } = lessonInfo;
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Zadat suplování</DialogTitle>
+                    <DialogDescription>
+                        Hodina: {lesson.subjectName} ({lesson.className}), {format(dayInfo.fullDate, "d.M.yyyy")}, {period}. hodina
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                    <RadioGroup value={subType} onValueChange={setSubType}>
+                        <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="odpada" id="odpada" />
+                            <Label htmlFor="odpada">Hodina odpadá</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="suplovat" id="suplovat" />
+                            <Label htmlFor="suplovat">Supluje se / mění se</Label>
+                        </div>
+                    </RadioGroup>
+
+                    {subType === 'suplovat' && (
+                        <div className="space-y-4 pt-4 border-t">
+                            <div className="grid gap-2">
+                                <Label>Suplující učitel (nepovinné)</Label>
+                                <Select value={subTeacherId} onValueChange={setSubTeacherId}>
+                                    <SelectTrigger><SelectValue placeholder="Vyberte učitele" /></SelectTrigger>
+                                    <SelectContent>
+                                        {teachers.filter(t => t.id !== lesson.teacherId).map(t => (
+                                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Nový předmět (nepovinné)</Label>
+                                 <Select value={subSubjectId} onValueChange={setSubSubjectId}>
+                                    <SelectTrigger><SelectValue placeholder="Vyberte předmět" /></SelectTrigger>
+                                    <SelectContent>
+                                        {subjects.map(s => (
+                                            <SelectItem key={s.id} value={s.id}>{s.name} ({s.shortcut})</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                    )}
+                     <div className="grid gap-2">
+                        <Label>Poznámka</Label>
+                        <Textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Zadejte poznámku k suplování..." />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>Zrušit</Button>
+                    <Button onClick={handleSave}><Save className="mr-2 h-4 w-4" /> Uložit suplování</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
 
 function LessonTooltipContent({ lesson, dayInfo, period }: { lesson: LessonBlock, dayInfo: DayMappingInfo, period: number }) {
     return (
@@ -76,7 +223,7 @@ function EventTooltipContent({ event }: { event: Udalost }) {
     )
 }
 
-function LessonContextMenu({ children, lesson, dayInfo, period, classId }: { children: React.ReactNode, lesson: LessonBlock, dayInfo: DayMappingInfo, period: number, classId: string }) {
+function LessonContextMenu({ children, lesson, dayInfo, period, classId, onSubstitute, isTeacher }: { children: React.ReactNode, lesson: LessonBlock, dayInfo: DayMappingInfo, period: number, classId: string, onSubstitute: () => void, isTeacher: boolean }) {
     const router = useRouter();
     
     const handleNavigation = (path: string, params: Record<string, string>) => {
@@ -113,8 +260,15 @@ function LessonContextMenu({ children, lesson, dayInfo, period, classId }: { chi
                     predmetId: lesson.subjectId,
                     datumZadani: format(dayInfo.fullDate, 'yyyy-MM-dd'),
                 })}>Nový domácí úkol</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem>Vytvořit online schůzku</DropdownMenuItem>
+                {isTeacher && (
+                    <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={onSubstitute}>
+                            <VenetianMask className="mr-2 h-4 w-4" />
+                            Zadat suplování
+                        </DropdownMenuItem>
+                    </>
+                )}
             </DropdownMenuContent>
         </DropdownMenu>
     );
@@ -138,7 +292,7 @@ function EmptySlotContextMenu({ children }: { children: React.ReactNode }) {
 }
 
 
-function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, isSubstituted = false, substitutionNote }: { lesson: LessonBlock; isTeacher: boolean, dayInfo: DayMappingInfo, period: number, classId: string, isSubstituted?: boolean, substitutionNote?: string }) {
+function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, onSubstitute, isSubstituted = false, substitutionNote }: { lesson: LessonBlock; isTeacher: boolean, dayInfo: DayMappingInfo, period: number, classId: string, onSubstitute: () => void, isSubstituted?: boolean, substitutionNote?: string }) {
     const getSubjectColor = (subjectId: string) => {
         if (!subjectId) return `hsl(0, 0%, 85%)`;
         let hash = 0;
@@ -161,7 +315,7 @@ function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, isSubstit
     );
     
     const interactiveBlock = isTeacher ? (
-        <LessonContextMenu lesson={lesson} dayInfo={dayInfo} period={period} classId={classId}>{blockContent}</LessonContextMenu>
+        <LessonContextMenu lesson={lesson} dayInfo={dayInfo} period={period} classId={classId} onSubstitute={onSubstitute} isTeacher={isTeacher}>{blockContent}</LessonContextMenu>
     ) : blockContent;
 
     return (
@@ -202,11 +356,11 @@ function EventBlock({ event }: { event: Udalost }) {
 function CancelledLessonBlock({ substitution }: { substitution: Substitution }) {
      const blockContent = (
          <div 
-            className="h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer bg-destructive/10 border border-dashed border-destructive"
+            className="h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer bg-muted/50 border border-dashed border-muted-foreground"
         >
-             <XCircle className="h-4 w-4 text-destructive mb-1" />
-            <div className="font-bold text-destructive">Odpadá</div>
-            <div className="text-muted-foreground text-xs">{substitution.originalLesson.lessonBlock.subjectShortcut}</div>
+             <XCircle className="h-4 w-4 text-muted-foreground mb-1" />
+            <div className="font-bold text-muted-foreground">Odpadá</div>
+            <div className="text-muted-foreground text-xs line-through">{substitution.originalLesson.lessonBlock.subjectShortcut}</div>
         </div>
     );
 
@@ -226,8 +380,13 @@ function CancelledLessonBlock({ substitution }: { substitution: Substitution }) 
     )
 }
 
-export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, isTeacher, userId, userClassId, day }: { dailySchedule: Rozvrh | undefined | null, eventsData: Udalost[], substitutionsData: Substitution[], isTeacher: boolean, userId: string, userClassId?: string, day: Date }) {
+export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, isTeacher, userId, userClassId, day, teachers, subjects }: { dailySchedule: Rozvrh | undefined | null, eventsData: Udalost[], substitutionsData: Substitution[], isTeacher: boolean, userId: string, userClassId?: string, day: Date, teachers: User[], subjects: Predmet[] }) {
     const router = useRouter();
+    const firestore = useFirestore();
+    const { user } = useAuth();
+    const { toast } = useToast();
+    const [editingSubFor, setEditingSubFor] = useState<{ lesson: LessonBlock; dayInfo: DayMappingInfo; period: number; classId: string; } | null>(null);
+    const [isSubDialogOpen, setIsSubDialogOpen] = useState(false);
     
     const timeSlots = dailySchedule?.timeSlots || defaultTimeSlots;
     
@@ -245,9 +404,7 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
     const findSubstitutionForCell = (dayDate: Date, periodIndex: number, classId: string) => {
          return substitutionsData.find(sub => {
              const subDate = parseISO(sub.date);
-             const dayName = dayNames[getDay(dayDate)];
-             const isSame = isSameDay(subDate, dayDate);
-             return isSame && sub.originalLesson.period === periodIndex && sub.originalLesson.classId === classId;
+             return isSameDay(subDate, dayDate) && sub.originalLesson.period === periodIndex && sub.originalLesson.classId === classId;
         })
     };
 
@@ -256,7 +413,7 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
         const lesson = dailySchedule.hodiny[periodIndex];
         if (lesson) {
             if (isTeacher) {
-                if (lesson.teacherId === userId) return { lesson, classId: dailySchedule.tridaId };
+                 return { lesson, classId: dailySchedule.tridaId };
             } else {
                 if (dailySchedule.tridaId === userClassId) return { lesson, classId: dailySchedule.tridaId };
             }
@@ -264,6 +421,23 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
         return null;
     };
     
+    const handleSaveSubstitution = async (subData: any) => {
+        if (!firestore || !user ) return;
+        const subId = `${subData.originalLesson.classId}-${subData.date}-${subData.originalLesson.period}`;
+        const subRef = doc(firestore, 'suplovani', subId);
+        
+        const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
+        const orgsSnap = await getDocs(orgsQuery);
+         if (orgsSnap.empty) {
+            toast({ variant: 'destructive', title: 'Chyba', description: 'V databázi neexistuje žádná organizace.' });
+            return;
+        }
+        const organizationId = orgsSnap.docs[0].id;
+
+        await setDocumentNonBlocking(subRef, { ...subData, id: subId, organizationId }, { merge: true });
+        toast({ title: "Suplování uloženo." });
+    };
+
     const handleCellClick = (isTeacher: boolean, lessonInfo: any, dayDate: Date, periodIndex: number) => {
         if(isTeacher || !lessonInfo?.lesson || !lessonInfo?.classId) return;
 
@@ -311,12 +485,20 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                         const isCancelledByEvent = event && event.nahrazujeHodiny;
 
                         const isSubstituted = !!substitution;
-                        const isCancelledBySub = substitution?.changes.type.includes('zruseno');
+                        const isCancelledBySub = !!substitution?.changes.type.includes('zruseno');
 
                         let substitutedLesson: LessonBlock | null = null;
                         if (isSubstituted && !isCancelledBySub && lesson) {
-                            substitutedLesson = { ...lesson, ...substitution!.changes };
-                            if (substitution!.changes.teacherId) substitutedLesson.teacherName = "Zástup"; 
+                            const newTeacher = teachers.find(t => t.id === substitution!.changes.teacherId);
+                            const newSubject = subjects.find(s => s.id === substitution!.changes.subjectId);
+                            substitutedLesson = { 
+                                ...lesson, 
+                                teacherId: newTeacher ? newTeacher.id : lesson.teacherId,
+                                teacherName: newTeacher ? newTeacher.name : lesson.teacherName,
+                                subjectId: newSubject ? newSubject.id : lesson.subjectId,
+                                subjectName: newSubject ? newSubject.name : lesson.subjectName,
+                                subjectShortcut: newSubject ? newSubject.shortcut : lesson.subjectShortcut,
+                             };
                         }
 
 
@@ -329,11 +511,11 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                                 ) : (
                                     <>
                                         {lesson && dayInfo && classId && (
-                                            <LessonBlockCmp lesson={lesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} isSubstituted={isSubstituted}/>
+                                            <LessonBlockCmp lesson={lesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} isSubstituted={isSubstituted} onSubstitute={() => { setEditingSubFor({ lesson, dayInfo, period: periodIndex + 1, classId }); setIsSubDialogOpen(true); }}/>
                                         )}
                                         {substitutedLesson && dayInfo && classId && (
                                             <div className="absolute inset-0.5">
-                                                <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} substitutionNote={substitution?.changes.note}/>
+                                                <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} substitutionNote={substitution?.changes.note} onSubstitute={() => { setEditingSubFor({ lesson: substitutedLesson, dayInfo, period: periodIndex + 1, classId }); setIsSubDialogOpen(true); }}/>
                                             </div>
                                         )}
                                         
@@ -349,6 +531,14 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                     })}
                 </React.Fragment>
             </div>
+             <SubstitutionDialog
+                isOpen={isSubDialogOpen}
+                onOpenChange={setIsSubDialogOpen}
+                lessonInfo={editingSubFor}
+                teachers={teachers}
+                subjects={subjects}
+                onSave={handleSaveSubstitution}
+            />
         </div>
     );
 }

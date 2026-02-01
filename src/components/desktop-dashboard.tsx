@@ -83,6 +83,13 @@ export function DesktopDashboard() {
   }, [firestore]);
   const { data: allStaff } = useCollection<User>(allStaffQuery);
 
+  const { data: subjects } = useCollection<Predmet>(
+    useMemoFirebase(
+      () => (firestore ? collection(firestore, 'predmety') : null),
+      [firestore]
+    )
+  );
+
   const studentRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     const studentId = hasRole('ziak') ? user.id : user.studentId;
@@ -350,6 +357,8 @@ export function DesktopDashboard() {
                   userId={user.id}
                   userClassId={targetClassId}
                   day={day}
+                  teachers={allStaff || []}
+                  subjects={subjects || []}
                 />
               </div>
             ))}
