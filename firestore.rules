@@ -44,8 +44,12 @@ service cloud.firestore {
     }
     
     match /grades/{gradeId} {
-      allow get: if isOrgMember(resource.data.organizationId) && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
-      allow list: if isAuthenticated();
+      allow get: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
+      allow list: if 
+          (hasRole('administrator') && request.query.organizationId != null) ||
+          (hasRole('ucitel') && request.query.ucitelId == request.auth.uid) ||
+          (hasRole('ziak') && request.query.ziakId == request.auth.uid) ||
+          (hasRole('rodic') && isMyStudent(request.query.ziakId));
       allow create, update, delete: if hasAnyRole(['ucitel', 'administrator']);
     }
 

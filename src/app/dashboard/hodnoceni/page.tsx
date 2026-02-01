@@ -61,15 +61,18 @@ function TeacherView() {
 
     const gradingsQuery = useMemoFirebase(() => {
         if (!user?.id || !firestore) return null;
-        
+    
         const gradesCollection = collection(firestore, 'grades');
 
         if (hasRole('administrator')) {
-            if (!user.organizationId) return null; // Prevent query if org ID is missing
+            // Stronger guard to prevent queries before organizationId is loaded
+            if (typeof user.organizationId !== 'string' || user.organizationId === '') {
+                return null;
+            }
             // Admin sees all grades in their organization
             return query(gradesCollection, where('organizationId', '==', user.organizationId), orderBy('createdAt', 'desc'));
         }
-        
+    
         // Teacher sees only their own grades
         return query(gradesCollection, where('ucitelId', '==', user.id), orderBy('createdAt', 'desc'));
     }, [firestore, user, hasRole]);
@@ -314,7 +317,7 @@ function TeacherView() {
                                         <TableCell>{g.ziakJmeno}</TableCell>
                                         <TableCell>{g.predmet}</TableCell>
                                         <TableCell className="font-bold text-lg">{g.znamka}</TableCell>
-                                        <TableCell>{(typeof g.vaha === 'number' ? g.vaha : 1.0).toFixed(1)}</TableCell>
+                                        <TableCell>{(typeof g.vaha === 'number' && !isNaN(g.vaha) ? g.vaha : 1.0).toFixed(1)}</TableCell>
                                         <TableCell className="max-w-xs truncate">{g.komentar}</TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(g)}><Pencil className="h-4 w-4" /></Button>
@@ -505,13 +508,13 @@ function StudentParentView() {
             
             const weightedSum = grades.reduce((sum, g) => {
                 if (typeof g.znamka !== 'number') return sum;
-                const weight = typeof g.vaha === 'number' ? g.vaha : 1.0;
+                const weight = (typeof g.vaha === 'number' && !isNaN(g.vaha)) ? g.vaha : 1.0;
                 return sum + (g.znamka * weight);
             }, 0);
             
             const totalWeight = grades.reduce((sum, g) => {
                 if (typeof g.znamka !== 'number') return sum;
-                const weight = typeof g.vaha === 'number' ? g.vaha : 1.0;
+                const weight = (typeof g.vaha === 'number' && !isNaN(g.vaha)) ? g.vaha : 1.0;
                 return sum + weight;
             }, 0);
 
@@ -609,7 +612,7 @@ function StudentParentView() {
                                         <TableCell>{g.predmet || '-'}</TableCell>
                                         <TableCell>
                                             <span className="font-bold text-lg mr-2">{typeof g.znamka === 'number' ? g.znamka : '?'}</span>
-                                            <Badge variant="outline">Váha: {(typeof g.vaha === 'number' ? g.vaha : 1.0).toFixed(1)}</Badge>
+                                            <Badge variant="outline">Váha: {(typeof g.vaha === 'number' && !isNaN(g.vaha) ? g.vaha : 1.0).toFixed(1)}</Badge>
                                         </TableCell>
                                         <TableCell>{getTeacherName(g.ucitelId)}</TableCell>
                                         <TableCell className="max-w-xs truncate">{g.komentar || '-'}</TableCell>
@@ -626,39 +629,38 @@ function StudentParentView() {
 }
 
 
-function HodnoceniPageContent() {
-  const { user, loading, hasRole } = useAuth();
-  
-  if (loading) return <div className="flex h-full w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
-  if (!user) return <div className="flex h-full w-full items-center justify-center">Přístup odepřen.</div>;
-
-  if (hasRole('administrator') && !user.organizationId) {
-      return (
-        <Card>
-            <CardHeader><CardTitle>Načítání dat organizace...</CardTitle></CardHeader>
-            <CardContent>
-                <p>Váš účet je administrátorský, ale zatím nebylo načteno přiřazení k organizaci. Chvilku strpení...</p>
-                <Loader2 className="h-8 w-8 animate-spin mx-auto mt-4" />
-            </CardContent>
-        </Card>
-      );
-  }
-
-  if (hasRole('ucitel') || hasRole('administrator')) {
-    return <TeacherView />;
-  }
-
-  if (hasRole('ziak') || hasRole('rodic')) {
-    return <StudentParentView />;
-  }
-
-  return <div>Nemáte roli pro zobrazení této stránky.</div>;
-}
-
 export default function HodnoceniPage() {
-    return (
-        <React.Suspense fallback={<div>Načítání...</div>}>
-            <HodnoceniPageContent />
-        </React.Suspense>
-    );
+    const { user, loading, hasRole } = useAuth();
+
+    const showLoading = loading || (hasRole('administrator') && !user?.organizationId);
+
+    if (showLoading) {
+        return (
+            <div className="flex h-full w-full items-center justify-center p-4">
+                <Card className="max-w-lg w-full">
+                    <CardHeader>
+                        <CardTitle>Načítání dat...</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-center gap-4">
+                             <Loader2 className="h-8 w-8 animate-spin" />
+                             <p>Ověřování oprávnění a načítání dat organizace. Chvilku strpení...</p>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+  
+    if (!user) return <div className="flex h-full w-full items-center justify-center">Přístup odepřen.</div>;
+  
+    if (hasRole('ucitel') || hasRole('administrator')) {
+      return <TeacherView />;
+    }
+  
+    if (hasRole('ziak') || hasRole('rodic')) {
+      return <StudentParentView />;
+    }
+  
+    return <div>Nemáte roli pro zobrazení této stránky.</div>;
 }
