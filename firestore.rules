@@ -47,8 +47,7 @@ service cloud.firestore {
       allow get: if isOrgMember(resource.data.organizationId) && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
       allow list: if 
                   (
-                    hasRole('administrator') &&
-                    request.query.organizationId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId
+                    hasRole('administrator') && request.query.organizationId != null
                   ) ||
                   (
                     hasRole('ucitel') &&
@@ -98,8 +97,7 @@ service cloud.firestore {
         );
         allow list: if 
                     (
-                      hasRole('administrator') &&
-                      request.query.organizationId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId
+                      hasRole('administrator') && request.query.organizationId != null
                     ) ||
                     (
                       hasRole('ucitel') &&
