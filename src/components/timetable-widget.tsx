@@ -17,6 +17,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -32,7 +42,7 @@ import {
 import { format, getDay, parse, parseISO, startOfWeek, addDays, isSameDay } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { Button } from './ui/button';
-import { useFirestore, setDocumentNonBlocking } from '@/firebase';
+import { useFirestore, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { doc, getDocs, query, collection, limit } from 'firebase/firestore';
@@ -54,6 +64,7 @@ function SubstitutionDialog({
     isOpen,
     onOpenChange,
     lessonInfo,
+    substitution,
     teachers,
     subjects,
     onSave,
@@ -61,6 +72,7 @@ function SubstitutionDialog({
     isOpen: boolean;
     onOpenChange: (isOpen: boolean) => void;
     lessonInfo: { lesson: LessonBlock; dayInfo: DayMappingInfo; period: number; classId: string } | null;
+    substitution: Substitution | null;
     teachers: User[];
     subjects: Predmet[];
     onSave: (subData: any) => void;
@@ -72,12 +84,26 @@ function SubstitutionDialog({
 
     useEffect(() => {
         if (isOpen && lessonInfo) {
-            setSubType('suplovat');
-            setSubTeacherIds(lessonInfo ? [lessonInfo.lesson.teacherId] : []);
-            setSubSubjectId(lessonInfo.lesson.subjectId);
-            setNote('');
+             if (substitution) {
+                // Pre-fill from existing substitution
+                const type = substitution.changes.type;
+                if (type.includes('zruseno')) {
+                    setSubType('odpada');
+                } else {
+                    setSubType('suplovat');
+                }
+                setSubTeacherIds(substitution.changes.teacherIds || [lessonInfo.lesson.teacherId]);
+                setSubSubjectId(substitution.changes.subjectId || lessonInfo.lesson.subjectId);
+                setNote(substitution.changes.note || '');
+            } else {
+                // New substitution
+                setSubType('suplovat');
+                setSubTeacherIds([lessonInfo.lesson.teacherId]);
+                setSubSubjectId(lessonInfo.lesson.subjectId);
+                setNote('');
+            }
         }
-    }, [isOpen, lessonInfo]);
+    }, [isOpen, lessonInfo, substitution]);
 
     const handleSave = () => {
         if (!lessonInfo) return;
@@ -95,8 +121,8 @@ function SubstitutionDialog({
 
             if (JSON.stringify(sortedOriginal) !== JSON.stringify(sortedNew)) {
                 type.push('zmena-ucitele');
-                changes.teacherIds = subTeacherIds;
             }
+            changes.teacherIds = subTeacherIds;
             
             if (subSubjectId && subSubjectId !== lessonInfo.lesson.subjectId) {
                 changes.subjectId = subSubjectId;
@@ -232,7 +258,7 @@ function EventTooltipContent({ event }: { event: Udalost }) {
     )
 }
 
-function LessonContextMenu({ children, lesson, dayInfo, period, classId, onSubstitute, isTeacher }: { children: React.ReactNode, lesson: LessonBlock, dayInfo: DayMappingInfo, period: number, classId: string, onSubstitute: () => void, isTeacher: boolean }) {
+function LessonContextMenu({ children, lesson, dayInfo, period, classId, onSubstitute, isTeacher, isSubstitutedLesson, onCancelSubstitution }: { children: React.ReactNode, lesson: LessonBlock, dayInfo: DayMappingInfo, period: number, classId: string, onSubstitute: () => void, isTeacher: boolean, isSubstitutedLesson?: boolean, onCancelSubstitution?: () => void }) {
     const router = useRouter();
     
     const handleNavigation = (path: string, params: Record<string, string>) => {
@@ -274,8 +300,14 @@ function LessonContextMenu({ children, lesson, dayInfo, period, classId, onSubst
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={onSubstitute}>
                             <VenetianMask className="mr-2 h-4 w-4" />
-                            Zadat suplování
+                            <span>{isSubstitutedLesson ? 'Upravit suplovanou hodinu' : 'Zadat suplování'}</span>
                         </DropdownMenuItem>
+                        {isSubstitutedLesson && onCancelSubstitution && (
+                            <DropdownMenuItem onClick={onCancelSubstitution} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                                <XCircle className="mr-2 h-4 w-4" />
+                                <span>Zrušit suplování</span>
+                            </DropdownMenuItem>
+                        )}
                     </>
                 )}
             </DropdownMenuContent>
@@ -301,7 +333,7 @@ function EmptySlotContextMenu({ children }: { children: React.ReactNode }) {
 }
 
 
-function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, onSubstitute, isSubstituted = false, substitutionNote, isNewSubstitutedLesson = false }: { lesson: LessonBlock; isTeacher: boolean, dayInfo: DayMappingInfo, period: number, classId: string, onSubstitute: () => void, isSubstituted?: boolean, substitutionNote?: string, isNewSubstitutedLesson?: boolean }) {
+function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, onSubstitute, onCancelSubstitution, isSubstituted = false, substitutionNote, isNewSubstitutedLesson = false }: { lesson: LessonBlock; isTeacher: boolean, dayInfo: DayMappingInfo, period: number, classId: string, onSubstitute: () => void, onCancelSubstitution?: () => void, isSubstituted?: boolean, substitutionNote?: string, isNewSubstitutedLesson?: boolean }) {
     const getSubjectColor = (subjectId: string) => {
         if (!subjectId) return `hsl(0, 0%, 85%)`;
         let hash = 0;
@@ -316,22 +348,31 @@ function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, onSubstit
          <div 
             className={cn(
                 "h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer relative",
-                isSubstituted && 'line-through opacity-70'
+                isSubstituted && 'bg-muted text-muted-foreground'
             )}
             style={{
-                backgroundColor: isNewSubstitutedLesson ? 'hsl(346.8, 77.2%, 49.8%, 0.5)' : isSubstituted ? 'hsl(var(--muted))' : getSubjectColor(lesson.subjectId),
-                color: isSubstituted ? 'hsl(var(--muted-foreground))' : undefined,
+                backgroundColor: isNewSubstitutedLesson ? 'hsl(346.8 77.2% 49.8% / 0.2)' : isSubstituted ? 'hsl(var(--muted))' : getSubjectColor(lesson.subjectId),
              }}
         >
-            {isNewSubstitutedLesson && <Badge variant="destructive" className="absolute -top-1 -right-1 text-xs p-0.5">SUPL</Badge>}
             <div className="font-bold">{lesson.subjectShortcut}</div>
             <div>{isTeacher ? lesson.className : lesson.teacherName}</div>
-            <div className={cn("text-muted-foreground", isNewSubstitutedLesson && 'text-card-foreground/80', isSubstituted && 'text-muted-foreground/80')}>{lesson.ucebnaName}</div>
+            <div className={cn("text-muted-foreground", isNewSubstitutedLesson && 'text-foreground/80')}>{lesson.ucebnaName}</div>
         </div>
     );
     
-    const interactiveBlock = isTeacher ? (
-        <LessonContextMenu lesson={lesson} dayInfo={dayInfo} period={period} classId={classId} onSubstitute={onSubstitute} isTeacher={isTeacher}>{blockContent}</LessonContextMenu>
+    const interactiveBlock = (isTeacher && !isSubstituted) ? (
+        <LessonContextMenu 
+            lesson={lesson} 
+            dayInfo={dayInfo} 
+            period={period} 
+            classId={classId} 
+            onSubstitute={onSubstitute} 
+            isTeacher={isTeacher}
+            isSubstitutedLesson={isNewSubstitutedLesson}
+            onCancelSubstitution={onCancelSubstitution}
+        >
+            {blockContent}
+        </LessonContextMenu>
     ) : blockContent;
 
     return (
@@ -401,7 +442,8 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
     const firestore = useFirestore();
     const { user } = useAuth();
     const { toast } = useToast();
-    const [editingSubFor, setEditingSubFor] = useState<{ lesson: LessonBlock; dayInfo: DayMappingInfo; period: number; classId: string; } | null>(null);
+    const [editingSubFor, setEditingSubFor] = useState<{ lesson: LessonBlock; dayInfo: DayMappingInfo; period: number; classId: string; substitution: Substitution | null; } | null>(null);
+    const [deletingSubstitution, setDeletingSubstitution] = useState<Substitution | null>(null);
     const [isSubDialogOpen, setIsSubDialogOpen] = useState(false);
     
     const timeSlots = dailySchedule?.timeSlots || defaultTimeSlots;
@@ -452,6 +494,14 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
 
         await setDocumentNonBlocking(subRef, { ...subData, id: subId, organizationId }, { merge: true });
         toast({ title: "Suplování uloženo." });
+    };
+
+    const handleDeleteSubstitution = async () => {
+        if (!firestore || !deletingSubstitution) return;
+        const subId = deletingSubstitution.id;
+        await deleteDocumentNonBlocking(doc(firestore, 'suplovani', subId));
+        toast({ title: 'Suplování zrušeno.' });
+        setDeletingSubstitution(null);
     };
 
     const handleCellClick = (isTeacher: boolean, lessonInfo: any, dayDate: Date, periodIndex: number) => {
@@ -517,6 +567,7 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                             substitutedLesson = { 
                                 ...lesson, 
                                 teacherName: newTeacherName,
+                                teacherId: substitution!.changes.teacherIds?.[0] || lesson.teacherId, // For logic, but name shows all
                                 subjectId: newSubject ? newSubject.id : lesson.subjectId,
                                 subjectName: newSubject ? newSubject.name : lesson.subjectName,
                                 subjectShortcut: newSubject ? newSubject.shortcut : lesson.subjectShortcut,
@@ -540,15 +591,39 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                                 ) : substitutedLesson && lesson && dayInfo && classId ? (
                                     <>
                                         <div onClick={() => handleCellClick(isTeacher, {lesson: substitutedLesson, classId}, day, periodIndex)} className="h-1/2">
-                                            <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} substitutionNote={substitution?.changes.note} isNewSubstitutedLesson={true} onSubstitute={() => { setEditingSubFor({ lesson: substitutedLesson, dayInfo, period: periodIndex + 1, classId }); setIsSubDialogOpen(true); }}/>
+                                            <LessonBlockCmp 
+                                                lesson={substitutedLesson} 
+                                                isTeacher={isTeacher} 
+                                                dayInfo={dayInfo} 
+                                                period={periodIndex + 1} 
+                                                classId={classId!} 
+                                                substitutionNote={substitution?.changes.note} 
+                                                isNewSubstitutedLesson={true} 
+                                                onSubstitute={() => { setEditingSubFor({ lesson: lesson!, dayInfo, period: periodIndex + 1, classId: classId!, substitution }); setIsSubDialogOpen(true); }}
+                                                onCancelSubstitution={() => setDeletingSubstitution(substitution)}
+                                            />
                                         </div>
-                                        <div onClick={() => handleCellClick(isTeacher, lessonInfo, day, periodIndex)} className="h-1/2">
-                                            <LessonBlockCmp lesson={lesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} isSubstituted={true} onSubstitute={() => { /* no-op for original */ }}/>
+                                        <div onClick={() => { /* no action for grayed out lesson */ }} className="h-1/2">
+                                            <LessonBlockCmp 
+                                                lesson={lesson!} 
+                                                isTeacher={isTeacher} 
+                                                dayInfo={dayInfo} 
+                                                period={periodIndex + 1} 
+                                                classId={classId!} 
+                                                isSubstituted={true} 
+                                                onSubstitute={() => { /* no-op for original */ }}
+                                            />
                                         </div>
                                     </>
                                 ) : lesson && dayInfo && classId ? (
                                     <div onClick={() => handleCellClick(isTeacher, lessonInfo, day, periodIndex)} className="h-full">
-                                        <LessonBlockCmp lesson={lesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} onSubstitute={() => { setEditingSubFor({ lesson, dayInfo, period: periodIndex + 1, classId }); setIsSubDialogOpen(true); }}/>
+                                        <LessonBlockCmp 
+                                            lesson={lesson} 
+                                            isTeacher={isTeacher} 
+                                            dayInfo={dayInfo} 
+                                            period={periodIndex + 1} 
+                                            classId={classId} 
+                                            onSubstitute={() => { setEditingSubFor({ lesson, dayInfo, period: periodIndex + 1, classId, substitution: null }); setIsSubDialogOpen(true); }}/>
                                     </div>
                                 ) : (
                                     isTeacher && !event && (
@@ -562,14 +637,29 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                     })}
                 </React.Fragment>
             </div>
-             <SubstitutionDialog
+            <SubstitutionDialog
                 isOpen={isSubDialogOpen}
                 onOpenChange={setIsSubDialogOpen}
                 lessonInfo={editingSubFor}
+                substitution={editingSubFor?.substitution ?? null}
                 teachers={teachers}
                 subjects={subjects}
                 onSave={handleSaveSubstitution}
             />
+            <AlertDialog open={!!deletingSubstitution} onOpenChange={() => setDeletingSubstitution(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Opravdu chcete zrušit toto suplování?</AlertDialogTitle>
+                        <AlertDialogDescription>Tato akce je nevratná.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Zpět</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDeleteSubstitution} className="bg-destructive hover:bg-destructive/90">
+                            Zrušit suplování
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
