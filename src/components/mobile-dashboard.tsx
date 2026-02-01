@@ -56,7 +56,7 @@ export function MobileDashboard() {
 
   // Determine the target class ID based on role
   const targetClassId = useMemo(() => {
-    if (hasRole('ucitel')) {
+    if (hasRole('ucitel') || hasRole('administrator')) {
       return selectedClassId;
     }
     return user?.tridaId;
@@ -64,14 +64,14 @@ export function MobileDashboard() {
 
   // Set default class for teachers
   useEffect(() => {
-    if (hasRole('ucitel') && teacherClasses && teacherClasses.length > 0 && !selectedClassId) {
+    if ((hasRole('ucitel') || hasRole('administrator')) && teacherClasses && teacherClasses.length > 0 && !selectedClassId) {
       setSelectedClassId(teacherClasses[0].id);
     }
-  }, [hasRole, selectedClassId]);
+  }, [hasRole, teacherClasses, selectedClassId]);
 
   // Set class for non-teachers
   useEffect(() => {
-    if (!hasRole('ucitel') && user?.tridaId) {
+    if (!hasRole('ucitel') && !hasRole('administrator') && user?.tridaId) {
       setSelectedClassId(user.tridaId);
     }
   }, [hasRole, user?.tridaId]);
@@ -83,8 +83,14 @@ export function MobileDashboard() {
   }, [firestore, targetClassId, currentDate]));
 
   const teacherClassesQuery = useMemoFirebase(() => {
-    if (!firestore || !user || !hasRole('ucitel')) return null;
-    return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
+    if (!firestore || !user ) return null;
+     if (hasRole('administrator')) {
+      return collection(firestore, 'tridy');
+    }
+    if (hasRole('ucitel')) {
+        return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
+    }
+    return null;
   }, [firestore, user, hasRole]);
   const { data: teacherClasses, isLoading: teacherClassesLoading } = useCollection<Trida>(teacherClassesQuery);
 
@@ -122,7 +128,8 @@ export function MobileDashboard() {
   const handleNextDay = () => setCurrentDate(prev => addDays(prev, 1));
   const handleSetToday = () => setCurrentDate(new Date());
 
-  const isDataLoading = dailySchedule.isLoading || eventsLoading || subsLoading || zapisyLoading || isUserLoading || (hasRole('ucitel') && teacherClassesLoading) || teachersLoading || subjectsLoading;
+  const canManage = hasRole('ucitel') || hasRole('administrator');
+  const isDataLoading = dailySchedule.isLoading || eventsLoading || subsLoading || zapisyLoading || isUserLoading || (canManage && teacherClassesLoading) || teachersLoading || subjectsLoading;
 
   if (isDataLoading) {
     return <div className="flex h-full w-full items-center justify-center">Načítání...</div>;
@@ -152,7 +159,7 @@ export function MobileDashboard() {
             </Button>
           </div>
           
-          {hasRole('ucitel') && (
+          {canManage && (
             <div className="mb-4">
               <Select value={selectedClassId} onValueChange={setSelectedClassId}>
                 <SelectTrigger>
@@ -172,7 +179,7 @@ export function MobileDashboard() {
             eventsData={eventsData || []}
             substitutionsData={substitutionsData || []}
             zapisyData={zapisyData || []}
-            isTeacher={hasRole('ucitel')}
+            isTeacher={canManage}
             userId={user.id}
             userClassId={targetClassId}
             day={currentDate}
