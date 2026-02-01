@@ -309,19 +309,16 @@ function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, onSubstit
          <div 
             className={cn(
                 "h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer relative",
-                isSubstituted && 'opacity-50 line-through'
+                isSubstituted && 'opacity-70'
             )}
             style={{
-                backgroundColor: isNewSubstitutedLesson ? 'hsl(var(--destructive) / 0.2)' : getSubjectColor(lesson.subjectId),
-                color: isNewSubstitutedLesson ? 'hsl(var(--destructive-foreground))' : undefined,
+                backgroundColor: isNewSubstitutedLesson ? 'hsl(var(--destructive) / 0.15)' : isSubstituted ? 'hsl(var(--muted))' : getSubjectColor(lesson.subjectId),
+                color: isNewSubstitutedLesson ? 'hsl(var(--card-foreground))' : isSubstituted ? 'hsl(var(--muted-foreground))' : undefined,
              }}
         >
-            {isNewSubstitutedLesson && (
-                <Badge variant="destructive" className="absolute top-0.5 right-0.5 text-[10px] px-1 h-4 leading-none">SUPL</Badge>
-            )}
             <div className="font-bold">{lesson.subjectShortcut}</div>
             <div>{isTeacher ? lesson.className : lesson.teacherName}</div>
-            <div className={cn("text-muted-foreground", isNewSubstitutedLesson && 'text-destructive-foreground/80')}>{lesson.ucebnaName}</div>
+            <div className={cn("text-muted-foreground", isNewSubstitutedLesson && 'text-card-foreground/80', isSubstituted && 'text-muted-foreground/80')}>{lesson.ucebnaName}</div>
         </div>
     );
     
@@ -454,7 +451,7 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
 
         const slug = [
             format(dayDate, 'yyyy-MM-dd'),
-            periodIndex,
+            periodIndex.toString(),
             lessonInfo.classId,
             lessonInfo.lesson.id
         ];
@@ -512,30 +509,39 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                              };
                         }
 
+                        const cellHasContent = isCancelledByEvent || (isCancelledBySub && substitution) || lesson;
 
                         return (
-                            <div key={periodIndex} className="p-0.5 border-b border-r border-border min-h-[70px] relative" onClick={() => handleCellClick(isTeacher, lessonInfo, day, periodIndex)}>
+                             <div 
+                                key={periodIndex} 
+                                className={cn(
+                                    "p-0.5 border-b border-r border-border min-h-[70px] flex flex-col gap-0.5 justify-center",
+                                    !cellHasContent && isTeacher && "cursor-pointer"
+                                )}
+                            >
                                 {isCancelledByEvent ? (
-                                     <EventBlock event={event!} />
+                                        <EventBlock event={event!} />
                                 ) : isCancelledBySub && substitution ? (
                                     <CancelledLessonBlock substitution={substitution} />
-                                ) : (
+                                ) : substitutedLesson && lesson && dayInfo && classId ? (
                                     <>
-                                        {lesson && dayInfo && classId && (
-                                            <LessonBlockCmp lesson={lesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} isSubstituted={isSubstituted} onSubstitute={() => { setEditingSubFor({ lesson, dayInfo, period: periodIndex + 1, classId }); setIsSubDialogOpen(true); }}/>
-                                        )}
-                                        {substitutedLesson && dayInfo && classId && (
-                                            <div className="absolute inset-0.5">
-                                                <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} substitutionNote={substitution?.changes.note} isNewSubstitutedLesson={true} onSubstitute={() => { setEditingSubFor({ lesson: substitutedLesson, dayInfo, period: periodIndex + 1, classId }); setIsSubDialogOpen(true); }}/>
-                                            </div>
-                                        )}
-                                        
-                                        {!lesson && !event && isTeacher && (
-                                            <EmptySlotContextMenu>
-                                                <div className="h-full w-full cursor-pointer"></div>
-                                            </EmptySlotContextMenu>
-                                        )}
+                                        <div onClick={() => handleCellClick(isTeacher, {lesson: substitutedLesson, classId}, day, periodIndex)} className="h-1/2">
+                                            <LessonBlockCmp lesson={substitutedLesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} substitutionNote={substitution?.changes.note} isNewSubstitutedLesson={true} onSubstitute={() => { setEditingSubFor({ lesson: substitutedLesson, dayInfo, period: periodIndex + 1, classId }); setIsSubDialogOpen(true); }}/>
+                                        </div>
+                                        <div onClick={() => handleCellClick(isTeacher, lessonInfo, day, periodIndex)} className="h-1/2">
+                                            <LessonBlockCmp lesson={lesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} isSubstituted={true} onSubstitute={() => { /* no-op for original */ }}/>
+                                        </div>
                                     </>
+                                ) : lesson && dayInfo && classId ? (
+                                    <div onClick={() => handleCellClick(isTeacher, lessonInfo, day, periodIndex)} className="h-full">
+                                        <LessonBlockCmp lesson={lesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} onSubstitute={() => { setEditingSubFor({ lesson, dayInfo, period: periodIndex + 1, classId }); setIsSubDialogOpen(true); }}/>
+                                    </div>
+                                ) : (
+                                    isTeacher && !event && (
+                                        <EmptySlotContextMenu>
+                                            <div className="h-full w-full"></div>
+                                        </EmptySlotContextMenu>
+                                    )
                                 )}
                             </div>
                         )
