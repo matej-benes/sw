@@ -32,7 +32,8 @@ import {
 import { format, getDay, parse, parseISO, startOfWeek, addDays, isSameDay } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { Button } from './ui/button';
-import { useFirestore, setDocumentNonBlocking, useAuth } from '@/firebase';
+import { useFirestore, setDocumentNonBlocking } from '@/firebase';
+import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { doc, getDocs, query, collection, limit } from 'firebase/firestore';
 import { Badge } from './ui/badge';
