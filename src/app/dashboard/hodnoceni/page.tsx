@@ -314,7 +314,7 @@ function TeacherView() {
                                         <TableCell>{g.ziakJmeno}</TableCell>
                                         <TableCell>{g.predmet}</TableCell>
                                         <TableCell className="font-bold text-lg">{g.znamka}</TableCell>
-                                        <TableCell>{g.vaha.toFixed(1)}</TableCell>
+                                        <TableCell>{(g.vaha || 1.0).toFixed(1)}</TableCell>
                                         <TableCell className="max-w-xs truncate">{g.komentar}</TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(g)}><Pencil className="h-4 w-4" /></Button>
@@ -499,8 +499,8 @@ function StudentParentView() {
         const averages: { [key: string]: string } = {};
         for (const subject in gradesBySubject) {
             const grades = gradesBySubject[subject];
-            const totalWeight = grades.reduce((sum, g) => sum + g.vaha, 0);
-            const weightedSum = grades.reduce((sum, g) => sum + g.znamka * g.vaha, 0);
+            const totalWeight = grades.reduce((sum, g) => sum + (g.vaha || 1.0), 0);
+            const weightedSum = grades.reduce((sum, g) => sum + g.znamka * (g.vaha || 1.0), 0);
             if (totalWeight > 0) {
                 averages[subject] = (weightedSum / totalWeight).toFixed(2);
             } else {
@@ -595,7 +595,7 @@ function StudentParentView() {
                                         <TableCell>{g.predmet}</TableCell>
                                         <TableCell>
                                             <span className="font-bold text-lg mr-2">{g.znamka}</span>
-                                            <Badge variant="outline">Váha: {g.vaha.toFixed(1)}</Badge>
+                                            <Badge variant="outline">Váha: {(g.vaha || 1.0).toFixed(1)}</Badge>
                                         </TableCell>
                                         <TableCell>{getTeacherName(g.ucitelId)}</TableCell>
                                         <TableCell className="max-w-xs truncate">{g.komentar}</TableCell>
