@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Query } from 'firebase/firestore';
 import type { PoznamkaZaka, User, Trida } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { format } from 'date-fns';
@@ -14,23 +14,35 @@ import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 function StudentParentBehaviorView() {
-    const { user, hasRole } = useAuth();
+    const { user, hasRole, loading: userLoading } = useAuth();
     const firestore = useFirestore();
+    const [notes, setNotes] = useState<PoznamkaZaka[]>([]);
+    const [notesLoading, setNotesLoading] = useState(true);
 
     const studentId = hasRole('ziak') ? user?.id : user?.studentId;
 
-    const notesQuery = useMemoFirebase(() => {
-        if (!firestore || !studentId) return null;
-        return query(
+    useEffect(() => {
+        if (!firestore || !studentId) {
+            setNotesLoading(false);
+            return;
+        }
+        setNotesLoading(true);
+        const q = query(
             collection(firestore, 'poznamky-zaku'),
             where('studentId', '==', studentId)
         );
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const results = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as PoznamkaZaka[];
+            setNotes(results);
+            setNotesLoading(false);
+        }, (error) => {
+            console.error("Error fetching notes:", error);
+            setNotesLoading(false);
+        });
+        return () => unsubscribe();
     }, [firestore, studentId]);
 
-    const { data: notes, isLoading: notesLoading } = useCollection<PoznamkaZaka>(notesQuery);
-
     const sortedNotes = useMemo(() => {
-        if (!notes) return [];
         return [...notes].sort((a, b) => new Date(b.datum).getTime() - new Date(a.datum).getTime());
     }, [notes]);
 
@@ -40,7 +52,7 @@ function StudentParentBehaviorView() {
     
     const getTeacherName = (id: string) => teachers?.find(t => t.id === id)?.name || 'Neznámý učitel';
     
-    const isLoading = notesLoading || teachersLoading;
+    const isLoading = notesLoading || teachersLoading || userLoading;
 
     return (
         <Card>
@@ -51,7 +63,7 @@ function StudentParentBehaviorView() {
             <CardContent>
                 {isLoading ? (
                     <div className="flex justify-center py-10"><Loader2 className="h-8 w-8 animate-spin" /></div>
-                ) : sortedNotes && sortedNotes.length > 0 ? (
+                ) : sortedNotes.length > 0 ? (
                     <ul className="space-y-4">
                         {sortedNotes.map(note => (
                             <li key={note.id} className="p-4 border rounded-lg">
@@ -83,6 +95,8 @@ function TeacherAdminBehaviorView() {
     const { user } = useAuth();
     const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+    const [notes, setNotes] = useState<PoznamkaZaka[]>([]);
+    const [notesLoading, setNotesLoading] = useState(false);
 
     const { data: classes, isLoading: classesLoading } = useCollection<Trida>(
         useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore])
@@ -94,18 +108,29 @@ function TeacherAdminBehaviorView() {
     }, [firestore, selectedClassId]);
     const { data: studentsInClass, isLoading: studentsLoading } = useCollection<User>(studentsInClassQuery);
 
-    const notesQuery = useMemoFirebase(() => {
-        if (!firestore || !selectedStudentId) return null;
-        return query(
+    useEffect(() => {
+        if (!firestore || !selectedStudentId) {
+            setNotes([]);
+            setNotesLoading(false);
+            return;
+        }
+        setNotesLoading(true);
+        const q = query(
             collection(firestore, 'poznamky-zaku'),
             where('studentId', '==', selectedStudentId)
         );
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const results = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as PoznamkaZaka[];
+            setNotes(results);
+            setNotesLoading(false);
+        }, (error) => {
+            console.error("Error fetching notes for teacher view:", error);
+            setNotesLoading(false);
+        });
+        return () => unsubscribe();
     }, [firestore, selectedStudentId]);
 
-    const { data: notes, isLoading: notesLoading } = useCollection<PoznamkaZaka>(notesQuery);
-
     const sortedNotes = useMemo(() => {
-        if (!notes) return [];
         return [...notes].sort((a, b) => new Date(b.datum).getTime() - new Date(a.datum).getTime());
     }, [notes]);
     
@@ -145,7 +170,7 @@ function TeacherAdminBehaviorView() {
                     <div className="flex justify-center py-10"><Loader2 className="h-8 w-8 animate-spin" /></div>
                 ) : !selectedStudentId ? (
                      <p className="text-center py-10 text-muted-foreground">Vyberte třídu a žáka pro zobrazení záznamů.</p>
-                ) : sortedNotes && sortedNotes.length > 0 ? (
+                ) : sortedNotes.length > 0 ? (
                     <ul className="space-y-4">
                         {sortedNotes.map(note => (
                             <li key={note.id} className="p-4 border rounded-lg">

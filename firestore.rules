@@ -14,24 +14,24 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuperAdmin == true;
+      // Use exists() for safer checking
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuperAdmin == true;
     }
     
-    function isOrgMember(orgId) {
-        let userOrgId = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId;
-        return isAuthenticated() && userOrgId != null && userOrgId == orgId;
+    function getUserData() {
+        return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function hasRole(role) {
-      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny([role]);
+      return isAuthenticated() && getUserData().roles.hasAny([role]);
     }
 
     function hasAnyRole(roles) {
-      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(roles);
+      return isAuthenticated() && getUserData().roles.hasAny(roles);
     }
     
     function isMyStudent(studentId) {
-        let parentData = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+        let parentData = getUserData();
         return parentData.roles.hasAny(['rodic']) && parentData.studentId == studentId;
     }
     
@@ -46,7 +46,7 @@ service cloud.firestore {
     match /grades/{gradeId} {
       allow get: if isAuthenticated() && (hasAnyRole(['ucitel', 'administrator']) || resource.data.ziakId == request.auth.uid || isMyStudent(resource.data.ziakId));
       allow list: if 
-          (hasRole('administrator') && request.query.organizationId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId) ||
+          (hasRole('administrator') && request.query.organizationId == getUserData().organizationId) ||
           (hasRole('ucitel') && request.query.ucitelId == request.auth.uid) ||
           (hasRole('ziak') && request.query.ziakId == request.auth.uid) ||
           (hasRole('rodic') && isMyStudent(request.query.ziakId));
@@ -85,7 +85,7 @@ service cloud.firestore {
           isMyStudent(resource.data.studentId)
         );
         allow list: if 
-            (hasRole('administrator') && request.query.organizationId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId) ||
+            (hasRole('administrator') && request.query.organizationId == getUserData().organizationId) ||
             (hasRole('ucitel') && request.query.ucitelId == request.auth.uid) ||
             (hasRole('ziak') && request.query.studentId == request.auth.uid) ||
             (hasRole('rodic') && isMyStudent(request.query.studentId));
@@ -100,7 +100,7 @@ service cloud.firestore {
     match /messages/{messageId} {
       allow create: if isAuthenticated();
       allow get: if isAuthenticated() && (resource.data.senderId == request.auth.uid || request.auth.uid in resource.data.recipientIds);
-      allow list: if isAuthenticated();
+      allow list: if isAuthenticated() && (request.query.recipientIds.hasAny([request.auth.uid]) || request.query.senderId == request.auth.uid);
       allow update: if isAuthenticated() && request.auth.uid in resource.data.recipientIds;
       allow delete: if false; 
     }

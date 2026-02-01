@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BookCopy, Printer, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import { useFirestore } from '@/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import type { Grading, User } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
@@ -16,18 +16,31 @@ interface SubjectAverage {
 }
 
 export default function VysvedceniPage() {
-    const { user, hasRole } = useAuth();
+    const { user, hasRole, loading: userLoading } = useAuth();
     const firestore = useFirestore();
+    const [grades, setGrades] = useState<Grading[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     
     const studentId = hasRole('ziak') ? user?.id : user?.studentId;
     const studentName = hasRole('ziak') ? user?.name : 'vašeho dítěte';
 
-    const gradesQuery = useMemoFirebase(() => {
-        if (!firestore || !studentId) return null;
-        return query(collection(firestore, 'grades'), where('ziakId', '==', studentId));
+    useEffect(() => {
+        if (!firestore || !studentId) {
+            setIsLoading(false);
+            return;
+        }
+        setIsLoading(true);
+        const q = query(collection(firestore, 'grades'), where('ziakId', '==', studentId));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const results = snapshot.docs.map(doc => ({...doc.data(), id: doc.id})) as Grading[];
+            setGrades(results);
+            setIsLoading(false);
+        }, (error) => {
+            console.error("Error fetching grades for report card:", error);
+            setIsLoading(false);
+        });
+        return () => unsubscribe();
     }, [firestore, studentId]);
-
-    const { data: grades, isLoading } = useCollection<Grading>(gradesQuery);
 
     const finalGrades = useMemo(() => {
         if (!grades) return [];
@@ -60,6 +73,8 @@ export default function VysvedceniPage() {
         return averages.sort((a,b) => a.subject.localeCompare(b.subject));
     }, [grades]);
 
+    const isPageLoading = userLoading || isLoading;
+
     return (
         <div className="space-y-6">
             <div className="flex items-center gap-4">
@@ -76,7 +91,7 @@ export default function VysvedceniPage() {
                     <CardDescription>Školní rok 2023/2024 - 2. pololetí</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {isLoading ? (
+                    {isPageLoading ? (
                         <div className="flex items-center justify-center h-40">
                             <Loader2 className="h-8 w-8 animate-spin text-primary" />
                         </div>
@@ -104,7 +119,7 @@ export default function VysvedceniPage() {
                     )}
                 </CardContent>
                 <CardFooter className="border-t pt-6">
-                     <Button variant="outline" onClick={() => window.print()} disabled={isLoading || finalGrades.length === 0}>
+                     <Button variant="outline" onClick={() => window.print()} disabled={isPageLoading || finalGrades.length === 0}>
                         <Printer className="mr-2 h-4 w-4" />
                         Tisknout vysvědčení
                     </Button>

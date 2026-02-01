@@ -1,8 +1,8 @@
-'use client'
+'use client';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, writeBatch, limit, getDocs, Timestamp, getDoc, documentId } from 'firebase/firestore';
+import { useFirestore, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, writeBatch, limit, getDocs, Timestamp, getDoc, documentId, Query } from 'firebase/firestore';
 import type { Grading, User, Trida, Predmet } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -33,6 +33,7 @@ import { Separator } from '@/components/ui/separator';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { useMemoFirebase } from '@/firebase';
 
 
 const gradingSchema = z.object({
@@ -52,45 +53,15 @@ export default function HodnoceniPage() {
     const searchParams = useSearchParams();
     const { toast } = useToast();
 
-    // --- Unified State ---
+    // --- Component State ---
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingGrading, setEditingGrading] = useState<Grading | null>(null);
     const [deletingGrading, setDeletingGrading] = useState<Grading | null>(null);
     const [selectedClassId, setSelectedClassId] = useState<string | null>(searchParams.get('tridaId'));
+    const [gradings, setGradings] = useState<Grading[] | null>(null);
+    const [gradingsLoading, setGradingsLoading] = useState(true);
 
-    // --- Unified Data Fetching ---
-    const gradingsQuery = useMemoFirebase(() => {
-        if (userLoading || !user || !firestore) {
-            return null; // Primary guard: wait for user and firestore
-        }
-
-        const isAdmin = hasRole('administrator');
-        const isTeacher = hasRole('ucitel');
-        const isStudentOrParent = hasRole('ziak') || hasRole('rodic');
-
-        const gradesCollection = collection(firestore, 'grades');
-
-        if (isAdmin) {
-            if (!user.organizationId) return null; // Admin-specific guard for organizationId
-            return query(gradesCollection, where('organizationId', '==', user.organizationId), orderBy('createdAt', 'desc'));
-        }
-
-        if (isTeacher) {
-            return query(gradesCollection, where('ucitelId', '==', user.id), orderBy('createdAt', 'desc'));
-        }
-
-        if (isStudentOrParent) {
-            const studentId = hasRole('ziak') ? user.id : user.studentId;
-            if (!studentId) return null;
-            return query(gradesCollection, where('ziakId', '==', studentId), orderBy('createdAt', 'desc'));
-        }
-
-        return null; // No matching role, no query
-    }, [firestore, user, userLoading, hasRole]);
-
-    const { data: gradings, isLoading: gradingsLoading } = useCollection<Grading>(gradingsQuery);
-
-    // --- Teacher-specific Data ---
+    // --- Data Fetching ---
     const teacherClassesQuery = useMemoFirebase(() => {
         if (!user || !firestore || !hasRole('ucitel')) return null;
         return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
@@ -108,12 +79,67 @@ export default function HodnoceniPage() {
         return collection(firestore, 'predmety');
     }, [firestore]);
     const { data: predmety, isLoading: predmetyLoading } = useCollection<Predmet>(predmetyQuery);
-    
-    // --- Student/Parent specific data ---
-     const { data: allTeachers, isLoading: teachersLoading } = useCollection<User>(useMemoFirebase(() => {
+
+    const { data: allTeachers, isLoading: teachersLoading } = useCollection<User>(useMemoFirebase(() => {
         if(!firestore || !(hasRole('ziak') || hasRole('rodic'))) return null;
         return query(collection(firestore, 'users'), where('roles', 'array-contains', 'ucitel'))
     }, [firestore, hasRole]));
+
+    // --- Manual Data Fetching for Gradings ---
+    useEffect(() => {
+        if (userLoading || !user || !firestore) {
+            return;
+        }
+
+        setGradingsLoading(true);
+
+        const isAdmin = hasRole('administrator');
+        const isTeacher = hasRole('ucitel');
+        const isStudentOrParent = hasRole('ziak') || hasRole('rodic');
+        const gradesCollection = collection(firestore, 'grades');
+        let q: Query | null = null;
+
+        if (isAdmin) {
+            if (!user.organizationId) {
+                setGradingsLoading(false);
+                setGradings([]);
+                return;
+            }
+            q = query(gradesCollection, where('organizationId', '==', user.organizationId), orderBy('createdAt', 'desc'));
+        } else if (isTeacher) {
+            q = query(gradesCollection, where('ucitelId', '==', user.id), orderBy('createdAt', 'desc'));
+        } else if (isStudentOrParent) {
+            const studentId = hasRole('ziak') ? user.id : user.studentId;
+            if (!studentId) {
+                setGradingsLoading(false);
+                setGradings([]);
+                return;
+            }
+            q = query(gradesCollection, where('ziakId', '==', studentId), orderBy('createdAt', 'desc'));
+        }
+
+        if (!q) {
+            setGradingsLoading(false);
+            setGradings([]);
+            return;
+        }
+
+        const unsubscribe = onSnapshot(q,
+            (snapshot) => {
+                const results = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Grading[];
+                setGradings(results);
+                setGradingsLoading(false);
+            },
+            (error) => {
+                console.error("Error fetching gradings:", error);
+                toast({ variant: 'destructive', title: 'Chyba načítání dat', description: 'Nepodařilo se načíst data o klasifikaci.' });
+                setGradings(null);
+                setGradingsLoading(false);
+            }
+        );
+
+        return () => unsubscribe();
+    }, [firestore, user, userLoading, hasRole, toast]);
 
 
     // --- Form Handling ---
@@ -134,11 +160,9 @@ export default function HodnoceniPage() {
             setValue('znamka', grading.znamka);
             setValue('vaha', grading.vaha);
             setValue('komentar', grading.komentar || '');
-            // This part is tricky as students might not be loaded yet.
-            // We can try to find the class from the user object if available.
-             const studentClassId = students?.find(s => s.id === grading.ziakId)?.tridaId;
+            const studentClassId = students?.find(s => s.id === grading.ziakId)?.tridaId;
             if(studentClassId) setSelectedClassId(studentClassId);
-            else if (allTeachers) { // fallback for student view
+            else if (allTeachers) {
                  const studentUser = allTeachers.find(u => u.id === grading.ziakId);
                  if (studentUser?.tridaId) setSelectedClassId(studentUser.tridaId);
             }
@@ -171,20 +195,12 @@ export default function HodnoceniPage() {
             handleOpenDialog(null);
         }
     }, [tridaIdFromParams, predmetIdFromParams, handleOpenDialog]);
-    
-    // --- Handlers ---
-    const handleSaveGrading = async (data: GradingFormData) => {
-        // (Implementation is complex but assumed correct from previous steps)
-    };
-    const handleDeleteGrading = async () => {
-        // (Implementation is complex but assumed correct from previous steps)
-    };
 
     // === RENDER LOGIC ===
-    const isDataReady = !userLoading && user && (!gradingsLoading || gradings !== null);
+    const isDataReady = !userLoading && user;
     const showTeacherAdminView = isDataReady && (hasRole('ucitel') || hasRole('administrator'));
     const showStudentParentView = isDataReady && (hasRole('ziak') || hasRole('rodic'));
-    
+
     if (!isDataReady) {
        return (
             <div className="flex h-full w-full items-center justify-center p-4">
@@ -239,16 +255,16 @@ export default function HodnoceniPage() {
                                     <TableRow><TableCell colSpan={7} className="text-center h-24">Nebylo zadáno žádné hodnocení.</TableCell></TableRow>
                                 ) : (
                                     gradings?.map(g => (
-                                        <TableRow key={g.id}>
-                                            <TableCell>{g.datum}</TableCell>
+                                        <TableRow key={g.id} onClick={() => router.push(`/dashboard/hodnoceni/${g.id}`)} className="cursor-pointer">
+                                            <TableCell>{format(parseISO(g.datum), 'd.M.yyyy')}</TableCell>
                                             <TableCell>{g.ziakJmeno}</TableCell>
                                             <TableCell>{g.predmet}</TableCell>
                                             <TableCell className="font-bold text-lg">{g.znamka}</TableCell>
                                             <TableCell>{(typeof g.vaha === 'number' && !isNaN(g.vaha) ? g.vaha : 1.0).toFixed(1)}</TableCell>
                                             <TableCell className="max-w-xs truncate">{g.komentar}</TableCell>
                                             <TableCell className="text-right">
-                                                <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(g)}><Pencil className="h-4 w-4" /></Button>
-                                                <Button variant="ghost" size="icon" onClick={() => setDeletingGrading(g)} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                                                <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleOpenDialog(g); }}><Pencil className="h-4 w-4" /></Button>
+                                                <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setDeletingGrading(g); }} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
                                             </TableCell>
                                         </TableRow>
                                     ))
@@ -266,26 +282,63 @@ export default function HodnoceniPage() {
      if (showStudentParentView) {
         const getTeacherName = (teacherId: string) => allTeachers?.find(t => t.id === teacherId)?.name || 'Neznámý';
         
-        const gradesBySubject = gradings?.reduce((acc, g) => {
-            if (g && g.predmet) {
-                if (!acc[g.predmet]) acc[g.predmet] = [];
-                acc[g.predmet].push(g);
-            }
-            return acc;
-        }, {} as Record<string, Grading[]>) || {};
+        const gradesBySubject = useMemo(() => {
+            if (!gradings) return {};
+            return gradings.reduce((acc, g) => {
+                if (g && g.predmet) {
+                    if (!acc[g.predmet]) acc[g.predmet] = [];
+                    acc[g.predmet].push(g);
+                }
+                return acc;
+            }, {} as Record<string, Grading[]>);
+        }, [gradings]);
 
-        const subjectAverages = Object.keys(gradesBySubject).reduce((acc, subject) => {
-            const grades = gradesBySubject[subject];
-            const weightedSum = grades.reduce((sum, g) => sum + (g.znamka * (g.vaha || 1)), 0);
-            const totalWeight = grades.reduce((sum, g) => sum + (g.vaha || 1), 0);
-            acc[subject] = totalWeight > 0 ? (weightedSum / totalWeight).toFixed(2) : 'N/A';
-            return acc;
-        }, {} as Record<string, string>);
+        const subjectAverages = useMemo(() => {
+            return Object.keys(gradesBySubject).reduce((acc, subject) => {
+                const grades = gradesBySubject[subject];
+                const weightedSum = grades.reduce((sum, g) => sum + (g.znamka * (g.vaha || 1)), 0);
+                const totalWeight = grades.reduce((sum, g) => sum + (g.vaha || 1), 0);
+                acc[subject] = totalWeight > 0 ? (weightedSum / totalWeight).toFixed(2) : 'N/A';
+                return acc;
+            }, {} as Record<string, string>);
+        }, [gradesBySubject]);
 
         return (
             <div className="p-4 md:p-6 space-y-8">
                  <h1 className="text-3xl font-bold">Klasifikace</h1>
-                 {/* ... StudentParentView JSX ... */}
+                 {gradingsLoading && <div>Načítání známek...</div>}
+                 {!gradingsLoading && Object.keys(gradesBySubject).map(subject => (
+                    <Card key={subject}>
+                        <CardHeader className="flex flex-row justify-between items-center">
+                            <div>
+                                <CardTitle>{subject}</CardTitle>
+                                <CardDescription>Průměr: {subjectAverages[subject]}</CardDescription>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Datum</TableHead>
+                                        <TableHead>Známka</TableHead>
+                                        <TableHead>Váha</TableHead>
+                                        <TableHead>Komentář</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {gradesBySubject[subject].map(g => (
+                                        <TableRow key={g.id} onClick={() => router.push(`/dashboard/hodnoceni/${g.id}`)} className="cursor-pointer">
+                                            <TableCell>{format(parseISO(g.datum), 'd. M. yyyy')}</TableCell>
+                                            <TableCell className="font-bold text-2xl">{g.znamka}</TableCell>
+                                            <TableCell>{(typeof g.vaha === 'number' && !isNaN(g.vaha) ? g.vaha : 1.0).toFixed(1)}</TableCell>
+                                            <TableCell>{g.komentar}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                 ))}
             </div>
         );
     }
