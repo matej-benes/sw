@@ -314,7 +314,7 @@ function TeacherView() {
                                         <TableCell>{g.ziakJmeno}</TableCell>
                                         <TableCell>{g.predmet}</TableCell>
                                         <TableCell className="font-bold text-lg">{g.znamka}</TableCell>
-                                        <TableCell>{(g.vaha || 1.0).toFixed(1)}</TableCell>
+                                        <TableCell>{(typeof g.vaha === 'number' ? g.vaha : 1.0).toFixed(1)}</TableCell>
                                         <TableCell className="max-w-xs truncate">{g.komentar}</TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(g)}><Pencil className="h-4 w-4" /></Button>
@@ -481,16 +481,19 @@ function StudentParentView() {
     const { data: teachers, isLoading: teachersLoading } = useCollection<User>(useMemoFirebase(() => firestore ? query(collection(firestore, 'users'), where('roles', 'array-contains', 'ucitel')) : null, [firestore]));
 
     const getTeacherName = useCallback((teacherId: string) => {
+        if (!teacherId) return 'Neznámý';
         return teachers?.find(t => t.id === teacherId)?.name || 'Neznámý';
     }, [teachers]);
 
     const gradesBySubject = useMemo(() => {
         if (!gradings) return {};
         return gradings.reduce((acc, g) => {
-            if (!acc[g.predmet]) {
-                acc[g.predmet] = [];
+            if (g && g.predmet) {
+                if (!acc[g.predmet]) {
+                    acc[g.predmet] = [];
+                }
+                acc[g.predmet].push(g);
             }
-            acc[g.predmet].push(g);
             return acc;
         }, {} as Record<string, Grading[]>);
     }, [gradings]);
@@ -499,8 +502,19 @@ function StudentParentView() {
         const averages: { [key: string]: string } = {};
         for (const subject in gradesBySubject) {
             const grades = gradesBySubject[subject];
-            const totalWeight = grades.reduce((sum, g) => sum + (g.vaha || 1.0), 0);
-            const weightedSum = grades.reduce((sum, g) => sum + g.znamka * (g.vaha || 1.0), 0);
+            
+            const weightedSum = grades.reduce((sum, g) => {
+                if (typeof g.znamka !== 'number') return sum;
+                const weight = typeof g.vaha === 'number' ? g.vaha : 1.0;
+                return sum + (g.znamka * weight);
+            }, 0);
+            
+            const totalWeight = grades.reduce((sum, g) => {
+                if (typeof g.znamka !== 'number') return sum;
+                const weight = typeof g.vaha === 'number' ? g.vaha : 1.0;
+                return sum + weight;
+            }, 0);
+
             if (totalWeight > 0) {
                 averages[subject] = (weightedSum / totalWeight).toFixed(2);
             } else {
@@ -584,21 +598,21 @@ function StudentParentView() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {gradings.length === 0 ? (
+                            {(gradings || []).length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={5} className="h-24 text-center">Nebyly nalezeny žádné známky.</TableCell>
                                 </TableRow>
                             ) : (
-                                gradings.map(g => (
+                                (gradings || []).map(g => (
                                     <TableRow key={g.id} onClick={() => router.push(`/dashboard/hodnoceni/${g.id}`)} className="cursor-pointer">
-                                        <TableCell>{g.datum}</TableCell>
-                                        <TableCell>{g.predmet}</TableCell>
+                                        <TableCell>{g.datum || '-'}</TableCell>
+                                        <TableCell>{g.predmet || '-'}</TableCell>
                                         <TableCell>
-                                            <span className="font-bold text-lg mr-2">{g.znamka}</span>
-                                            <Badge variant="outline">Váha: {(g.vaha || 1.0).toFixed(1)}</Badge>
+                                            <span className="font-bold text-lg mr-2">{typeof g.znamka === 'number' ? g.znamka : '?'}</span>
+                                            <Badge variant="outline">Váha: {(typeof g.vaha === 'number' ? g.vaha : 1.0).toFixed(1)}</Badge>
                                         </TableCell>
                                         <TableCell>{getTeacherName(g.ucitelId)}</TableCell>
-                                        <TableCell className="max-w-xs truncate">{g.komentar}</TableCell>
+                                        <TableCell className="max-w-xs truncate">{g.komentar || '-'}</TableCell>
                                     </TableRow>
                                 ))
                             )}
