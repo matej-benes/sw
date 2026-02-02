@@ -87,7 +87,7 @@ function SubstitutionDialog({
         if (isOpen && lessonInfo) {
              if (substitution) {
                 // Pre-fill from existing substitution
-                const type = substitution.changes.type;
+                const type = substitution.changes?.type;
                 const isCancelled = Array.isArray(type) ? type.includes('zruseno') : type === 'zruseno';
 
                 if (isCancelled) {
@@ -95,9 +95,9 @@ function SubstitutionDialog({
                 } else {
                     setSubType('suplovat');
                 }
-                setSubTeacherIds(substitution.changes.teacherIds || [lessonInfo.lesson.teacherId]);
-                setSubSubjectId(substitution.changes.subjectId || lessonInfo.lesson.subjectId);
-                setNote(substitution.changes.note || '');
+                setSubTeacherIds(substitution.changes?.teacherIds || [lessonInfo.lesson.teacherId]);
+                setSubSubjectId(substitution.changes?.subjectId || lessonInfo.lesson.subjectId);
+                setNote(substitution.changes?.note || '');
             } else {
                 // New substitution
                 setSubType('suplovat');
@@ -432,7 +432,7 @@ function CancelledLessonBlock({ substitution }: { substitution: Substitution }) 
                    <div className="p-2 text-sm">
                         <h3 className="font-bold text-base mb-2 text-destructive">Zrušená hodina</h3>
                         <p>Hodina předmětu {substitution.originalLesson.lessonBlock.subjectName} byla zrušena.</p>
-                        {substitution.changes.note && <p className="mt-1">Poznámka: {substitution.changes.note}</p>}
+                        {substitution.changes?.note && <p className="mt-1">Poznámka: {substitution.changes.note}</p>}
                    </div>
                 </TooltipContent>
             </Tooltip>
@@ -568,23 +568,23 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                         
                         const isCancelledByEvent = event && event.nahrazujeHodiny;
 
-                        const isCancelledBySub = substitution ? (Array.isArray(substitution.changes.type) ? substitution.changes.type.includes('zruseno') : substitution.changes.type === 'zruseno') : false;
+                        const isCancelledBySub = substitution ? (Array.isArray(substitution.changes?.type) ? substitution.changes.type.includes('zruseno') : substitution.changes?.type === 'zruseno') : false;
 
                         let substitutedLesson: LessonBlock | null = null;
                         if (substitution && !isCancelledBySub && lesson) {
                             let newTeacherName = lesson.teacherName;
-                            if (substitution.changes.teacherIds && substitution.changes.teacherIds.length > 0) {
+                            if (substitution.changes?.teacherIds && substitution.changes.teacherIds.length > 0) {
                                 newTeacherName = substitution.changes.teacherIds
                                     .map(id => teachers.find(t => t.id === id)?.name)
                                     .filter(Boolean)
                                     .join(', ');
                             }
                             
-                            const newSubject = subjects.find(s => s.id === substitution.changes.subjectId);
+                            const newSubject = subjects.find(s => s.id === substitution.changes?.subjectId);
                             substitutedLesson = { 
                                 ...lesson, 
                                 teacherName: newTeacherName,
-                                teacherId: substitution.changes.teacherIds?.[0] || lesson.teacherId, // For logic, but name shows all
+                                teacherId: substitution.changes?.teacherIds?.[0] || lesson.teacherId, // For logic, but name shows all
                                 subjectId: newSubject ? newSubject.id : lesson.subjectId,
                                 subjectName: newSubject ? newSubject.name : lesson.subjectName,
                                 subjectShortcut: newSubject ? newSubject.shortcut : lesson.subjectShortcut,
@@ -614,7 +614,7 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                                                 dayInfo={dayInfo} 
                                                 period={periodIndex + 1} 
                                                 classId={classId!} 
-                                                substitutionNote={substitution?.changes.note} 
+                                                substitutionNote={substitution?.changes?.note} 
                                                 isNewSubstitutedLesson={true} 
                                                 onSubstitute={() => { setEditingSubFor({ lesson: lesson!, dayInfo, period: periodIndex + 1, classId: classId!, substitution }); setIsSubDialogOpen(true); }}
                                                 onGrade={() => handleGrade(substitutedLesson, dayInfo, periodIndex + 1, classId!)}

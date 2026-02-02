@@ -35,6 +35,7 @@ import { useFirestore } from '@/firebase';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import type { User } from '@/lib/types';
 import Link from 'next/link';
+import { verifyPinByPin } from '@/ai/flows/verify-pin-by-pin';
 
 const pinSchema = z.object({
   pin: z.string().length(6, 'PIN musí mít 6 číslic.'),
@@ -56,7 +57,7 @@ type PasswordFormValues = z.infer<typeof passwordSchema>;
 export default function RegistrationPage() {
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
-  const [verifiedUser, setVerifiedUser] = useState<User | null>(null);
+  const [verifiedUser, setVerifiedUser] = useState<(User & { id: string }) | null>(null);
   const router = useRouter();
   const { toast } = useToast();
   const firestore = useFirestore();
@@ -82,10 +83,9 @@ export default function RegistrationPage() {
     }
   
     try {
-      const pinDocRef = doc(firestore, 'pins', data.pin);
-      const pinDocSnap = await getDoc(pinDocRef);
-  
-      if (!pinDocSnap.exists()) {
+      const result = await verifyPinByPin({ pin: data.pin });
+      
+      if (!result.user) {
         toast({
           variant: 'destructive',
           title: 'Chyba ověření',
@@ -94,25 +94,8 @@ export default function RegistrationPage() {
         setIsLoading(false);
         return;
       }
-  
-      const userId = pinDocSnap.data().userId;
-      if (!userId) {
-          throw new Error('Chybějící ID uživatele v PIN dokumentu.');
-      }
-      const userDocRef = doc(firestore, 'users', userId);
-      const userDocSnap = await getDoc(userDocRef);
-  
-      if (!userDocSnap.exists()) {
-        toast({
-          variant: 'destructive',
-          title: 'Chyba',
-          description: 'Uživatelský účet propojený s tímto PINem neexistuje.',
-        });
-        setIsLoading(false);
-        return;
-      }
-  
-      setVerifiedUser({ id: userDocSnap.id, ...userDocSnap.data() } as User);
+      
+      setVerifiedUser(result.user as User & { id: string });
       setStep(2);
     } catch (error) {
       console.error('Error verifying PIN: ', error);
@@ -127,49 +110,46 @@ export default function RegistrationPage() {
   };
 
   const onPasswordSubmit = async (data: PasswordFormValues) => {
-    if (!verifiedUser?.email || !verifiedUser?.id || !firestore || !verifiedUser.pin) {
+    if (!verifiedUser?.email || !verifiedUser?.id) {
       toast({
         variant: 'destructive',
         title: 'Chyba',
-        description: 'Uživatelská data nejsou k dispozici nebo chybí PIN.',
+        description: 'Uživatelská data nejsou k dispozici.',
       });
       return;
     }
     setIsLoading(true);
-
+  
     try {
       const auth = getAuth();
+      // Temporarily create an account with a placeholder password.
+      // This will be updated immediately.
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         verifiedUser.email,
         data.password
       );
       
-      const tempUserDocRef = doc(firestore, 'users', verifiedUser.id);
-      const tempUserSnap = await getDoc(tempUserDocRef);
+      // Now update the user document in Firestore, clearing the PIN
+      if (firestore) {
+        const userRef = doc(firestore, 'users', verifiedUser.id);
+        const userSnap = await getDoc(userRef);
 
-      if(tempUserSnap.exists()) {
-        const batch = writeBatch(firestore);
+        if (userSnap.exists()) {
+            const batch = writeBatch(firestore);
 
-        const userData = tempUserSnap.data();
-        // Remove pin and old id from data before creating new doc
-        delete (userData as any).pin;
-        delete (userData as any).id;
-        
-        const newUserDocRef = doc(firestore, 'users', userCredential.user.uid);
-        batch.set(newUserDocRef, userData);
+            // Copy data to new user document with the correct UID from Auth
+            const newUserData = { ...userSnap.data(), pin: null };
+            const newUserRef = doc(firestore, 'users', userCredential.user.uid);
+            batch.set(newUserRef, newUserData);
+            
+            // Delete the old temporary user document
+            batch.delete(userRef);
 
-        batch.delete(tempUserDocRef);
-
-        const pinDocRef = doc(firestore, 'pins', verifiedUser.pin);
-        batch.delete(pinDocRef);
-
-        await batch.commit();
-
-      } else {
-        throw new Error("Původní uživatelský dokument nebyl nalezen.");
+            await batch.commit();
+        }
       }
-
+  
       toast({
         title: 'Registrace dokončena!',
         description: 'Váš účet byl úspěšně vytvořen. Nyní se můžete přihlásit.',
@@ -181,10 +161,10 @@ export default function RegistrationPage() {
         description =
           'Tento e-mailový účet již existuje. Pokud jste již registrováni, přihlaste se na hlavní stránce.';
       }
-       console.error("Registration error:", error);
       toast({ variant: 'destructive', title: 'Chyba registrace', description });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const renderStep = () => {

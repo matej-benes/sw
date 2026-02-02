@@ -1,7 +1,7 @@
 'use client';
 import React, { useState } from 'react';
 import { cn } from "@/lib/utils";
-import type { LessonBlock, Udalost, Rozvrh, Substitution, ZapisHodiny } from "@/lib/types";
+import type { LessonBlock, Udalost, Rozvrh, Substitution, ZapisHodiny, Predmet, User } from "@/lib/types";
 import { useRouter } from 'next/navigation';
 import { format, parseISO, isSameDay } from 'date-fns';
 import { BookOpen, Info, XCircle, ChevronRight } from 'lucide-react';
@@ -111,8 +111,8 @@ export function MobileTimetableList({
     userId: string;
     userClassId?: string;
     day: Date;
-    teachers: any[]; // User[]
-    subjects: any[]; // Predmet[]
+    teachers: User[];
+    subjects: Predmet[];
 }) {
     const router = useRouter();
 
@@ -159,25 +159,27 @@ export function MobileTimetableList({
         const zapis = zapisyData.find(z => z.datum === format(day, 'yyyy-MM-dd') && parseInt(z.hodina) === period);
 
         if (substitution) {
-            const isCancelled = Array.isArray(substitution.changes.type) ? substitution.changes.type.includes('zruseno') : substitution.changes.type === 'zruseno';
+            const isCancelled = Array.isArray(substitution.changes?.type) 
+                ? substitution.changes.type.includes('zruseno') 
+                : substitution.changes?.type === 'zruseno';
             if (isCancelled) {
                 return [<CancelledLessonItem key={`sub-cancelled-${keyPrefix}`} substitution={substitution} period={period} time={time}/>];
             }
 
             let newTeacherName = lesson.teacherName;
-            if (substitution.changes.teacherIds && substitution.changes.teacherIds.length > 0) {
+            if (substitution.changes?.teacherIds && substitution.changes.teacherIds.length > 0) {
                 newTeacherName = substitution.changes.teacherIds
                     .map(id => teachers.find(t => t.id === id)?.name)
                     .filter(Boolean)
                     .join(', ');
             }
             
-            const newSubject = subjects.find(s => s.id === substitution.changes.subjectId);
+            const newSubject = subjects.find(s => s.id === substitution.changes?.subjectId);
             
             const finalLesson: LessonBlock = {
                 ...lesson,
                 teacherName: newTeacherName,
-                teacherId: substitution.changes.teacherIds?.[0] || lesson.teacherId,
+                teacherId: substitution.changes?.teacherIds?.[0] || lesson.teacherId,
                 subjectId: newSubject ? newSubject.id : lesson.subjectId,
                 subjectName: newSubject ? newSubject.name : lesson.subjectName,
                 subjectShortcut: newSubject ? newSubject.shortcut : lesson.subjectShortcut,
