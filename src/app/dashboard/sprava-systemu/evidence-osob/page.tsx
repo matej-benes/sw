@@ -91,7 +91,7 @@ const userSchema = z.object({
   name: z.string().min(1, 'Jméno je povinné'),
   email: z.string().email('Neplatný formát emailu'),
   roles: z.array(z.string()).min(1, 'Uživatel musí mít alespoň jednu roli'),
-  password: z.string().optional().nullable(),
+  pin: z.string().optional().nullable(),
   tridaId: z.string().optional().nullable(),
   studentId: z.string().optional().nullable(),
 });
@@ -106,12 +106,11 @@ function UserForm({
 }: {
   user?: User | null;
   allUsers: User[],
-  onSave: (data: UserFormData, password: string | null) => void;
+  onSave: (data: UserFormData, pin: string | null) => void;
   closeDialog: () => void;
 }) {
   const { hasRole } = useAuth();
   const firestore = useFirestore();
-  const [showPassword, setShowPassword] = useState(false);
   
   const tridyQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -133,25 +132,22 @@ function UserForm({
       name: user?.name || '',
       email: user?.email || '',
       roles: user?.roles || [],
-      password: '',
+      pin: user?.pin || null,
       tridaId: (user as any)?.tridaId || null,
       studentId: user?.studentId || null,
     },
   });
   
-  const currentPassword = watch('password');
+  const currentPin = watch('pin');
   
   const onSubmit = (data: UserFormData) => {
-    const password = data.password || null;
-    const userData = { ...data };
-    delete (userData as any).password;
-    onSave(userData, password);
+    onSave(data, data.pin || null);
     closeDialog();
   };
 
-  const generatePassword = () => {
-    const newPassword = Math.random().toString(36).slice(-8);
-    setValue('password', newPassword, { shouldValidate: true });
+  const generatePin = () => {
+    const newPin = Math.random().toString(36).slice(-8);
+    setValue('pin', newPin, { shouldValidate: true });
   };
   
   const roles = watch('roles');
@@ -245,20 +241,16 @@ function UserForm({
        )}
       
        <div className="space-y-2">
-        <Label htmlFor="password">Dočasné heslo</Label>
+        <Label htmlFor="pin">PIN (Dočasné heslo)</Label>
         <div className="flex items-center gap-2">
-          <Input id="password" {...register('password')} type={showPassword ? 'text' : 'password'} placeholder={user ? "Nezměněno" : "Není vygenerováno"} />
-          <Button type="button" variant="ghost" size="icon" onClick={() => setShowPassword(!showPassword)} className="h-9 w-9">
-            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </Button>
-          <Button type="button" variant="outline" onClick={generatePassword}>
+          <Input id="pin" {...register('pin')} placeholder={user ? "Nezměněno" : "Není vygenerováno"} />
+          <Button type="button" variant="outline" onClick={generatePin}>
             <ShieldCheck className="mr-2 h-4 w-4" />
             Generovat
           </Button>
         </div>
-        {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
-        {currentPassword && !user && <p className="text-xs text-muted-foreground">Toto heslo slouží pro první přihlášení. Uživatel bude vyzván ke změně.</p>}
-        {user && <p className="text-xs text-muted-foreground">Pro změnu hesla existujícího uživatele použijte jiný nástroj.</p>}
+        {errors.pin && <p className="text-sm text-destructive">{errors.pin.message}</p>}
+        {currentPin && <p className="text-xs text-muted-foreground">Toto slouží jako dočasné heslo pro první přihlášení.</p>}
       </div>
 
       <DialogFooter>
@@ -333,21 +325,18 @@ function AdminUserManagement() {
         return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined && v !== null));
     };
 
-    const handleSaveUser = async (formData: UserFormData, password: string | null) => {
+    const handleSaveUser = async (formData: UserFormData, pin: string | null) => {
       if (!firestore || !adminUser?.email) return;
 
       try {
         if (editingUser) {
           const userRef = doc(firestore, 'users', editingUser.id);
-          const dataToUpdate = removeUndefinedFields(formData);
-          await updateDoc(userRef, dataToUpdate);
+          const dataToUpdate = { ...formData, pin: pin || editingUser.pin || null };
+          await updateDoc(userRef, removeUndefinedFields(dataToUpdate));
           toast({ title: 'Uživatel aktualizován' });
-          if (password) {
-            toast({ title: 'Heslo nebylo změněno', description: 'Změna hesla pro existujícího uživatele není v tomto formuláři podporována.', variant: 'default' });
-          }
         } else {
-          if (!formData.email || !password || !formData.name) {
-            throw new Error("Email, heslo a jméno jsou povinné pro vytvoření nového uživatele.");
+          if (!formData.email || !pin) {
+            throw new Error("Email a PIN (dočasné heslo) jsou povinné pro vytvoření nového uživatele.");
           }
           
           const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
@@ -367,24 +356,20 @@ function AdminUserManagement() {
           }
 
           // Create the new user in Firebase Auth
-          const userCredential = await createUserWithEmailAndPassword(auth, formData.email, password);
+          const userCredential = await createUserWithEmailAndPassword(auth, formData.email, pin);
           const newUser = userCredential.user;
 
           // Re-authenticate as admin. This is a client-side SDK limitation.
           await signIn(adminEmail, adminPassword);
           
           const newUserForDb: Partial<User> = {
-            name: formData.name,
-            email: formData.email,
-            roles: formData.roles || [],
+            ...formData,
             organizationId: organizationId,
             avatarUrl: `https://picsum.photos/seed/${newUser.uid}/100/100`,
-            ...(formData.studentId && { studentId: formData.studentId }),
-            ...(formData.tridaId && { tridaId: formData.tridaId }),
+            pin: pin,
           };
           
-          const cleanedData = removeUndefinedFields(newUserForDb);
-          await setDoc(doc(firestore, 'users', newUser.uid), cleanedData);
+          await setDoc(doc(firestore, 'users', newUser.uid), removeUndefinedFields(newUserForDb));
           
           toast({ title: 'Uživatel vytvořen', description: `Uživatel ${formData.name} byl vytvořen.` });
         }

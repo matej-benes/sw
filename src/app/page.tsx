@@ -54,7 +54,7 @@ export default function LoginPage() {
     setIsSigningIn(true);
     try {
       await signIn(data.email, data.password);
-      router.replace('/dashboard');
+      // AuthProvider will handle redirection based on user state (pin)
     } catch (error: any) {
       toast({
         variant: 'destructive',
