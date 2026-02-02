@@ -52,7 +52,7 @@ export function MobileDashboard() {
   const { user, hasRole, loading: isUserLoading } = useAuth();
   
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedClassId, setSelectedClassId] = useState<string>('');
+  const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined);
 
   const studentRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -86,17 +86,15 @@ export function MobileDashboard() {
     
   // Set default class for teachers/admins or the user's class
   useEffect(() => {
-    if (selectedClassId) return; // Already have a class, do nothing
-
     if (hasRole('ucitel') || hasRole('administrator')) {
-        if (teacherClasses && teacherClasses.length > 0) {
-            setSelectedClassId(teacherClasses[0].id);
-        }
-    } else { // Student or Parent
-        const classId = hasRole('ziak') ? user?.tridaId : studentData?.tridaId;
-        if (classId) {
-            setSelectedClassId(classId);
-        }
+      if (teacherClasses && teacherClasses.length > 0 && !selectedClassId) {
+        setSelectedClassId(teacherClasses[0].id);
+      }
+    } else { 
+      const classId = hasRole('ziak') ? user?.tridaId : studentData?.tridaId;
+      if (classId) {
+        setSelectedClassId(classId);
+      }
     }
   }, [hasRole, user, studentData, teacherClasses, selectedClassId]);
 
@@ -173,7 +171,7 @@ export function MobileDashboard() {
           
           {canManage && (
             <div className="mb-4">
-              <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+              <Select value={selectedClassId || ''} onValueChange={setSelectedClassId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Vyberte třídu" />
                 </SelectTrigger>
