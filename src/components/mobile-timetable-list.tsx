@@ -55,7 +55,8 @@ function SubstitutionDialog({
         if (isOpen && lessonInfo) {
              if (substitution) {
                 const type = substitution.changes.type;
-                setSubType(type.includes('zruseno') ? 'odpada' : 'suplovat');
+                const isCancelled = Array.isArray(type) ? type.includes('zruseno') : type === 'zruseno';
+                setSubType(isCancelled ? 'odpada' : 'suplovat');
                 setSubTeacherIds(substitution.changes.teacherIds || []);
                 setSubSubjectId(substitution.changes.subjectId || lessonInfo.lesson.subjectId);
                 setNote(substitution.changes.note || '');
@@ -469,7 +470,8 @@ export function MobileTimetableList({
         const zapis = zapisyData.find(z => z.datum === format(day, 'yyyy-MM-dd') && parseInt(z.hodina) === period);
 
         if (substitution) {
-            if (substitution.changes.type.includes('zruseno')) {
+            const isCancelled = Array.isArray(substitution.changes.type) ? substitution.changes.type.includes('zruseno') : substitution.changes.type === 'zruseno';
+            if (isCancelled) {
                 return [<CancelledLessonItem key={`sub-cancelled-${keyPrefix}`} substitution={substitution} period={period} time={time}/>];
             }
 

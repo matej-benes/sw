@@ -87,7 +87,9 @@ function SubstitutionDialog({
              if (substitution) {
                 // Pre-fill from existing substitution
                 const type = substitution.changes.type;
-                if (type.includes('zruseno')) {
+                const isCancelled = Array.isArray(type) ? type.includes('zruseno') : type === 'zruseno';
+
+                if (isCancelled) {
                     setSubType('odpada');
                 } else {
                     setSubType('suplovat');
@@ -264,6 +266,10 @@ function LessonContextMenu({ children, lesson, dayInfo, period, classId, onSubst
     const handleNavigation = (path: string, params: Record<string, string>) => {
         const query = new URLSearchParams(params).toString();
         router.push(`${path}?${query}`);
+    }
+
+    if (!isTeacher) {
+        return <>{children}</>;
     }
 
     return (
@@ -550,24 +556,23 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                         
                         const isCancelledByEvent = event && event.nahrazujeHodiny;
 
-                        const isSubstituted = !!substitution;
-                        const isCancelledBySub = !!substitution?.changes.type.includes('zruseno');
+                        const isCancelledBySub = substitution ? (Array.isArray(substitution.changes.type) ? substitution.changes.type.includes('zruseno') : substitution.changes.type === 'zruseno') : false;
 
                         let substitutedLesson: LessonBlock | null = null;
-                        if (isSubstituted && !isCancelledBySub && lesson) {
+                        if (substitution && !isCancelledBySub && lesson) {
                             let newTeacherName = lesson.teacherName;
-                            if (substitution!.changes.teacherIds && substitution!.changes.teacherIds.length > 0) {
-                                newTeacherName = substitution!.changes.teacherIds
+                            if (substitution.changes.teacherIds && substitution.changes.teacherIds.length > 0) {
+                                newTeacherName = substitution.changes.teacherIds
                                     .map(id => teachers.find(t => t.id === id)?.name)
                                     .filter(Boolean)
                                     .join(', ');
                             }
                             
-                            const newSubject = subjects.find(s => s.id === substitution!.changes.subjectId);
+                            const newSubject = subjects.find(s => s.id === substitution.changes.subjectId);
                             substitutedLesson = { 
                                 ...lesson, 
                                 teacherName: newTeacherName,
-                                teacherId: substitution!.changes.teacherIds?.[0] || lesson.teacherId, // For logic, but name shows all
+                                teacherId: substitution.changes.teacherIds?.[0] || lesson.teacherId, // For logic, but name shows all
                                 subjectId: newSubject ? newSubject.id : lesson.subjectId,
                                 subjectName: newSubject ? newSubject.name : lesson.subjectName,
                                 subjectShortcut: newSubject ? newSubject.shortcut : lesson.subjectShortcut,
@@ -606,7 +611,7 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                                         <div onClick={() => { /* no action for grayed out lesson */ }} className="h-1/2">
                                             <LessonBlockCmp 
                                                 lesson={lesson!} 
-                                                isTeacher={isTeacher} 
+                                                isTeacher={false} 
                                                 dayInfo={dayInfo} 
                                                 period={periodIndex + 1} 
                                                 classId={classId!} 
