@@ -388,20 +388,20 @@ export function MobileTimetableList({
     const [isSubDialogOpen, setIsSubDialogOpen] = useState(false);
     const [deletingSubstitution, setDeletingSubstitution] = useState<Substitution | null>(null);
 
-    const handleLessonClick = (lesson: LessonBlock, periodIndex: number) => {
+    const handleLessonClick = (lesson: LessonBlock, periodIndex: number, time: string) => {
         if (!lesson.classId) return;
 
         if (isTeacher) {
-             const substitution = substitutionsData.find(sub => {
-                 if (!dailySchedule || !sub.originalLesson) return false;
-                 const subDate = parseISO(sub.date);
-                 return isSameDay(subDate, day) && sub.originalLesson.period === periodIndex && sub.originalLesson.classId === dailySchedule.tridaId;
+            const substitution = substitutionsData.find(sub => {
+                if (!dailySchedule || !sub.originalLesson) return false;
+                const subDate = parseISO(sub.date);
+                return isSameDay(subDate, day) && sub.originalLesson.period === periodIndex && sub.originalLesson.classId === dailySchedule.tridaId;
             });
             setSelectedLesson({
                 lesson: lesson,
                 period: periodIndex + 1,
-                time: timeSlots[periodIndex],
-                substitution: substitution || null
+                time: time,
+                substitution: substitution || null,
             });
             setIsActionSheetOpen(true);
         } else {
@@ -501,7 +501,7 @@ export function MobileTimetableList({
                     period={period} 
                     time={time}
                     topic={zapis?.topic}
-                    onClick={() => handleLessonClick(finalLesson, index)}
+                    onClick={() => handleLessonClick(finalLesson, index, time)}
                     isSubstituting
                 />,
                 <LessonListItem 
@@ -522,7 +522,7 @@ export function MobileTimetableList({
                 period={period} 
                 time={time}
                 topic={zapis?.topic}
-                onClick={() => handleLessonClick(lesson, index)}
+                onClick={() => handleLessonClick(lesson, index, time)}
             />
         ];
     });
