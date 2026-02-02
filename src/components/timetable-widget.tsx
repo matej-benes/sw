@@ -31,7 +31,7 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { PlusCircle, Info, XCircle, VenetianMask, Save } from 'lucide-react';
+import { PlusCircle, Info, XCircle, VenetianMask, Save, PencilRuler } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   Tooltip,
@@ -42,12 +42,13 @@ import {
 import { format, getDay, parse, parseISO, startOfWeek, addDays, isSameDay } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { Button } from './ui/button';
-import { useFirestore, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { useFirestore, setDocumentNonBlocking, deleteDocumentNonBlocking, useCollection, useMemoFirebase } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { doc, getDocs, query, collection, limit } from 'firebase/firestore';
+import { doc, getDocs, query, collection, limit, where } from 'firebase/firestore';
 import { Badge } from './ui/badge';
 import { MultiSelect } from './ui/multi-select';
+import { GradingDialog } from './grading-dialog';
 
 
 const defaultTimeSlots = [
@@ -260,7 +261,7 @@ function EventTooltipContent({ event }: { event: Udalost }) {
     )
 }
 
-function LessonContextMenu({ children, lesson, dayInfo, period, classId, onSubstitute, isTeacher, isSubstitutedLesson, onCancelSubstitution }: { children: React.ReactNode, lesson: LessonBlock, dayInfo: DayMappingInfo, period: number, classId: string, onSubstitute: () => void, isTeacher: boolean, isSubstitutedLesson?: boolean, onCancelSubstitution?: () => void }) {
+function LessonContextMenu({ children, lesson, dayInfo, period, classId, onSubstitute, onGrade, isTeacher, isSubstitutedLesson, onCancelSubstitution }: { children: React.ReactNode, lesson: LessonBlock, dayInfo: DayMappingInfo, period: number, classId: string, onSubstitute: () => void, onGrade: () => void, isTeacher: boolean, isSubstitutedLesson?: boolean, onCancelSubstitution?: () => void }) {
     const router = useRouter();
     
     const handleNavigation = (path: string, params: Record<string, string>) => {
@@ -284,12 +285,7 @@ function LessonContextMenu({ children, lesson, dayInfo, period, classId, onSubst
                     hodina: (period).toString(),
                     predmetId: lesson.subjectId,
                 })}>Zapsat do třídní knihy</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleNavigation('/dashboard/hodnoceni', {
-                     tridaId: lesson.classId,
-                    predmetId: lesson.subjectId,
-                    datum: format(dayInfo.fullDate, 'yyyy-MM-dd'),
-                    hodina: period.toString()
-                })}>Nové hodnocení</DropdownMenuItem>
+                <DropdownMenuItem onClick={onGrade}><PencilRuler className="mr-2"/>Nové hodnocení</DropdownMenuItem>
                 <DropdownMenuItem>Probrané učivo</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => router.push('/dashboard/poznamky-zaka')}>Poznámka dítěte/žáka/studenta do třídní knihy</DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -339,7 +335,7 @@ function EmptySlotContextMenu({ children }: { children: React.ReactNode }) {
 }
 
 
-function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, onSubstitute, onCancelSubstitution, isSubstituted = false, substitutionNote, isNewSubstitutedLesson = false }: { lesson: LessonBlock; isTeacher: boolean, dayInfo: DayMappingInfo, period: number, classId: string, onSubstitute: () => void, onCancelSubstitution?: () => void, isSubstituted?: boolean, substitutionNote?: string, isNewSubstitutedLesson?: boolean }) {
+function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, onSubstitute, onGrade, onCancelSubstitution, isSubstituted = false, substitutionNote, isNewSubstitutedLesson = false }: { lesson: LessonBlock; isTeacher: boolean, dayInfo: DayMappingInfo, period: number, classId: string, onSubstitute: () => void, onGrade: () => void, onCancelSubstitution?: () => void, isSubstituted?: boolean, substitutionNote?: string, isNewSubstitutedLesson?: boolean }) {
     const getSubjectColor = (subjectId: string) => {
         if (!subjectId) return `hsl(0, 0%, 85%)`;
         let hash = 0;
@@ -373,6 +369,7 @@ function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, onSubstit
             period={period} 
             classId={classId} 
             onSubstitute={onSubstitute} 
+            onGrade={onGrade}
             isTeacher={isTeacher}
             isSubstitutedLesson={isNewSubstitutedLesson}
             onCancelSubstitution={onCancelSubstitution}
@@ -452,6 +449,16 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
     const [deletingSubstitution, setDeletingSubstitution] = useState<Substitution | null>(null);
     const [isSubDialogOpen, setIsSubDialogOpen] = useState(false);
     
+    const [isGradingDialogOpen, setIsGradingDialogOpen] = useState(false);
+    const [gradingLessonInfo, setGradingLessonInfo] = useState<{ lesson: LessonBlock; dayInfo: DayMappingInfo; period: number; classId: string; } | null>(null);
+
+    const { data: students } = useCollection<User>(
+        useMemoFirebase(() => {
+            if (!firestore || !userClassId) return null;
+            return query(collection(firestore, "users"), where("tridaId", "==", userClassId), where("roles", "array-contains", "ziak"));
+        }, [firestore, userClassId])
+    );
+    
     const timeSlots = dailySchedule?.timeSlots || defaultTimeSlots;
     
     const findEventForCell = (dayDate: Date, periodIndex: number) => {
@@ -527,6 +534,11 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
         date: format(day, 'd.M.'),
         fullDate: day,
     };
+    
+    const handleGrade = (lesson: LessonBlock, dayInfo: DayMappingInfo, period: number, classId: string) => {
+        setGradingLessonInfo({ lesson, dayInfo, period, classId });
+        setIsGradingDialogOpen(true);
+    }
 
     return (
         <div>
@@ -605,6 +617,7 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                                                 substitutionNote={substitution?.changes.note} 
                                                 isNewSubstitutedLesson={true} 
                                                 onSubstitute={() => { setEditingSubFor({ lesson: lesson!, dayInfo, period: periodIndex + 1, classId: classId!, substitution }); setIsSubDialogOpen(true); }}
+                                                onGrade={() => handleGrade(substitutedLesson, dayInfo, periodIndex + 1, classId!)}
                                                 onCancelSubstitution={() => setDeletingSubstitution(substitution)}
                                             />
                                         </div>
@@ -617,6 +630,7 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                                                 classId={classId!} 
                                                 isSubstituted={true} 
                                                 onSubstitute={() => { /* no-op for original */ }}
+                                                onGrade={() => {}}
                                             />
                                         </div>
                                     </>
@@ -628,7 +642,9 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                                             dayInfo={dayInfo} 
                                             period={periodIndex + 1} 
                                             classId={classId} 
-                                            onSubstitute={() => { setEditingSubFor({ lesson, dayInfo, period: periodIndex + 1, classId, substitution: null }); setIsSubDialogOpen(true); }}/>
+                                            onSubstitute={() => { setEditingSubFor({ lesson, dayInfo, period: periodIndex + 1, classId, substitution: null }); setIsSubDialogOpen(true); }}
+                                            onGrade={() => handleGrade(lesson, dayInfo, periodIndex + 1, classId)}
+                                        />
                                     </div>
                                 ) : (
                                     isTeacher && !event && (
@@ -665,6 +681,16 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+            {gradingLessonInfo && (
+                <GradingDialog
+                    isOpen={isGradingDialogOpen}
+                    onOpenChange={setIsGradingDialogOpen}
+                    lesson={gradingLessonInfo.lesson}
+                    students={students || []}
+                    subjects={subjects || []}
+                    day={gradingLessonInfo.dayInfo.fullDate}
+                />
+            )}
         </div>
     );
 }
