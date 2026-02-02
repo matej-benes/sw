@@ -27,6 +27,7 @@ import {
     UserX,
     FileText,
 } from 'lucide-react';
+import { Separator } from '../ui/separator';
 
 const mainNavLinks = [
     { name: 'Komunikace', href: '/dashboard/zpravy', icon: MessageSquare },
@@ -118,14 +119,14 @@ export function AppSidebar() {
                  
                  {isParentOrStudent && (
                     <>
-                        <div className='my-2'></div>
+                        <Separator className="my-2" />
                         {renderNavLinks(studentParentLinks)}
                     </>
                  )}
 
                  {(isTeacher) && (
                     <>
-                        <div className='my-2'></div>
+                        <Separator className="my-2" />
                         {renderNavLinks(teacherNavLinks)}
                         
                         <Accordion type="single" collapsible className="w-full" defaultValue={pathname.includes('/dashboard/tisk') ? 'tiskove-vystupy' : undefined}>
@@ -145,7 +146,7 @@ export function AppSidebar() {
                  )}
                 {(isAdministrator) && (
                     <>
-                        <div className='my-2'></div>
+                        <Separator className="my-2" />
                         {renderNavLinks(adminNavLinks)}
                          <Accordion type="single" collapsible className="w-full" defaultValue={pathname.includes('/dashboard/sprava-systemu') ? 'sprava-systemu' : undefined}>
                             <AccordionItem value="sprava-systemu" className="border-b-0">
@@ -163,6 +164,9 @@ export function AppSidebar() {
                     </>
                 )}
             </nav>
+        </div>
+         <div className="mt-auto p-4 border-t">
+            {renderNavLinks([{name: 'Nápověda', href: '/dashboard/napoveda', icon: FileQuestion}])}
         </div>
     </div>
   );

@@ -1,13 +1,17 @@
 'use client';
 import { AppSidebar } from '@/components/layout/app-sidebar';
 import { UserNav } from '@/components/layout/user-nav';
+import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/logo';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { usePageTitleUpdater } from '@/hooks/usePageTitleUpdater';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { MobileLayout } from '@/components/layout/mobile-layout';
+import { FileQuestion } from 'lucide-react';
+import Link from 'next/link';
 
 export default function DashboardLayout({
   children,
@@ -44,8 +48,21 @@ export default function DashboardLayout({
        </div>
       <div className="flex flex-col">
         <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
-          <div className="w-full flex-1">
-             
+          <div className="w-full flex-1 flex justify-end">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" asChild>
+                    <Link href="/dashboard/napoveda">
+                      <FileQuestion />
+                    </Link>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Nápověda a příručka</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
           <UserNav />
         </header>
