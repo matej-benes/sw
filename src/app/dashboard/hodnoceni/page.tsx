@@ -260,13 +260,6 @@ export default function HodnoceniPage() {
         }
     }, [teacherClasses, selectedClassId, tridaIdFromParams]);
     
-    // This effect is removed because the button is removed.
-    // useEffect(() => {
-    //     if ((tridaIdFromParams || predmetIdFromParams) && !isDialogOpen) {
-    //         handleOpenDialog(null);
-    //     }
-    // }, [tridaIdFromParams, predmetIdFromParams, handleOpenDialog, isDialogOpen]);
-
     const handleDelete = async () => {
         if (!deletingGrading || !firestore) return;
         try {
@@ -381,6 +374,10 @@ export default function HodnoceniPage() {
                         <h1 className="text-3xl font-bold">Klasifikace</h1>
                         <p className="text-muted-foreground">Chronologický přehled zadaného hodnocení.</p>
                     </div>
+                     <Button onClick={() => handleOpenDialog(null)}>
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Nové hodnocení
+                    </Button>
                 </div>
 
                 <Card>
