@@ -45,12 +45,6 @@ service cloud.firestore {
       allow delete: if isOwner(userId) || hasRole('administrator');
     }
     
-    match /pins/{pinId} {
-      allow get: if true;
-      allow create, delete: if hasRole('administrator');
-      allow list, update: if false;
-    }
-    
     match /organizations/{organizationId} {
       allow read: if isSignedIn();
       allow write: if isSuperAdmin();

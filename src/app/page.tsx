@@ -119,10 +119,6 @@ export default function LoginPage() {
               {isSigningIn && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Přihlásit se
             </Button>
-            <Separator />
-            <Button variant="link" asChild className="w-full">
-                <Link href="/registrace">První přihlášení / Registrace</Link>
-            </Button>
           </CardFooter>
         </form>
       </Card>
