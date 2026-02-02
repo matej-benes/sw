@@ -34,7 +34,7 @@ import {
 import { cs } from 'date-fns/locale';
 
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, query, where, getDoc, doc, writeBatch } from 'firebase/firestore';
+import { collection, query, where, getDoc, doc, writeBatch, getDocs } from 'firebase/firestore';
 import type {
   Trida,
   User,
@@ -44,15 +44,27 @@ import type {
   ScheduleTemplate,
   ZapisHodiny,
   Predmet,
+  LessonBlock,
 } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 
+const defaultTimeSlots = [
+    "07:55-08:40", "08:55-09:40", "09:55-10:40", "10:45-11:30",
+    "11:35-12:20", "12:30-13:15", "13:20-14:05", "14:15-15:00",
+    "15:05-15:50", "15:55-16:40"
+];
+
 export function MobileDashboard() {
   const firestore = useFirestore();
-  const { user, hasRole, loading: isUserLoading } = useAuth();
+  const { user, hasRole, isSuperAdmin, loading: isUserLoading } = useAuth();
   
+  const isTeacherView = hasRole('ucitel') && !isSuperAdmin();
+
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedClassId, setSelectedClassId] = useState<string>('');
+
+  const [teacherDailySchedule, setTeacherDailySchedule] = useState<Rozvrh | null>(null);
+  const [teacherScheduleLoading, setTeacherScheduleLoading] = useState(false);
 
   const studentRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -64,13 +76,14 @@ export function MobileDashboard() {
 
   // Determine the target class ID based on role
   const targetClassId = useMemo(() => {
+    if (isTeacherView) return undefined;
     if (hasRole('ucitel') || hasRole('administrator')) {
       return selectedClassId;
     }
     if (hasRole('ziak')) return user?.tridaId;
     if (hasRole('rodic')) return studentData?.tridaId;
     return undefined;
-  }, [hasRole, user, studentData, selectedClassId]);
+  }, [hasRole, user, studentData, selectedClassId, isTeacherView]);
 
   const teacherClassesQuery = useMemoFirebase(() => {
     if (!firestore || !user ) return null;
@@ -88,24 +101,65 @@ export function MobileDashboard() {
   useEffect(() => {
     if (selectedClassId) return; // Already have a class, do nothing
 
-    if (hasRole('ucitel') || hasRole('administrator')) {
+    if ((hasRole('ucitel') || hasRole('administrator')) && !isTeacherView) {
         if (teacherClasses && teacherClasses.length > 0) {
             setSelectedClassId(teacherClasses[0].id);
         }
-    } else { // Student or Parent
+    } else if (!isTeacherView) { // Student or Parent
         const classId = hasRole('ziak') ? user?.tridaId : studentData?.tridaId;
         if (classId) {
             setSelectedClassId(classId);
         }
     }
-  }, [hasRole, user, studentData, teacherClasses, selectedClassId]);
+  }, [hasRole, user, studentData, teacherClasses, selectedClassId, isTeacherView]);
+
+  // Fetch and aggregate schedule for teacher view
+  useEffect(() => {
+    if (!isTeacherView || !firestore || !user?.id) return;
+
+    const fetchAndAggregate = async () => {
+        setTeacherScheduleLoading(true);
+
+        const dayStr = format(currentDate, 'yyyy-MM-dd');
+        const q = query(collection(firestore, 'rozvrhy'), where('datum', '==', dayStr));
+        const querySnapshot = await getDocs(q);
+        const schedulesForDay = querySnapshot.docs.map(d => d.data() as Rozvrh);
+        
+        let resolvedTimeSlots = defaultTimeSlots;
+        if (schedulesForDay.length > 0 && schedulesForDay[0].timeSlots.length > 0) {
+            resolvedTimeSlots = schedulesForDay[0].timeSlots;
+        }
+
+        const teacherDayLessons: (LessonBlock | null)[] = Array(resolvedTimeSlots.length).fill(null);
+
+        for (const schedule of schedulesForDay) {
+            schedule.hodiny.forEach((lesson, index) => {
+                if (lesson && lesson.teacherId === user.id) {
+                    teacherDayLessons[index] = lesson;
+                }
+            });
+        }
+
+        setTeacherDailySchedule({
+            id: `teacher-schedule-${dayStr}`,
+            tridaId: user.id,
+            organizationId: user.organizationId || '',
+            datum: dayStr,
+            timeSlots: resolvedTimeSlots,
+            hodiny: teacherDayLessons,
+        });
+        setTeacherScheduleLoading(false);
+    };
+
+    fetchAndAggregate();
+  }, [isTeacherView, firestore, currentDate, user?.id, user?.organizationId]);
 
 
   const dailySchedule = useDoc<Rozvrh>(useMemoFirebase(() => {
-    if (!firestore || !targetClassId) return null;
+    if (isTeacherView || !firestore || !targetClassId) return null;
     const scheduleId = `${targetClassId}-${format(currentDate, 'yyyy-MM-dd')}`;
     return doc(firestore, 'rozvrhy', scheduleId);
-  }, [firestore, targetClassId, currentDate]));
+  }, [firestore, targetClassId, currentDate, isTeacherView]));
   
   const eventsQuery = useMemoFirebase(() => {
     if (!firestore || !targetClassId) return null;
@@ -141,7 +195,9 @@ export function MobileDashboard() {
   const handleSetToday = () => setCurrentDate(new Date());
 
   const canManage = hasRole('ucitel') || hasRole('administrator');
-  const isDataLoading = dailySchedule.isLoading || eventsLoading || subsLoading || zapisyLoading || isUserLoading || studentLoading || (canManage && teacherClassesLoading) || teachersLoading || subjectsLoading;
+  
+  const scheduleToRender = isTeacherView ? teacherDailySchedule : dailySchedule.data;
+  const isDataLoading = isUserLoading || studentLoading || teachersLoading || subjectsLoading || eventsLoading || subsLoading || zapisyLoading || (isTeacherView ? teacherScheduleLoading : (dailySchedule.isLoading || (canManage && teacherClassesLoading)));
 
   if (isDataLoading) {
     return <div className="flex h-full w-full items-center justify-center">Načítání...</div>;
@@ -171,7 +227,7 @@ export function MobileDashboard() {
             </Button>
           </div>
           
-          {canManage && (
+          {canManage && !isTeacherView && (
             <div className="mb-4">
               <Select value={selectedClassId} onValueChange={setSelectedClassId}>
                 <SelectTrigger>
@@ -187,7 +243,7 @@ export function MobileDashboard() {
           )}
 
           <MobileTimetableList
-            dailySchedule={dailySchedule.data}
+            dailySchedule={scheduleToRender}
             eventsData={eventsData || []}
             substitutionsData={substitutionsData || []}
             zapisyData={zapisyData || []}

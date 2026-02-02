@@ -51,17 +51,26 @@ import type {
   ScheduleTemplate,
   Omluvenka,
   Organization,
+  LessonBlock,
 } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { useUnreadMessages } from '@/hooks/use-unread-messages';
 
+const defaultTimeSlots = [
+    "07:55-08:40", "08:55-09:40", "09:55-10:40", "10:45-11:30",
+    "11:35-12:20", "12:30-13:15", "13:20-14:05", "14:15-15:00",
+    "15:05-15:50", "15:55-16:40"
+];
+
 export function DesktopDashboard() {
   const firestore = useFirestore();
   const { user, hasRole, isSuperAdmin, loading: isUserLoading } = useAuth();
   const { unreadCount } = useUnreadMessages();
   const router = useRouter();
+
+  const isTeacherView = hasRole('ucitel') && !isSuperAdmin();
   
   const { data: organizations, isLoading: orgsLoading } = useCollection<Organization>(
     useMemoFirebase(
@@ -102,29 +111,94 @@ export function DesktopDashboard() {
   const [viewMode, setViewMode] = useState('tridy');
   const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined);
   const [isFullWeekView, setIsFullWeekView] = useState(false);
+  
+  const [teacherWeekSchedules, setTeacherWeekSchedules] = useState<Rozvrh[]>([]);
+  const [teacherSchedulesLoading, setTeacherSchedulesLoading] = useState(false);
+
+  const weekDays = useMemo(() => {
+    const start = startOfWeek(currentDate, { weekStartsOn: 1 });
+    if (isFullWeekView) {
+        return Array.from({ length: 7 }, (_, i) => addDays(start, i));
+    }
+    const today = new Date();
+    const isSunday = getDay(today) === 0;
+    if (isSunday) {
+        const nextMonday = addDays(start, 7);
+        return [nextMonday, addDays(nextMonday, 1)];
+    }
+    return [today, addDays(today, 1)];
+  }, [currentDate, isFullWeekView]);
+
+
+  useEffect(() => {
+    if (!isTeacherView || !firestore || weekDays.length === 0 || !user?.id) return;
+
+    const fetchTeacherSchedules = async () => {
+        setTeacherSchedulesLoading(true);
+        const weekSchedules: Rozvrh[] = [];
+        
+        let resolvedTimeSlots = defaultTimeSlots; 
+
+        for (const day of weekDays) {
+            const dayStr = format(day, 'yyyy-MM-dd');
+            const q = query(collection(firestore, 'rozvrhy'), where('datum', '==', dayStr));
+            const querySnapshot = await getDocs(q);
+
+            const schedulesForDay = querySnapshot.docs.map(d => d.data() as Rozvrh);
+            
+            if (schedulesForDay.length > 0 && schedulesForDay[0].timeSlots.length > 0) {
+                resolvedTimeSlots = schedulesForDay[0].timeSlots;
+            }
+
+            const teacherDayLessons: (LessonBlock | null)[] = Array(resolvedTimeSlots.length).fill(null);
+
+            for (const schedule of schedulesForDay) {
+                schedule.hodiny.forEach((lesson, index) => {
+                    if (lesson && lesson.teacherId === user.id) {
+                        teacherDayLessons[index] = lesson;
+                    }
+                });
+            }
+            
+            weekSchedules.push({
+                id: `teacher-schedule-${dayStr}`,
+                tridaId: user.id, 
+                organizationId: user.organizationId || '',
+                datum: dayStr,
+                timeSlots: resolvedTimeSlots,
+                hodiny: teacherDayLessons,
+            });
+        }
+        setTeacherWeekSchedules(weekSchedules);
+        setTeacherSchedulesLoading(false);
+    };
+
+    fetchTeacherSchedules();
+  }, [isTeacherView, firestore, weekDays, user?.id, user?.organizationId]);
 
   const targetClassId = useMemo(() => {
+    if (isTeacherView) return undefined; // Teacher view is not class-based
     if (hasRole('ucitel') || isSuperAdmin()) return selectedClassId;
     if (hasRole('ziak')) return user?.tridaId;
     if (hasRole('rodic')) return studentData?.tridaId;
     return undefined;
-  }, [hasRole, isSuperAdmin, user, studentData, selectedClassId]);
+  }, [hasRole, isSuperAdmin, isTeacherView, user, studentData, selectedClassId]);
   
   useEffect(() => {
-    if ((hasRole('ucitel') || isSuperAdmin()) && tridy && tridy.length > 0 && !selectedClassId) {
+    if ((hasRole('ucitel') || isSuperAdmin()) && !isTeacherView && tridy && tridy.length > 0 && !selectedClassId) {
       setSelectedClassId(tridy[0].id);
     } else if (!hasRole('ucitel') && !isSuperAdmin()) {
       setSelectedClassId(user?.tridaId || studentData?.tridaId);
     }
-  }, [tridy, selectedClassId, hasRole, isSuperAdmin, user?.tridaId, studentData?.tridaId]);
+  }, [tridy, selectedClassId, hasRole, isSuperAdmin, isTeacherView, user?.tridaId, studentData?.tridaId]);
 
 
   const schedulesQuery = useMemoFirebase(() => {
-      if (!firestore || !targetClassId) return null;
+      if (isTeacherView || !firestore || !targetClassId) return null;
       return query(collection(firestore, 'rozvrhy'), where('tridaId', '==', targetClassId));
-  }, [firestore, targetClassId]);
+  }, [firestore, targetClassId, isTeacherView]);
 
-  const { data: schedulesData } = useCollection<Rozvrh>(schedulesQuery);
+  const { data: schedulesData, isLoading: schedulesLoading } = useCollection<Rozvrh>(schedulesQuery);
 
   const eventsQuery = useMemoFirebase(() => {
     if (!firestore || !targetClassId) return null; 
@@ -170,20 +244,6 @@ export function DesktopDashboard() {
   }, [firestore, studentClassData]);
   const { data: classTeacherData } = useDoc<User>(classTeacherRef);
 
-  const weekDays = useMemo(() => {
-    const start = startOfWeek(currentDate, { weekStartsOn: 1 });
-    if (isFullWeekView) {
-        return Array.from({ length: 7 }, (_, i) => addDays(start, i));
-    }
-    const today = new Date();
-    const isSunday = getDay(today) === 0;
-    if (isSunday) {
-        const nextMonday = addDays(start, 7);
-        return [nextMonday, addDays(nextMonday, 1)];
-    }
-    return [today, addDays(today, 1)];
-  }, [currentDate, isFullWeekView]);
-
   const weekLabel = useMemo(() => {
     const start = startOfWeek(currentDate, { weekStartsOn: 1 });
     const end = addDays(start, 6);
@@ -226,7 +286,7 @@ export function DesktopDashboard() {
     };
   }, [studentClassData, allStaff, classTeacherData]);
 
-  const isLoading = isUserLoading || !user || orgsLoading;
+  const isLoading = isUserLoading || !user || orgsLoading || (isTeacherView ? teacherSchedulesLoading : schedulesLoading);
 
   if (isLoading) {
     return <div className="flex h-full w-full items-center justify-center">Načítání dat...</div>;
@@ -278,7 +338,7 @@ export function DesktopDashboard() {
         <Card>
           <CardHeader className="flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-4">
-              {(hasRole('ucitel') || isSuperAdmin()) && (
+              {(hasRole('ucitel') || isSuperAdmin()) && !isTeacherView && (
                 <>
                   <Select value={viewMode} onValueChange={setViewMode}>
                     <SelectTrigger className="w-[180px]">
@@ -318,7 +378,7 @@ export function DesktopDashboard() {
                 </Button>
               </div>
               
-              {(hasRole('ziak') || hasRole('rodic')) && classInfo.className && (
+              {(hasRole('ziak') || hasRole('rodic')) && !isTeacherView && classInfo.className && (
                 <div className="flex items-center gap-3 text-sm">
                   <Separator orientation="vertical" className="h-8 hidden md:block" />
                   <div className="text-left">
@@ -347,21 +407,27 @@ export function DesktopDashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            {weekDays.map(day => (
-              <div key={day.toISOString()}>
-                <TimetableWidget
-                  dailySchedule={schedulesData?.find(s => isSameDay(parseISO(s.datum), day))}
-                  eventsData={eventsData || []}
-                  substitutionsData={substitutionsData || []}
-                  isTeacher={hasRole('ucitel') || isSuperAdmin()}
-                  userId={user.id}
-                  userClassId={targetClassId}
-                  day={day}
-                  teachers={allStaff || []}
-                  subjects={subjects || []}
-                />
-              </div>
-            ))}
+            {weekDays.map(day => {
+              const scheduleForDay = isTeacherView
+                  ? teacherWeekSchedules.find(s => isSameDay(parseISO(s.datum), day))
+                  : schedulesData?.find(s => isSameDay(parseISO(s.datum), day));
+
+              return (
+                <div key={day.toISOString()}>
+                  <TimetableWidget
+                    dailySchedule={scheduleForDay}
+                    eventsData={eventsData || []}
+                    substitutionsData={substitutionsData || []}
+                    isTeacher={hasRole('ucitel') || isSuperAdmin()}
+                    userId={user.id}
+                    userClassId={isTeacherView ? undefined : targetClassId}
+                    day={day}
+                    teachers={allStaff || []}
+                    subjects={subjects || []}
+                  />
+                </div>
+              )
+            })}
           </CardContent>
         </Card>
       </div>
