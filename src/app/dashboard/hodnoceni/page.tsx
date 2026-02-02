@@ -144,31 +144,28 @@ export default function HodnoceniPage() {
 
         let q: FirestoreQuery | null = null;
         
-        if (hasRole('administrator') && user.organizationId) {
-            q = query(
-                collection(firestore, 'grades'), 
-                where('organizationId', '==', user.organizationId),
-                orderBy('datum', 'desc'),
-                limit(50) 
-            );
-        } else if (hasRole('ucitel')) {
+        // Prioritize teacher role to ensure teachers see their own grades
+        if (hasRole('ucitel')) {
              q = query(
                 collection(firestore, 'grades'),
                 where('ucitelId', '==', user.id),
-                orderBy('datum', 'desc'),
                 limit(50)
+            );
+        } else if (hasRole('administrator') && user.organizationId) {
+            q = query(
+                collection(firestore, 'grades'), 
+                where('organizationId', '==', user.organizationId),
+                limit(50) 
             );
         } else if (hasRole('ziak') && user.id) {
              q = query(
                 collection(firestore, 'grades'),
-                where('ziakId', '==', user.id),
-                orderBy('datum', 'desc')
+                where('ziakId', '==', user.id)
             );
         } else if (hasRole('rodic') && user.studentId) {
             q = query(
                 collection(firestore, 'grades'),
-                where('ziakId', '==', user.studentId),
-                orderBy('datum', 'desc')
+                where('ziakId', '==', user.studentId)
             );
         } else {
              setGradingsLoading(false);
@@ -181,11 +178,12 @@ export default function HodnoceniPage() {
             setGradingsLoading(false);
         }, (error) => {
             console.error("Error fetching gradings: ", error);
+            toast({ variant: 'destructive', title: 'Chyba načítání známek', description: 'Nepodařilo se načíst data o hodnocení. Zkontrolujte prosím své připojení a oprávnění.' });
             setGradingsLoading(false);
         });
 
         return () => unsubscribe();
-    }, [firestore, user, hasRole]);
+    }, [firestore, user, hasRole, toast]);
 
     // Fetch students when a class is selected
     useEffect(() => {
@@ -261,12 +259,13 @@ export default function HodnoceniPage() {
             setSelectedClassId(teacherClasses[0].id);
         }
     }, [teacherClasses, selectedClassId, tridaIdFromParams]);
-
-    useEffect(() => {
-        if ((tridaIdFromParams || predmetIdFromParams) && !isDialogOpen) {
-            handleOpenDialog(null);
-        }
-    }, [tridaIdFromParams, predmetIdFromParams, handleOpenDialog, isDialogOpen]);
+    
+    // This effect is removed because the button is removed.
+    // useEffect(() => {
+    //     if ((tridaIdFromParams || predmetIdFromParams) && !isDialogOpen) {
+    //         handleOpenDialog(null);
+    //     }
+    // }, [tridaIdFromParams, predmetIdFromParams, handleOpenDialog, isDialogOpen]);
 
     const handleDelete = async () => {
         if (!deletingGrading || !firestore) return;
@@ -291,30 +290,42 @@ export default function HodnoceniPage() {
             return;
         }
 
-        for (const studentId of data.studentIds) {
-            const studentData = students.find(s => s.id === studentId);
-            if (!studentData) continue;
-
-            const gradeData: Omit<Grading, 'id' | 'createdAt'> & { updatedAt?: Timestamp } = {
-                organizationId: user.organizationId,
-                tridaId: studentData.tridaId || '',
-                ziakId: studentId,
-                ziakJmeno: studentData.name,
+        if (editingGrading) {
+            const studentData = students.find(s => s.id === editingGrading.ziakId);
+            if (!studentData) {
+                toast({ variant: 'destructive', title: 'Chyba', description: 'Upravovaný žák nebyl nalezen.'});
+                return;
+            }
+            const gradeRef = doc(firestore, 'grades', editingGrading.id);
+            const updatedData = {
                 predmetId: data.predmetId,
                 predmet: selectedPredmet.name,
                 znamka: data.znamka,
                 vaha: data.vaha,
                 komentar: data.komentar || '',
-                ucitelId: user.id,
-                datum: format(now.toDate(), 'yyyy-MM-dd'),
-                cas: format(now.toDate(), 'HH:mm'),
+                updatedAt: now,
             };
+            batch.update(gradeRef, updatedData);
+        } else {
+            for (const studentId of data.studentIds) {
+                const studentData = students.find(s => s.id === studentId);
+                if (!studentData) continue;
 
-            if (editingGrading) {
-                const gradeRef = doc(firestore, 'grades', editingGrading.id);
-                gradeData.updatedAt = now;
-                batch.update(gradeRef, gradeData);
-            } else {
+                const gradeData: Omit<Grading, 'id' | 'createdAt'> = {
+                    organizationId: user.organizationId,
+                    tridaId: studentData.tridaId || '',
+                    ziakId: studentId,
+                    ziakJmeno: studentData.name,
+                    predmetId: data.predmetId,
+                    predmet: selectedPredmet.name,
+                    znamka: data.znamka,
+                    vaha: data.vaha,
+                    komentar: data.komentar || '',
+                    ucitelId: user.id,
+                    datum: format(now.toDate(), 'yyyy-MM-dd'),
+                    cas: format(now.toDate(), 'HH:mm'),
+                };
+
                 const gradeRef = doc(collection(firestore, 'grades'));
                 batch.set(gradeRef, { ...gradeData, createdAt: now });
             }
@@ -336,6 +347,17 @@ export default function HodnoceniPage() {
             });
         }
     };
+    
+    // Client-side sorting for teacher/admin view
+    const sortedGradings = useMemo(() => {
+        if (!gradings) return [];
+        return [...gradings].sort((a, b) => {
+            const dateA = a.datum ? parseISO(a.datum).getTime() : 0;
+            const dateB = b.datum ? parseISO(b.datum).getTime() : 0;
+            return dateB - dateA;
+        });
+    }, [gradings]);
+
 
     const isDataLoading = userLoading || gradingsLoading || classesLoading || studentsLoading || predmetyLoading || teachersLoading;
 
@@ -378,10 +400,10 @@ export default function HodnoceniPage() {
                             <TableBody>
                                 {isDataLoading ? (
                                     <TableRow><TableCell colSpan={7} className="text-center h-24">Načítání hodnocení...</TableCell></TableRow>
-                                ) : gradings?.length === 0 ? (
+                                ) : sortedGradings?.length === 0 ? (
                                     <TableRow><TableCell colSpan={7} className="text-center h-24">Nebylo zadáno žádné hodnocení.</TableCell></TableRow>
                                 ) : (
-                                    gradings?.map(g => (
+                                    sortedGradings?.map(g => (
                                         <TableRow key={g.id} onClick={() => router.push(`/dashboard/hodnoceni/${g.id}`)} className="cursor-pointer">
                                             <TableCell>{format(parseISO(g.datum), 'd.M.yyyy')}</TableCell>
                                             <TableCell>{g.ziakJmeno}</TableCell>
@@ -407,7 +429,7 @@ export default function HodnoceniPage() {
                         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                             <div className="grid gap-2">
                                 <Label>Třída</Label>
-                                <Select onValueChange={setSelectedClassId} value={selectedClassId || ''} disabled={classesLoading}>
+                                <Select onValueChange={setSelectedClassId} value={selectedClassId || ''} disabled={classesLoading || !!editingGrading}>
                                     <SelectTrigger><SelectValue placeholder="Vyberte třídu" /></SelectTrigger>
                                     <SelectContent>{teacherClasses.map(c => <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>)}</SelectContent>
                                 </Select>
@@ -428,6 +450,7 @@ export default function HodnoceniPage() {
                                                             const newValue = checked ? [...field.value, s.id] : field.value.filter(id => id !== s.id);
                                                             field.onChange(newValue);
                                                         }}
+                                                        disabled={!!editingGrading}
                                                     />
                                                     <Label htmlFor={`student-${s.id}`}>{s.name}</Label>
                                                 </div>
@@ -441,7 +464,7 @@ export default function HodnoceniPage() {
                                 <div className="grid gap-2">
                                     <Label>Předmět</Label>
                                     <Controller name="predmetId" control={control} render={({ field }) => (
-                                        <Select onValueChange={field.onChange} value={field.value} disabled={predmetyLoading || !!predmetIdFromParams || !!editingGrading}><SelectTrigger><SelectValue placeholder="Předmět"/></SelectTrigger><SelectContent>{predmety.map(p=><SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select>
+                                        <Select onValueChange={field.onChange} value={field.value} disabled={predmetyLoading || !!editingGrading}><SelectTrigger><SelectValue placeholder="Předmět"/></SelectTrigger><SelectContent>{predmety.map(p=><SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select>
                                     )} />
                                     {errors.predmetId && <p className="text-sm text-destructive">{errors.predmetId.message}</p>}
                                 </div>
@@ -526,7 +549,9 @@ export default function HodnoceniPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {gradesBySubject[subject].map(g => (
+                                    {gradesBySubject[subject]
+                                        .sort((a, b) => parseISO(b.datum).getTime() - parseISO(a.datum).getTime())
+                                        .map(g => (
                                         <TableRow key={g.id} onClick={() => router.push(`/dashboard/hodnoceni/${g.id}`)} className="cursor-pointer">
                                             <TableCell>{format(parseISO(g.datum), 'd. M. yyyy')}</TableCell>
                                             <TableCell className="font-bold text-2xl">{g.znamka}</TableCell>
