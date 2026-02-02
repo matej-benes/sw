@@ -388,17 +388,12 @@ export function MobileTimetableList({
     const [isSubDialogOpen, setIsSubDialogOpen] = useState(false);
     const [deletingSubstitution, setDeletingSubstitution] = useState<Substitution | null>(null);
 
-    if (!dailySchedule) {
-        return <p className="text-center text-muted-foreground py-8">Pro tento den není dostupný žádný rozvrh.</p>;
-    }
-
-    const { hodiny, timeSlots } = dailySchedule;
-
     const handleLessonClick = (lesson: LessonBlock, periodIndex: number) => {
         if (!lesson.classId) return;
 
         if (isTeacher) {
              const substitution = substitutionsData.find(sub => {
+                 if (!dailySchedule || !sub.originalLesson) return false;
                  const subDate = parseISO(sub.date);
                  return isSameDay(subDate, day) && sub.originalLesson.period === periodIndex && sub.originalLesson.classId === dailySchedule.tridaId;
             });
@@ -445,6 +440,11 @@ export function MobileTimetableList({
         setDeletingSubstitution(null);
     };
 
+    if (!dailySchedule) {
+        return <p className="text-center text-muted-foreground py-8">Pro tento den není dostupný žádný rozvrh.</p>;
+    }
+
+    const { hodiny, timeSlots } = dailySchedule;
     
     const items = hodiny.flatMap((lesson, index) => {
         const time = timeSlots[index] || '';
