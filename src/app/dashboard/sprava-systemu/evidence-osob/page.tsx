@@ -62,14 +62,14 @@ import {
   getDocs,
   limit,
 } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import type { User } from '@/lib/types';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { cn } from '@/lib/utils';
-import { getAuth } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 
 
 const roleTranslations: { [key in Role]: string } = {
@@ -106,7 +106,7 @@ function UserForm({
 }: {
   user?: User | null;
   allUsers: User[],
-  onSave: (data: Partial<User>, pin: string | null) => void;
+  onSave: (data: UserFormData, pin: string | null) => void;
   closeDialog: () => void;
 }) {
   const { hasRole } = useAuth();
@@ -132,24 +132,22 @@ function UserForm({
       name: user?.name || '',
       email: user?.email || '',
       roles: user?.roles || [],
-      pin: user?.pin || '',
+      pin: user?.pin || null,
       tridaId: (user as any)?.tridaId || null,
       studentId: user?.studentId || null,
     },
   });
   
+  const [showPin, setShowPin] = useState(false);
   const currentPin = watch('pin');
   
   const onSubmit = (data: UserFormData) => {
-    const pin = data.pin || null;
-    const userData = { ...data };
-    delete (userData as any).pin;
-    onSave(userData, pin);
+    onSave(data, data.pin || null);
     closeDialog();
   };
 
   const generatePin = () => {
-    const newPin = Math.floor(100000 + Math.random() * 900000).toString();
+    const newPin = Math.random().toString(36).substring(2, 10);
     setValue('pin', newPin, { shouldValidate: true });
   };
   
@@ -244,16 +242,19 @@ function UserForm({
        )}
       
        <div className="space-y-2">
-        <Label htmlFor="pin">Registrační PIN</Label>
+        <Label htmlFor="pin">Dočasné heslo</Label>
         <div className="flex items-center gap-2">
-          <Input id="pin" {...register('pin')} placeholder="PIN není vygenerován" />
+          <Input id="pin" {...register('pin')} type={showPin ? 'text' : 'password'} placeholder={user ? "Nezměněno" : "Není vygenerováno"} />
+          <Button type="button" variant="ghost" size="icon" onClick={() => setShowPin(!showPin)} className="h-9 w-9">
+              {showPin ? <EyeOff /> : <Eye />}
+          </Button>
           <Button type="button" variant="outline" onClick={generatePin}>
             <ShieldCheck className="mr-2 h-4 w-4" />
             Generovat
           </Button>
         </div>
         {errors.pin && <p className="text-sm text-destructive">{errors.pin.message}</p>}
-        {currentPin && <p className="text-xs text-muted-foreground">Tento PIN slouží pro první registraci uživatele.</p>}
+        {currentPin && <p className="text-xs text-muted-foreground">Toto slouží jako dočasné heslo pro první přihlášení.</p>}
       </div>
 
       <DialogFooter>
@@ -310,6 +311,7 @@ function UserRow({ user, onEdit, onDelete }: { user: User, onEdit: (user: User) 
 
 function AdminUserManagement() {
     const firestore = useFirestore();
+    const { user: adminUser, signIn } = useAuth();
     
     const usersCollection = useMemoFirebase(
       () => (firestore) ? collection(firestore, 'users') : null,
@@ -318,63 +320,74 @@ function AdminUserManagement() {
 
     const { data: allUsers, isLoading: usersLoading } = useCollection<User>(usersCollection);
 
-    const [selectedRole, setSelectedRole] = useState<Role | 'all'>('all');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [deletingUser, setDeletingUser] = useState<User | null>(null);
     const { toast } = useToast();
 
-    const filteredUsers = useMemo(() => {
-        if (!allUsers) return [];
-        if (selectedRole === 'all') {
-            return allUsers;
-        }
-        return allUsers.filter(user => user.roles?.includes(selectedRole));
-    }, [allUsers, selectedRole]);
-
     const removeUndefinedFields = (obj: any) => {
         return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined && v !== null));
     };
 
-    const handleSaveUser = async (formData: Partial<User>, pin: string | null) => {
-      if (!firestore) return;
+    const handleSaveUser = async (formData: UserFormData, pin: string | null) => {
+      if (!firestore || !adminUser?.email) return;
 
       try {
-        const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
-        const orgsSnap = await getDocs(orgsQuery);
-        if (orgsSnap.empty) {
-          throw new Error("V databázi neexistuje žádná organizace. Vytvořte ji prosím nejprve.");
-        }
-        const organizationId = orgsSnap.docs[0].id;
-        
         if (editingUser) {
           const userRef = doc(firestore, 'users', editingUser.id);
-          const dataToUpdate = { ...formData, pin };
-          const cleanedData = removeUndefinedFields(dataToUpdate);
-          await updateDoc(userRef, cleanedData);
+          const dataToUpdate = { ...formData, pin: pin || editingUser.pin || null };
+          await updateDoc(userRef, removeUndefinedFields(dataToUpdate));
           toast({ title: 'Uživatel aktualizován' });
         } else {
-          if (!formData.email || !formData.name) {
-            throw new Error("Email a jméno jsou povinné pro vytvoření nového uživatele.");
+          if (!formData.email || !pin) {
+            throw new Error("Email a dočasné heslo jsou povinné pro vytvoření nového uživatele.");
           }
           
-          const newUserForDb: Omit<Partial<User>, 'id'> = {
-            name: formData.name,
-            email: formData.email,
-            roles: formData.roles || [],
+          const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
+          const orgsSnap = await getDocs(orgsQuery);
+          if (orgsSnap.empty) {
+            throw new Error("V databázi neexistuje žádná organizace. Vytvořte ji prosím nejprve.");
+          }
+          const organizationId = orgsSnap.docs[0].id;
+
+          const auth = getAuth();
+          const adminEmail = adminUser.email;
+          const adminPassword = prompt("Pro potvrzení vytvoření uživatele zadejte prosím znovu své administrátorské heslo. Budete dočasně odhlášeni a znovu přihlášeni.");
+          
+          if (!adminPassword) {
+              toast({ variant: 'destructive', title: 'Operace přerušena', description: 'Uživatel nebyl vytvořen, protože nebylo zadáno heslo administrátora.' });
+              return;
+          }
+
+          // Create the new user in Firebase Auth
+          const userCredential = await createUserWithEmailAndPassword(auth, formData.email, pin);
+          const newUser = userCredential.user;
+
+          // Re-authenticate as admin. This is a client-side SDK limitation.
+          await signIn(adminEmail, adminPassword);
+          
+          const newUserForDb: Partial<User> = {
+            ...formData,
             organizationId: organizationId,
-            pin: pin || Math.floor(100000 + Math.random() * 900000).toString(),
-            avatarUrl: `https://picsum.photos/seed/${Math.random()}/100/100`,
-            ...(formData.studentId && { studentId: formData.studentId }),
-            ...(formData.tridaId && { tridaId: formData.tridaId }),
+            avatarUrl: `https://picsum.photos/seed/${newUser.uid}/100/100`,
+            pin: pin,
           };
-          const cleanedData = removeUndefinedFields(newUserForDb);
-          await addDocumentNonBlocking(collection(firestore, 'users'), cleanedData);
-          toast({ title: 'Uživatel vytvořen', description: `Uživatel ${formData.name} byl vytvořen s registračním PINem.` });
+          
+          await setDoc(doc(firestore, 'users', newUser.uid), removeUndefinedFields(newUserForDb));
+          
+          toast({ title: 'Uživatel vytvořen', description: `Uživatel ${formData.name} byl vytvořen.` });
         }
       } catch (e: any) {
         console.error("Error saving user:", e);
-        toast({ variant: 'destructive', title: 'Chyba', description: e.message || 'Nepodařilo se uložit uživatele.' });
+        let description = 'Nepodařilo se uložit uživatele.';
+        if (e.code === 'auth/email-already-in-use') {
+          description = 'Tento e-mail je již používán jiným účtem.';
+        } else if (e.code === 'auth/wrong-password') {
+            description = 'Bylo zadáno nesprávné administrátorské heslo. Uživatel byl vytvořen, ale vy jste byli odhlášeni. Přihlaste se znovu.';
+        } else if (e.message) {
+            description = e.message;
+        }
+        toast({ variant: 'destructive', title: 'Chyba', description });
       }
 
       setIsDialogOpen(false);
@@ -385,10 +398,16 @@ function AdminUserManagement() {
         if (!deletingUser || !firestore) return;
 
         try {
+            const userRef = doc(firestore, 'users', deletingUser.id);
+            const userSnap = await getDoc(userRef);
+
             const batch = writeBatch(firestore);
             
-            const userRef = doc(firestore, 'users', deletingUser.id);
             batch.delete(userRef);
+
+            // Note: This does not delete the user from Firebase Authentication,
+            // which must be done with admin privileges, typically via a backend function.
+            // We are only deleting the Firestore user document.
 
             await batch.commit();
             
@@ -425,11 +444,11 @@ function AdminUserManagement() {
             <div>
               <CardTitle>Seznam uživatelů</CardTitle>
               <CardDescription>
-                Celkem {filteredUsers?.length ?? 0} uživatelů.
+                Celkem {allUsers?.length ?? 0} uživatelů.
               </CardDescription>
             </div>
              <div className="flex items-center gap-2">
-                <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as Role | 'all')}>
+                <Select value="all" onValueChange={() => {}}>
                     <SelectTrigger className="w-[180px]">
                         <SelectValue placeholder="Filtrovat podle role" />
                     </SelectTrigger>
@@ -465,10 +484,10 @@ function AdminUserManagement() {
                     </TableCell>
                   </TableRow>
                 )}
-                {!usersLoading && filteredUsers?.map((user) => (
+                {!usersLoading && allUsers?.map((user) => (
                     <UserRow key={user.id} user={user} onEdit={openDialog} onDelete={setDeletingUser} />
                 ))}
-                {!usersLoading && filteredUsers?.length === 0 && (
+                {!usersLoading && allUsers?.length === 0 && (
                     <TableRow>
                         <TableCell colSpan={4} className="h-24 text-center">
                             Žádní uživatelé neodpovídají filtru.

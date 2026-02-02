@@ -6,45 +6,30 @@ service cloud.firestore {
 
     // --- POMOCNÉ FUNKCE (HELPER FUNCTIONS) ---
 
-    // 1. Zkontroluje, zda je uživatel přihlášen
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // 2. Získá data o uživateli z databáze (pro kontrolu rolí)
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    // 3. Zkontroluje, zda má uživatel konkrétní roli
     function hasRole(role) {
-      // Správná kontrola pro pole 'roles'
       return isSignedIn() && getUserData().roles.hasAny([role]);
     }
     
-    // 3.1 Zkontroluje, zda má uživatel alespoň jednu z rolí v seznamu
     function hasAnyRole(roles) {
       return isSignedIn() && getUserData().roles.hasAny(roles);
     }
 
-    // 4. Zkontroluje, zda je uživatel administrátor
-    function isAdmin() {
-      // Používá správný název role 'administrator'
-      return hasRole('administrator');
-    }
-    
-    // 4.1 Zkontroluje, zda je uživatel Super Administrátor
     function isSuperAdmin() {
       return isSignedIn() && getUserData().isSuperAdmin == true;
     }
-
-    // 5. Zkontroluje, zda je uživatel učitel
-    function isTeacher() {
-      // Používá správný název role 'ucitel'
-      return hasRole('ucitel');
-    }
     
-    // 6. Zkontroluje, zda je rodič a ID studenta se shoduje
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
     function isMyStudent(studentId) {
         let parentData = getUserData();
         return hasRole('rodic') && parentData.studentId == studentId;
@@ -53,8 +38,11 @@ service cloud.firestore {
     // --- PRAVIDLA PRO KOLEKCE ---
 
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin() || isSuperAdmin() || request.auth.uid == userId;
+      allow get: if isOwner(userId) || hasRole('administrator');
+      allow list: if hasRole('administrator');
+      allow create: if hasRole('administrator') || (request.auth != null && request.auth.uid == userId);
+      allow update: if isOwner(userId) || hasRole('administrator');
+      allow delete: if isOwner(userId) || hasRole('administrator');
     }
     
     match /organizations/{organizationId} {
@@ -63,9 +51,7 @@ service cloud.firestore {
     }
 
     match /grades/{gradeId} {
-      // Čtení: Admin/SuperAdmin vidí vše v rámci své organizace. Učitel vidí známky, které zadal. Žák/Rodič vidí své/svého dítěte.
       allow read: if isSignedIn();
-      // Zápis/Úprava: Jen učitelé, admini a superadmini
       allow write: if isTeacher() || isAdmin() || isSuperAdmin();
     }
 

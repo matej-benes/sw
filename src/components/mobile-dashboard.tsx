@@ -61,7 +61,7 @@ export function MobileDashboard() {
   const isTeacherView = hasRole('ucitel') && !isSuperAdmin();
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedClassId, setSelectedClassId] = useState<string>('');
+  const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined);
 
   const [teacherDailySchedule, setTeacherDailySchedule] = useState<Rozvrh | null>(null);
   const [teacherScheduleLoading, setTeacherScheduleLoading] = useState(false);
@@ -229,7 +229,7 @@ export function MobileDashboard() {
           
           {canManage && !isTeacherView && (
             <div className="mb-4">
-              <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+              <Select value={selectedClassId || ''} onValueChange={setSelectedClassId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Vyberte třídu" />
                 </SelectTrigger>

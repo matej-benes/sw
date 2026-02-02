@@ -1,7 +1,7 @@
 'use client';
 import React, { useState } from 'react';
 import { cn } from "@/lib/utils";
-import type { LessonBlock, Udalost, Rozvrh, Substitution, ZapisHodiny } from "@/lib/types";
+import type { LessonBlock, Udalost, Rozvrh, Substitution, ZapisHodiny, Predmet, User } from "@/lib/types";
 import { useRouter } from 'next/navigation';
 import { format, parseISO, isSameDay } from 'date-fns';
 import { BookOpen, Info, XCircle, ChevronRight } from 'lucide-react';
@@ -91,6 +91,23 @@ function CancelledLessonItem({ substitution, period, time }: { substitution: Sub
     );
 }
 
+// Helper function to safely parse date strings
+function safeParseISO(dateString: string | null | undefined): Date | null {
+    if (!dateString) return null;
+    try {
+        const date = parseISO(dateString);
+        if (isNaN(date.getTime())) {
+            console.warn(`Invalid date string encountered: ${dateString}`);
+            return null; // Invalid date
+        }
+        return date;
+    } catch (e) {
+        console.error(`Error parsing date string: ${dateString}`, e);
+        return null;
+    }
+}
+
+
 export function MobileTimetableList({
     dailySchedule,
     eventsData,
@@ -111,8 +128,8 @@ export function MobileTimetableList({
     userId: string;
     userClassId?: string;
     day: Date;
-    teachers: any[]; // User[]
-    subjects: any[]; // Predmet[]
+    teachers: User[];
+    subjects: Predmet[];
 }) {
     const router = useRouter();
 
@@ -140,7 +157,8 @@ export function MobileTimetableList({
         const keyPrefix = `${day.toISOString()}-${index}`;
 
         const event = eventsData.find(e => {
-            const eventDate = parseISO(e.datum);
+            const eventDate = safeParseISO(e.datum);
+            if (!eventDate) return false;
             return isSameDay(eventDate, day) && e.cas === time.split('-')[0];
         });
 
@@ -152,32 +170,35 @@ export function MobileTimetableList({
         
         const substitution = substitutionsData.find(sub => {
              if (!sub.date || !sub.originalLesson) return false;
-             const subDate = parseISO(sub.date);
+             const subDate = safeParseISO(sub.date);
+             if (!subDate) return false;
              return isSameDay(subDate, day) && sub.originalLesson.period === index && sub.originalLesson.classId === dailySchedule.tridaId;
         });
         
         const zapis = zapisyData.find(z => z.datum === format(day, 'yyyy-MM-dd') && parseInt(z.hodina) === period);
 
         if (substitution) {
-            const isCancelled = Array.isArray(substitution.changes.type) ? substitution.changes.type.includes('zruseno') : substitution.changes.type === 'zruseno';
+            const isCancelled = Array.isArray(substitution.changes?.type) 
+                ? substitution.changes.type.includes('zruseno') 
+                : substitution.changes?.type === 'zruseno';
             if (isCancelled) {
                 return [<CancelledLessonItem key={`sub-cancelled-${keyPrefix}`} substitution={substitution} period={period} time={time}/>];
             }
 
             let newTeacherName = lesson.teacherName;
-            if (substitution.changes.teacherIds && substitution.changes.teacherIds.length > 0) {
+            if (substitution.changes?.teacherIds && substitution.changes.teacherIds.length > 0) {
                 newTeacherName = substitution.changes.teacherIds
                     .map(id => teachers.find(t => t.id === id)?.name)
                     .filter(Boolean)
                     .join(', ');
             }
             
-            const newSubject = subjects.find(s => s.id === substitution.changes.subjectId);
+            const newSubject = subjects.find(s => s.id === substitution.changes?.subjectId);
             
             const finalLesson: LessonBlock = {
                 ...lesson,
                 teacherName: newTeacherName,
-                teacherId: substitution.changes.teacherIds?.[0] || lesson.teacherId,
+                teacherId: substitution.changes?.teacherIds?.[0] || lesson.teacherId,
                 subjectId: newSubject ? newSubject.id : lesson.subjectId,
                 subjectName: newSubject ? newSubject.name : lesson.subjectName,
                 subjectShortcut: newSubject ? newSubject.shortcut : lesson.subjectShortcut,

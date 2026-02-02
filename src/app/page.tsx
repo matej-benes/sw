@@ -54,7 +54,7 @@ export default function LoginPage() {
     setIsSigningIn(true);
     try {
       await signIn(data.email, data.password);
-      router.replace('/dashboard');
+      // AuthProvider will handle redirection based on user state (pin)
     } catch (error: any) {
       toast({
         variant: 'destructive',
@@ -118,10 +118,6 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" disabled={isSigningIn}>
               {isSigningIn && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Přihlásit se
-            </Button>
-            <Separator />
-            <Button variant="link" asChild className="w-full">
-                <Link href="/registrace">První přihlášení / Registrace</Link>
             </Button>
           </CardFooter>
         </form>

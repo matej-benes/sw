@@ -14,15 +14,19 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
+      // Check for a custom claim, which is more secure and efficient.
+      // This requires a Cloud Function to set the claim upon user creation/promotion.
+      // return request.auth.token.isSuperAdmin == true;
+      // Fallback to checking a field in the user's document.
       return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuperAdmin == true;
-    }
-
-    function hasRole(role) {
-      return isSignedIn() && getUserData().roles.hasAny([role]);
     }
     
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && getUserData().roles.hasAny([role]);
     }
 
     function hasAnyRole(roles) {
@@ -37,9 +41,20 @@ service cloud.firestore {
     // Per-Collection Rules
 
     match /users/{userId} {
-      allow read, create: if true;
+      // Admins can list all users.
+      allow list: if hasRole('administrator');
+      // Users can see their own profile, admins can see anyone's.
+      allow get: if isOwner(userId) || hasRole('administrator');
+      
+      // Admins can create users. This is broad to allow the client-side admin creation flow.
+      // A more secure implementation would use a Cloud Function.
+      allow create: if hasRole('administrator');
+
+      // Users can update their own profile, admins can update anyone's.
       allow update: if isOwner(userId) || hasRole('administrator');
-      allow delete: if isOwner(userId) || hasRole('administrator');
+
+      // Only admins can delete users.
+      allow delete: if hasRole('administrator');
     }
     
     match /grades/{gradeId} {
@@ -108,7 +123,7 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow get: if isSignedIn() && (resource.data.senderId == request.auth.uid || request.auth.uid in resource.data.recipientIds);
       allow list: if isSignedIn();
-      allow update: if isSignedIn() && request.auth.uid in resource.data.recipientIds;
+      allow update(write): if isSignedIn() && request.auth.uid in resource.data.recipientIds;
       allow delete: if false; 
     }
 
