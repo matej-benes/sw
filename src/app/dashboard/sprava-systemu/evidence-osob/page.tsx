@@ -62,7 +62,7 @@ import {
   getDocs,
   limit,
 } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth';
 import type { User } from '@/lib/types';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -351,10 +351,6 @@ function AdminUserManagement() {
           await updateDoc(userRef, cleanedData);
           toast({ title: 'Uživatel aktualizován' });
         } else {
-          if (!formData.email || !formData.name) {
-            throw new Error("Email a jméno jsou povinné pro vytvoření nového uživatele.");
-          }
-          
           const newUserForDb: Omit<Partial<User>, 'id'> = {
             name: formData.name,
             email: formData.email,
@@ -366,7 +362,17 @@ function AdminUserManagement() {
             ...(formData.tridaId && { tridaId: formData.tridaId }),
           };
           const cleanedData = removeUndefinedFields(newUserForDb);
-          await addDocumentNonBlocking(collection(firestore, 'users'), cleanedData);
+          const userDocPromise = addDocumentNonBlocking(collection(firestore, 'users'), cleanedData);
+
+          if (userDocPromise && cleanedData.pin) {
+              userDocPromise.then((userDocRef) => {
+                  if (userDocRef) {
+                      const pinRef = doc(firestore, 'pins', cleanedData.pin!);
+                      setDocumentNonBlocking(pinRef, { userId: userDocRef.id }, {});
+                  }
+              });
+          }
+
           toast({ title: 'Uživatel vytvořen', description: `Uživatel ${formData.name} byl vytvořen s registračním PINem.` });
         }
       } catch (e: any) {
@@ -382,10 +388,20 @@ function AdminUserManagement() {
         if (!deletingUser || !firestore) return;
 
         try {
+            const userRef = doc(firestore, 'users', deletingUser.id);
+            const userSnap = await getDoc(userRef);
+
             const batch = writeBatch(firestore);
             
-            const userRef = doc(firestore, 'users', deletingUser.id);
             batch.delete(userRef);
+
+            if (userSnap.exists()) {
+                const userData = userSnap.data();
+                if (userData.pin) {
+                    const pinRef = doc(firestore, 'pins', userData.pin);
+                    batch.delete(pinRef);
+                }
+            }
 
             await batch.commit();
             

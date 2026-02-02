@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Logo } from '@/components/logo';
+import { Logo } from '@/components/ui/logo';
 import { Loader2, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -28,13 +28,13 @@ import {
   doc,
   getDoc,
   setDoc,
-  deleteDoc
+  deleteDoc,
+  writeBatch
 } from 'firebase/firestore';
 import { useFirestore } from '@/firebase';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import type { User } from '@/lib/types';
 import Link from 'next/link';
-import { verifyPinByPin } from '@/ai/flows/verify-pin-by-pin';
 
 const pinSchema = z.object({
   pin: z.string().length(6, 'PIN musí mít 6 číslic.'),
@@ -75,19 +75,45 @@ export default function RegistrationPage() {
 
   const onPinSubmit = async (data: PinFormValues) => {
     setIsLoading(true);
+    if (!firestore) {
+      toast({ variant: 'destructive', title: 'Chyba', description: 'Databáze není dostupná.' });
+      setIsLoading(false);
+      return;
+    }
+  
     try {
-      const result = await verifyPinByPin({ pin: data.pin });
-
-      if (!result.user) {
+      const pinDocRef = doc(firestore, 'pins', data.pin);
+      const pinDocSnap = await getDoc(pinDocRef);
+  
+      if (!pinDocSnap.exists()) {
         toast({
           variant: 'destructive',
           title: 'Chyba ověření',
           description: 'Zadaný PIN nebyl nalezen nebo je nesprávný.',
         });
-      } else {
-        setVerifiedUser(result.user as User);
-        setStep(2);
+        setIsLoading(false);
+        return;
       }
+  
+      const userId = pinDocSnap.data().userId;
+      if (!userId) {
+          throw new Error('Chybějící ID uživatele v PIN dokumentu.');
+      }
+      const userDocRef = doc(firestore, 'users', userId);
+      const userDocSnap = await getDoc(userDocRef);
+  
+      if (!userDocSnap.exists()) {
+        toast({
+          variant: 'destructive',
+          title: 'Chyba',
+          description: 'Uživatelský účet propojený s tímto PINem neexistuje.',
+        });
+        setIsLoading(false);
+        return;
+      }
+  
+      setVerifiedUser({ id: userDocSnap.id, ...userDocSnap.data() } as User);
+      setStep(2);
     } catch (error) {
       console.error('Error verifying PIN: ', error);
       toast({
@@ -95,16 +121,17 @@ export default function RegistrationPage() {
         title: 'Chyba',
         description: 'Při ověřování PINu došlo k chybě.',
       });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const onPasswordSubmit = async (data: PasswordFormValues) => {
-    if (!verifiedUser?.email || !verifiedUser?.id || !firestore) {
+    if (!verifiedUser?.email || !verifiedUser?.id || !firestore || !verifiedUser.pin) {
       toast({
         variant: 'destructive',
         title: 'Chyba',
-        description: 'Uživatelská data nejsou k dispozici.',
+        description: 'Uživatelská data nejsou k dispozici nebo chybí PIN.',
       });
       return;
     }
@@ -122,19 +149,26 @@ export default function RegistrationPage() {
       const tempUserSnap = await getDoc(tempUserDocRef);
 
       if(tempUserSnap.exists()) {
+        const batch = writeBatch(firestore);
+
         const userData = tempUserSnap.data();
         // Remove pin and old id from data before creating new doc
         delete (userData as any).pin;
         delete (userData as any).id;
         
         const newUserDocRef = doc(firestore, 'users', userCredential.user.uid);
-        await setDoc(newUserDocRef, userData);
-        await deleteDoc(tempUserDocRef);
+        batch.set(newUserDocRef, userData);
+
+        batch.delete(tempUserDocRef);
+
+        const pinDocRef = doc(firestore, 'pins', verifiedUser.pin);
+        batch.delete(pinDocRef);
+
+        await batch.commit();
 
       } else {
         throw new Error("Původní uživatelský dokument nebyl nalezen.");
       }
-
 
       toast({
         title: 'Registrace dokončena!',
