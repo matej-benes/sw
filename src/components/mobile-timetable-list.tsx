@@ -91,6 +91,23 @@ function CancelledLessonItem({ substitution, period, time }: { substitution: Sub
     );
 }
 
+// Helper function to safely parse date strings
+function safeParseISO(dateString: string | null | undefined): Date | null {
+    if (!dateString) return null;
+    try {
+        const date = parseISO(dateString);
+        if (isNaN(date.getTime())) {
+            console.warn(`Invalid date string encountered: ${dateString}`);
+            return null; // Invalid date
+        }
+        return date;
+    } catch (e) {
+        console.error(`Error parsing date string: ${dateString}`, e);
+        return null;
+    }
+}
+
+
 export function MobileTimetableList({
     dailySchedule,
     eventsData,
@@ -140,7 +157,8 @@ export function MobileTimetableList({
         const keyPrefix = `${day.toISOString()}-${index}`;
 
         const event = eventsData.find(e => {
-            const eventDate = parseISO(e.datum);
+            const eventDate = safeParseISO(e.datum);
+            if (!eventDate) return false;
             return isSameDay(eventDate, day) && e.cas === time.split('-')[0];
         });
 
@@ -152,7 +170,8 @@ export function MobileTimetableList({
         
         const substitution = substitutionsData.find(sub => {
              if (!sub.date || !sub.originalLesson) return false;
-             const subDate = parseISO(sub.date);
+             const subDate = safeParseISO(sub.date);
+             if (!subDate) return false;
              return isSameDay(subDate, day) && sub.originalLesson.period === index && sub.originalLesson.classId === dailySchedule.tridaId;
         });
         
