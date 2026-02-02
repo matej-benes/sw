@@ -52,7 +52,7 @@ export function MobileDashboard() {
   const { user, hasRole, loading: isUserLoading } = useAuth();
   
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined);
+  const [selectedClassId, setSelectedClassId] = useState<string>('');
 
   const studentRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -72,6 +72,18 @@ export function MobileDashboard() {
     return undefined;
   }, [hasRole, user, studentData, selectedClassId]);
 
+  const teacherClassesQuery = useMemoFirebase(() => {
+    if (!firestore || !user ) return null;
+     if (hasRole('administrator')) {
+      return collection(firestore, 'tridy');
+    }
+    if (hasRole('ucitel')) {
+        return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
+    }
+    return null;
+  }, [firestore, user, hasRole]);
+  const { data: teacherClasses, isLoading: teacherClassesLoading } = useCollection<Trida>(teacherClassesQuery);
+    
   // Set default class for teachers/admins or the user's class
   useEffect(() => {
     if (selectedClassId) return; // Already have a class, do nothing
@@ -94,20 +106,7 @@ export function MobileDashboard() {
     const scheduleId = `${targetClassId}-${format(currentDate, 'yyyy-MM-dd')}`;
     return doc(firestore, 'rozvrhy', scheduleId);
   }, [firestore, targetClassId, currentDate]));
-
-  const teacherClassesQuery = useMemoFirebase(() => {
-    if (!firestore || !user ) return null;
-     if (hasRole('administrator')) {
-      return collection(firestore, 'tridy');
-    }
-    if (hasRole('ucitel')) {
-        return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
-    }
-    return null;
-  }, [firestore, user, hasRole]);
-  const { data: teacherClasses, isLoading: teacherClassesLoading } = useCollection<Trida>(teacherClassesQuery);
-
-
+  
   const eventsQuery = useMemoFirebase(() => {
     if (!firestore || !targetClassId) return null;
     return query(collection(firestore, 'udalosti'), where('tridyIds', 'array-contains', targetClassId));
