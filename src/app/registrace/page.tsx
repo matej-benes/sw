@@ -34,6 +34,7 @@ import { useFirestore } from '@/firebase';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import type { User } from '@/lib/types';
 import Link from 'next/link';
+import { verifyPinByPin } from '@/ai/flows/verify-pin-by-pin';
 
 const pinSchema = z.object({
   pin: z.string().length(6, 'PIN musí mít 6 číslic.'),
@@ -73,24 +74,18 @@ export default function RegistrationPage() {
   } = useForm<PasswordFormValues>({ resolver: zodResolver(passwordSchema) });
 
   const onPinSubmit = async (data: PinFormValues) => {
-    if (!firestore) return;
     setIsLoading(true);
     try {
-      const q = query(
-        collection(firestore, 'users'),
-        where('pin', '==', data.pin)
-      );
-      const querySnapshot = await getDocs(q);
+      const result = await verifyPinByPin({ pin: data.pin });
 
-      if (querySnapshot.empty) {
+      if (!result.user) {
         toast({
           variant: 'destructive',
           title: 'Chyba ověření',
           description: 'Zadaný PIN nebyl nalezen nebo je nesprávný.',
         });
       } else {
-        const userDoc = querySnapshot.docs[0];
-        setVerifiedUser({ id: userDoc.id, ...userDoc.data() } as User);
+        setVerifiedUser(result.user as User);
         setStep(2);
       }
     } catch (error) {
