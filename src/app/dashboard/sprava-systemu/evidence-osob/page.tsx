@@ -138,6 +138,7 @@ function UserForm({
     },
   });
   
+  const [showPin, setShowPin] = useState(false);
   const currentPin = watch('pin');
   
   const onSubmit = (data: UserFormData) => {
@@ -146,7 +147,7 @@ function UserForm({
   };
 
   const generatePin = () => {
-    const newPin = Math.random().toString(36).slice(-8);
+    const newPin = Math.random().toString(36).substring(2, 10);
     setValue('pin', newPin, { shouldValidate: true });
   };
   
@@ -241,9 +242,12 @@ function UserForm({
        )}
       
        <div className="space-y-2">
-        <Label htmlFor="pin">PIN (Dočasné heslo)</Label>
+        <Label htmlFor="pin">Dočasné heslo</Label>
         <div className="flex items-center gap-2">
-          <Input id="pin" {...register('pin')} placeholder={user ? "Nezměněno" : "Není vygenerováno"} />
+          <Input id="pin" {...register('pin')} type={showPin ? 'text' : 'password'} placeholder={user ? "Nezměněno" : "Není vygenerováno"} />
+          <Button type="button" variant="ghost" size="icon" onClick={() => setShowPin(!showPin)} className="h-9 w-9">
+              {showPin ? <EyeOff /> : <Eye />}
+          </Button>
           <Button type="button" variant="outline" onClick={generatePin}>
             <ShieldCheck className="mr-2 h-4 w-4" />
             Generovat
@@ -336,7 +340,7 @@ function AdminUserManagement() {
           toast({ title: 'Uživatel aktualizován' });
         } else {
           if (!formData.email || !pin) {
-            throw new Error("Email a PIN (dočasné heslo) jsou povinné pro vytvoření nového uživatele.");
+            throw new Error("Email a dočasné heslo jsou povinné pro vytvoření nového uživatele.");
           }
           
           const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
