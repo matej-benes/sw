@@ -106,7 +106,7 @@ function UserForm({
 }: {
   user?: User | null;
   allUsers: User[],
-  onSave: (data: Partial<User>, pin: string | null) => void;
+  onSave: (data: UserFormData) => void;
   closeDialog: () => void;
 }) {
   const { hasRole } = useAuth();
@@ -141,10 +141,7 @@ function UserForm({
   const currentPin = watch('pin');
   
   const onSubmit = (data: UserFormData) => {
-    const pin = data.pin || null;
-    const userData = { ...data };
-    delete (userData as any).pin;
-    onSave(userData, pin);
+    onSave(data);
     closeDialog();
   };
 
@@ -336,7 +333,7 @@ function AdminUserManagement() {
         return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined && v !== null));
     };
 
-    const handleSaveUser = async (formData: Partial<User>, pin: string | null) => {
+    const handleSaveUser = async (formData: UserFormData) => {
       if (!firestore) return;
 
       try {
@@ -349,7 +346,7 @@ function AdminUserManagement() {
         
         if (editingUser) {
           const userRef = doc(firestore, 'users', editingUser.id);
-          const dataToUpdate = { ...formData, pin };
+          const dataToUpdate = { ...formData };
           const cleanedData = removeUndefinedFields(dataToUpdate);
           await updateDoc(userRef, cleanedData);
           toast({ title: 'Uživatel aktualizován' });
@@ -363,7 +360,7 @@ function AdminUserManagement() {
             email: formData.email,
             roles: formData.roles || [],
             organizationId: organizationId,
-            pin: pin || Math.floor(100000 + Math.random() * 900000).toString(),
+            pin: formData.pin || Math.floor(100000 + Math.random() * 900000).toString(),
             avatarUrl: `https://picsum.photos/seed/${Math.random()}/100/100`,
             ...(formData.studentId && { studentId: formData.studentId }),
             ...(formData.tridaId && { tridaId: formData.tridaId }),
