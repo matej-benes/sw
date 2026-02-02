@@ -54,27 +54,40 @@ export function MobileDashboard() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined);
 
+  const studentRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    const studentId = hasRole('ziak') ? user.id : user.studentId;
+    if (!studentId) return null;
+    return doc(firestore, 'users', studentId);
+  }, [firestore, user, hasRole]);
+  const { data: studentData, isLoading: studentLoading } = useDoc<User>(studentRef);
+
   // Determine the target class ID based on role
   const targetClassId = useMemo(() => {
     if (hasRole('ucitel') || hasRole('administrator')) {
       return selectedClassId;
     }
-    return user?.tridaId;
-  }, [hasRole, user?.tridaId, selectedClassId]);
+    if (hasRole('ziak')) return user?.tridaId;
+    if (hasRole('rodic')) return studentData?.tridaId;
+    return undefined;
+  }, [hasRole, user, studentData, selectedClassId]);
 
-  // Set default class for teachers
+  // Set default class for teachers/admins or the user's class
   useEffect(() => {
-    if ((hasRole('ucitel') || hasRole('administrator')) && teacherClasses && teacherClasses.length > 0 && !selectedClassId) {
-      setSelectedClassId(teacherClasses[0].id);
-    }
-  }, [hasRole, teacherClasses, selectedClassId]);
+    if (selectedClassId) return; // Already have a class, do nothing
 
-  // Set class for non-teachers
-  useEffect(() => {
-    if (!hasRole('ucitel') && !hasRole('administrator') && user?.tridaId) {
-      setSelectedClassId(user.tridaId);
+    if (hasRole('ucitel') || hasRole('administrator')) {
+        if (teacherClasses && teacherClasses.length > 0) {
+            setSelectedClassId(teacherClasses[0].id);
+        }
+    } else { // Student or Parent
+        const classId = hasRole('ziak') ? user?.tridaId : studentData?.tridaId;
+        if (classId) {
+            setSelectedClassId(classId);
+        }
     }
-  }, [hasRole, user?.tridaId]);
+  }, [hasRole, user, studentData, teacherClasses, selectedClassId]);
+
 
   const dailySchedule = useDoc<Rozvrh>(useMemoFirebase(() => {
     if (!firestore || !targetClassId) return null;
@@ -129,7 +142,7 @@ export function MobileDashboard() {
   const handleSetToday = () => setCurrentDate(new Date());
 
   const canManage = hasRole('ucitel') || hasRole('administrator');
-  const isDataLoading = dailySchedule.isLoading || eventsLoading || subsLoading || zapisyLoading || isUserLoading || (canManage && teacherClassesLoading) || teachersLoading || subjectsLoading;
+  const isDataLoading = dailySchedule.isLoading || eventsLoading || subsLoading || zapisyLoading || isUserLoading || studentLoading || (canManage && teacherClassesLoading) || teachersLoading || subjectsLoading;
 
   if (isDataLoading) {
     return <div className="flex h-full w-full items-center justify-center">Načítání...</div>;
