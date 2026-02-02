@@ -48,7 +48,7 @@ export default function LessonDetailPage() {
     const lesson = useMemo<LessonBlock | null>(() => {
         const originalLesson = schedule?.hodiny[parseInt(periodStr, 10)];
         if (!originalLesson) return null;
-        if (!substitution || (substitution.changes.type && Array.isArray(substitution.changes.type) && substitution.changes.type.includes('zruseno'))) {
+        if (!substitution || !substitution.changes || (substitution.changes.type && Array.isArray(substitution.changes.type) && substitution.changes.type.includes('zruseno'))) {
             return originalLesson;
         }
 
@@ -90,7 +90,7 @@ export default function LessonDetailPage() {
     
     const timeSlot = schedule?.timeSlots[parseInt(periodStr, 10)];
     
-    const classRef = useMemoFirebase(() => lesson ? doc(firestore, 'tridy', lesson.classId) : null, [firestore, lesson]);
+    const classRef = useMemoFirebase(() => (firestore && classId) ? doc(firestore, 'tridy', classId) : null, [firestore, classId]);
     const {data: classData} = useDoc<Trida>(classRef);
     
     const isLoading = scheduleLoading || zapisLoading || substitutionLoading || teachersLoading || subjectsLoading;
