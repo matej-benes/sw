@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
@@ -94,7 +93,6 @@ export function DesktopDashboard() {
   
   const allStaffQuery = useMemoFirebase(() => {
       if (!firestore) return null;
-      // Fetch all potential teachers/staff including admins
       return query(collection(firestore, "users"), where("roles", "array-contains-any", ["ucitel", "asistent pedagoga", "vedouci pracovnik", "administrator"]));
   }, [firestore]);
   const { data: allStaff } = useCollection<User>(allStaffQuery);
@@ -153,10 +151,10 @@ export function DesktopDashboard() {
 
         for (const day of weekDays) {
             const dayStr = format(day, 'yyyy-MM-dd');
+            // Querying all schedules for the date. We'll filter by teacher in memory.
             const q = query(
                 collection(firestore, 'rozvrhy'), 
-                where('datum', '==', dayStr),
-                where('organizationId', '==', user.organizationId)
+                where('datum', '==', dayStr)
             );
             const querySnapshot = await getDocs(q);
 
@@ -183,9 +181,10 @@ export function DesktopDashboard() {
 
                     if (sub) {
                         const isAssignedToMe = sub.changes.teacherIds?.includes(user.id);
-                        const isCancelled = Array.isArray(sub.changes.type) ? sub.changes.type.includes('zruseno') : sub.changes.type === 'zruseno';
+                        const isCancelled = Array.isArray(sub.changes.type) 
+                            ? sub.changes.type.includes('zruseno') 
+                            : sub.changes.type === 'zruseno';
                         
-                        // User is substituting
                         if (isAssignedToMe && !isCancelled) {
                             shouldInclude = true;
                             finalLesson = {
@@ -202,9 +201,7 @@ export function DesktopDashboard() {
                                     finalLesson.subjectShortcut = newSubj.shortcut;
                                 }
                             }
-                        } 
-                        // User is original teacher and NOT replaced or is part of the new team
-                        else if (lesson.teacherId === user.id && !isCancelled) {
+                        } else if (lesson.teacherId === user.id && !isCancelled) {
                             const isReplaced = sub.changes.teacherIds && sub.changes.teacherIds.length > 0 && !sub.changes.teacherIds.includes(user.id);
                             if (!isReplaced) {
                                 shouldInclude = true;
@@ -215,7 +212,6 @@ export function DesktopDashboard() {
                     }
 
                     if (shouldInclude) {
-                        // Avoid overwriting if possible, or handle conflicts
                         teacherDayLessons[index] = finalLesson;
                     }
                 });

@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
@@ -79,7 +78,6 @@ export function MobileDashboard() {
   }, [firestore, user, hasRole]);
   const { data: studentData, isLoading: studentLoading } = useDoc<User>(studentRef);
 
-  // Determine the target class ID based on role
   const targetClassId = useMemo(() => {
     if (isPersonalView) return undefined;
     if (isAdmin) {
@@ -102,7 +100,6 @@ export function MobileDashboard() {
   }, [firestore, user, hasRole]);
   const { data: teacherClasses, isLoading: teacherClassesLoading } = useCollection<Trida>(teacherClassesQuery);
     
-  // Set default class for teachers/admins or the user's class
   useEffect(() => {
     if (selectedClassId) return;
 
@@ -110,7 +107,7 @@ export function MobileDashboard() {
         if (teacherClasses && teacherClasses.length > 0) {
             setSelectedClassId(teacherClasses[0].id);
         }
-    } else if (!isPersonalView) { // Student or Parent
+    } else if (!isPersonalView) { 
         const classId = hasRole('ziak') ? user?.tridaId : studentData?.tridaId;
         if (classId) {
             setSelectedClassId(classId);
@@ -139,7 +136,6 @@ export function MobileDashboard() {
     return query(collection(firestore, "users"), where("roles", "array-contains-any", ["ucitel", "asistent pedagoga", "vedouci pracovnik", "administrator"]));
   }, [firestore]));
 
-  // Fetch and aggregate schedule for teacher view
   useEffect(() => {
     if (!isPersonalView || !firestore || !user?.id || !substitutionsData) return;
 
@@ -147,10 +143,10 @@ export function MobileDashboard() {
         setTeacherScheduleLoading(true);
 
         const dayStr = format(currentDate, 'yyyy-MM-dd');
+        // Fetch all schedules for the date. We'll filter by teacher in memory.
         const q = query(
             collection(firestore, 'rozvrhy'), 
-            where('datum', '==', dayStr),
-            where('organizationId', '==', user.organizationId)
+            where('datum', '==', dayStr)
         );
         const querySnapshot = await getDocs(q);
         const schedulesForDay = querySnapshot.docs.map(d => d.data() as Rozvrh);
@@ -177,7 +173,9 @@ export function MobileDashboard() {
 
                 if (sub) {
                     const isAssignedToMe = sub.changes.teacherIds?.includes(user.id);
-                    const isCancelled = Array.isArray(sub.changes.type) ? sub.changes.type.includes('zruseno') : sub.changes.type === 'zruseno';
+                    const isCancelled = Array.isArray(sub.changes.type) 
+                        ? sub.changes.type.includes('zruseno') 
+                        : sub.changes.type === 'zruseno';
                     
                     if (isAssignedToMe && !isCancelled) {
                         shouldInclude = true;

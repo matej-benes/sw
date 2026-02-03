@@ -93,6 +93,7 @@ export function ScheduleGenerator({ isOpen, onOpenChange }: ScheduleGeneratorPro
 
           const newSchedule: Omit<Rozvrh, 'id'> = {
             tridaId: classId,
+            organizationId: template.organizationId || '',
             datum: dayString,
             timeSlots: template.timeSlots,
             hodiny: lessonsForDay,
@@ -134,7 +135,7 @@ export function ScheduleGenerator({ isOpen, onOpenChange }: ScheduleGeneratorPro
               options={classOptions}
               onValueChange={setSelectedClassIds}
               defaultValue={selectedClassIds}
-              placeholder="Vyberte třídy..."
+              placeholder="Vyberte třídu..."
             />
           </div>
           <div className="space-y-2">
