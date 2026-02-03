@@ -99,7 +99,7 @@ export function MobileDashboard() {
     
   // Set default class for teachers/admins or the user's class
   useEffect(() => {
-    if (selectedClassId) return; // Already have a class, do nothing
+    if (selectedClassId) return;
 
     if ((hasRole('ucitel') || hasRole('administrator')) && !isTeacherView) {
         if (teacherClasses && teacherClasses.length > 0) {
@@ -113,15 +113,35 @@ export function MobileDashboard() {
     }
   }, [hasRole, user, studentData, teacherClasses, selectedClassId, isTeacherView]);
 
+  const substitutionsQuery = useMemoFirebase(() => {
+    if (!firestore || !user?.organizationId) return null;
+    if (isTeacherView) {
+        return query(collection(firestore, 'suplovani'), where('organizationId', '==', user.organizationId));
+    }
+    if (!targetClassId) return null;
+    return query(collection(firestore, 'suplovani'), where('originalLesson.classId', '==', targetClassId));
+  }, [firestore, targetClassId, isTeacherView, user?.organizationId]);
+
+  const { data: substitutionsData } = useCollection<Substitution>(substitutionsQuery);
+
+  const { data: subjects } = useCollection<Predmet>(useMemoFirebase(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'predmety');
+  }, [firestore]));
+
   // Fetch and aggregate schedule for teacher view
   useEffect(() => {
-    if (!isTeacherView || !firestore || !user?.id) return;
+    if (!isTeacherView || !firestore || !user?.id || !substitutionsData) return;
 
     const fetchAndAggregate = async () => {
         setTeacherScheduleLoading(true);
 
         const dayStr = format(currentDate, 'yyyy-MM-dd');
-        const q = query(collection(firestore, 'rozvrhy'), where('datum', '==', dayStr));
+        const q = query(
+            collection(firestore, 'rozvrhy'), 
+            where('datum', '==', dayStr),
+            where('organizationId', '==', user.organizationId)
+        );
         const querySnapshot = await getDocs(q);
         const schedulesForDay = querySnapshot.docs.map(d => d.data() as Rozvrh);
         
@@ -131,10 +151,39 @@ export function MobileDashboard() {
         }
 
         const teacherDayLessons: (LessonBlock | null)[] = Array(resolvedTimeSlots.length).fill(null);
+        const subsToday = substitutionsData.filter(s => s.date === dayStr);
 
         for (const schedule of schedulesForDay) {
             schedule.hodiny.forEach((lesson, index) => {
-                if (lesson && lesson.teacherId === user.id) {
+                if (!lesson) return;
+
+                const sub = subsToday.find(s => 
+                    s.originalLesson.classId === schedule.tridaId && 
+                    s.originalLesson.period === index
+                );
+
+                if (sub) {
+                    const isAssignedToMe = sub.changes.teacherIds?.includes(user.id);
+                    const isCancelled = Array.isArray(sub.changes.type) ? sub.changes.type.includes('zruseno') : sub.changes.type === 'zruseno';
+                    
+                    if (isAssignedToMe && !isCancelled) {
+                        const virtualLesson: LessonBlock = {
+                            ...lesson,
+                            teacherId: user.id,
+                            teacherName: user.name,
+                            isSubstitution: true,
+                        };
+                        if (sub.changes.subjectId && subjects) {
+                            const newSubj = subjects.find(s => s.id === sub.changes.subjectId);
+                            if (newSubj) {
+                                virtualLesson.subjectId = newSubj.id;
+                                virtualLesson.subjectName = newSubj.name;
+                                virtualLesson.subjectShortcut = newSubj.shortcut;
+                            }
+                        }
+                        teacherDayLessons[index] = virtualLesson;
+                    }
+                } else if (lesson.teacherId === user.id) {
                     teacherDayLessons[index] = lesson;
                 }
             });
@@ -152,7 +201,7 @@ export function MobileDashboard() {
     };
 
     fetchAndAggregate();
-  }, [isTeacherView, firestore, currentDate, user?.id, user?.organizationId]);
+  }, [isTeacherView, firestore, currentDate, user?.id, user?.organizationId, substitutionsData, subjects]);
 
 
   const dailySchedule = useDoc<Rozvrh>(useMemoFirebase(() => {
@@ -166,28 +215,17 @@ export function MobileDashboard() {
     return query(collection(firestore, 'udalosti'), where('tridyIds', 'array-contains', targetClassId));
   }, [firestore, targetClassId]);
   
-  const substitutionsQuery = useMemoFirebase(() => {
-    if (!firestore || !targetClassId) return null;
-     return query(collection(firestore, 'suplovani'), where('originalLesson.classId', '==', targetClassId));
-  }, [firestore, targetClassId]);
-  
   const zapisyQuery = useMemoFirebase(() => {
     if (!firestore || !targetClassId) return null;
     return query(collection(firestore, 'zapisyHodin'), where('tridaId', '==', targetClassId));
   }, [firestore, targetClassId]);
 
   const { data: eventsData, isLoading: eventsLoading } = useCollection<Udalost>(eventsQuery);
-  const { data: substitutionsData, isLoading: subsLoading } = useCollection<Substitution>(substitutionsQuery);
   const { data: zapisyData, isLoading: zapisyLoading } = useCollection<ZapisHodiny>(zapisyQuery);
   
   const { data: teachers, isLoading: teachersLoading } = useCollection<User>(useMemoFirebase(() => {
     if (!firestore) return null;
     return query(collection(firestore, "users"), where("roles", "array-contains", "ucitel"));
-  }, [firestore]));
-
-  const { data: subjects, isLoading: subjectsLoading } = useCollection<Predmet>(useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, 'predmety');
   }, [firestore]));
 
   const handlePrevDay = () => setCurrentDate(prev => subDays(prev, 1));
@@ -197,7 +235,7 @@ export function MobileDashboard() {
   const canManage = hasRole('ucitel') || hasRole('administrator');
   
   const scheduleToRender = isTeacherView ? teacherDailySchedule : dailySchedule.data;
-  const isDataLoading = isUserLoading || studentLoading || teachersLoading || subjectsLoading || eventsLoading || subsLoading || zapisyLoading || (isTeacherView ? teacherScheduleLoading : (dailySchedule.isLoading || (canManage && teacherClassesLoading)));
+  const isDataLoading = isUserLoading || studentLoading || teachersLoading || (subjects === null) || eventsLoading || zapisyLoading || (isTeacherView ? teacherScheduleLoading : (dailySchedule.isLoading || (canManage && teacherClassesLoading)));
 
   if (isDataLoading) {
     return <div className="flex h-full w-full items-center justify-center">Načítání...</div>;

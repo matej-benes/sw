@@ -642,6 +642,7 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                                             dayInfo={dayInfo} 
                                             period={periodIndex + 1} 
                                             classId={classId} 
+                                            isNewSubstitutedLesson={lesson.isSubstitution}
                                             onSubstitute={() => { setEditingSubFor({ lesson, dayInfo, period: periodIndex + 1, classId, substitution: null }); setIsSubDialogOpen(true); }}
                                             onGrade={() => handleGrade(lesson, dayInfo, periodIndex + 1, classId)}
                                         />
@@ -674,7 +675,7 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                         <AlertDialogDescription>Tato akce je nevratná.</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel>Zpět</AlertDialogCancel>
+                        <AlertDialogCancel>Zět</AlertDialogCancel>
                         <AlertDialogAction onClick={handleDeleteSubstitution} className="bg-destructive hover:bg-destructive/90">
                             Zrušit suplování
                         </AlertDialogAction>

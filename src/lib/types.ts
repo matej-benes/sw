@@ -115,6 +115,7 @@ export interface LessonBlock {
   className: string;
   ucebnaId?: string;
   ucebnaName?: string;
+  isSubstitution?: boolean;
 }
 
 export type ScheduleGrid = {
@@ -292,5 +293,3 @@ export interface ZaznamSchuzky {
     createdBy: string;
     createdAt: Timestamp;
 }
-
-    

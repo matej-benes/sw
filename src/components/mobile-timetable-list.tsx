@@ -233,6 +233,7 @@ export function MobileTimetableList({
                 time={time}
                 topic={zapis?.topic}
                 onClick={() => handleLessonClick(lesson, index)}
+                isSubstituting={lesson.isSubstitution}
             />
         ];
     });

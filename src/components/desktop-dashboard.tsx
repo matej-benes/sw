@@ -129,11 +129,17 @@ export function DesktopDashboard() {
     return [today, addDays(today, 1)];
   }, [currentDate, isFullWeekView]);
 
+  const { data: substitutionsData } = useCollection<Substitution>(
+    useMemoFirebase(
+      () => (firestore && user?.organizationId ? query(collection(firestore, 'suplovani'), where('organizationId', '==', user.organizationId)) : null),
+      [firestore, user?.organizationId]
+    )
+  );
 
   useEffect(() => {
-    if (!isTeacherView || !firestore || weekDays.length === 0 || !user?.id) return;
+    if (!isTeacherView || !firestore || weekDays.length === 0 || !user?.id || !substitutionsData) return;
 
-    const fetchTeacherSchedules = async () => {
+    const aggregateSchedules = async () => {
         setTeacherSchedulesLoading(true);
         const weekSchedules: Rozvrh[] = [];
         
@@ -141,7 +147,11 @@ export function DesktopDashboard() {
 
         for (const day of weekDays) {
             const dayStr = format(day, 'yyyy-MM-dd');
-            const q = query(collection(firestore, 'rozvrhy'), where('datum', '==', dayStr));
+            const q = query(
+                collection(firestore, 'rozvrhy'), 
+                where('datum', '==', dayStr),
+                where('organizationId', '==', user.organizationId)
+            );
             const querySnapshot = await getDocs(q);
 
             const schedulesForDay = querySnapshot.docs.map(d => d.data() as Rozvrh);
@@ -151,10 +161,40 @@ export function DesktopDashboard() {
             }
 
             const teacherDayLessons: (LessonBlock | null)[] = Array(resolvedTimeSlots.length).fill(null);
+            const subsToday = substitutionsData.filter(s => s.date === dayStr);
 
             for (const schedule of schedulesForDay) {
                 schedule.hodiny.forEach((lesson, index) => {
-                    if (lesson && lesson.teacherId === user.id) {
+                    if (!lesson) return;
+
+                    const sub = subsToday.find(s => 
+                        s.originalLesson.classId === schedule.tridaId && 
+                        s.originalLesson.period === index
+                    );
+
+                    if (sub) {
+                        const isAssignedToMe = sub.changes.teacherIds?.includes(user.id);
+                        const isCancelled = Array.isArray(sub.changes.type) ? sub.changes.type.includes('zruseno') : sub.changes.type === 'zruseno';
+                        
+                        if (isAssignedToMe && !isCancelled) {
+                            const virtualLesson: LessonBlock = {
+                                ...lesson,
+                                teacherId: user.id,
+                                teacherName: user.name,
+                                isSubstitution: true,
+                            };
+                            
+                            if (sub.changes.subjectId && subjects) {
+                                const newSubj = subjects.find(s => s.id === sub.changes.subjectId);
+                                if (newSubj) {
+                                    virtualLesson.subjectId = newSubj.id;
+                                    virtualLesson.subjectName = newSubj.name;
+                                    virtualLesson.subjectShortcut = newSubj.shortcut;
+                                }
+                            }
+                            teacherDayLessons[index] = virtualLesson;
+                        }
+                    } else if (lesson.teacherId === user.id) {
                         teacherDayLessons[index] = lesson;
                     }
                 });
@@ -173,8 +213,8 @@ export function DesktopDashboard() {
         setTeacherSchedulesLoading(false);
     };
 
-    fetchTeacherSchedules();
-  }, [isTeacherView, firestore, weekDays, user?.id, user?.organizationId]);
+    aggregateSchedules();
+  }, [isTeacherView, firestore, weekDays, user?.id, user?.organizationId, substitutionsData, subjects]);
 
   const targetClassId = useMemo(() => {
     if (isTeacherView) return undefined; // Teacher view is not class-based
@@ -209,13 +249,6 @@ export function DesktopDashboard() {
   }, [firestore, targetClassId]);
   const { data: eventsData } = useCollection<Udalost>(eventsQuery);
 
-  const { data: substitutionsData } = useCollection<Substitution>(
-    useMemoFirebase(
-      () => (firestore ? collection(firestore, 'suplovani') : null),
-      [firestore]
-    )
-  );
-  
   const teacherClassesQuery = useMemoFirebase(() => {
     if (!firestore || !user || !hasRole('ucitel')) return null;
     return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
