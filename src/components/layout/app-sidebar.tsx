@@ -26,6 +26,7 @@ import {
     CalendarDays,
     UserX,
     FileText,
+    GraduationCap,
 } from 'lucide-react';
 import { Separator } from '../ui/separator';
 
@@ -67,6 +68,10 @@ const spravaSystemuLinks = [
      { name: "Učebny", href: "/dashboard/sprava-systemu/ucebny", icon: Home },
      { name: "Přijímací řízení", href: "/dashboard/prijimaci-rizeni", icon: UserCheck },
 ]
+
+const teachingLinks = [
+    { name: 'Vyučující', href: '/dashboard/vyuka/vyucujici', icon: GraduationCap },
+];
 
 export function AppSidebar() {
   const { hasRole, isSuperAdmin } = useAuth();
@@ -120,6 +125,19 @@ export function AppSidebar() {
                  {isParentOrStudent && (
                     <>
                         <Separator className="my-2" />
+                        <Accordion type="single" collapsible className="w-full" defaultValue={pathname.includes('/dashboard/vyuka') ? 'vyuka' : undefined}>
+                            <AccordionItem value="vyuka" className="border-b-0">
+                                <AccordionTrigger className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary hover:no-underline [&[data-state=open]>svg]:rotate-180">
+                                     <GraduationCap className="h-4 w-4" />
+                                    Výuka
+                                </AccordionTrigger>
+                                <AccordionContent className="pl-8 pb-0">
+                                    <nav className='grid gap-1'>
+                                        {renderNavLinks(teachingLinks, true)}
+                                    </nav>
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
                         {renderNavLinks(studentParentLinks)}
                     </>
                  )}
