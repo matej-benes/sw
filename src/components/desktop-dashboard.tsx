@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
@@ -21,6 +22,7 @@ import {
   ChevronRight,
   Calendar as CalendarIcon,
   ChevronDown,
+  User as UserIcon,
 } from 'lucide-react';
 import { TimetableWidget } from '@/components/timetable-widget';
 import {
@@ -70,8 +72,12 @@ export function DesktopDashboard() {
   const { unreadCount } = useUnreadMessages();
   const router = useRouter();
 
-  const isTeacherView = hasRole('ucitel') && !isSuperAdmin();
+  const isTeacher = hasRole('ucitel');
+  const isAdmin = hasRole('administrator') || isSuperAdmin();
   
+  const [viewMode, setViewMode] = useState(isAdmin ? 'tridy' : 'muj-rozvrh');
+  const isPersonalView = viewMode === 'muj-rozvrh';
+
   const { data: organizations, isLoading: orgsLoading } = useCollection<Organization>(
     useMemoFirebase(
       () => (firestore ? collection(firestore, 'organizations') : null),
@@ -88,7 +94,8 @@ export function DesktopDashboard() {
   
   const allStaffQuery = useMemoFirebase(() => {
       if (!firestore) return null;
-      return query(collection(firestore, "users"), where("roles", "array-contains-any", ["ucitel", "asistent pedagoga", "vedouci pracovnik"]));
+      // Fetch all potential teachers/staff including admins
+      return query(collection(firestore, "users"), where("roles", "array-contains-any", ["ucitel", "asistent pedagoga", "vedouci pracovnik", "administrator"]));
   }, [firestore]);
   const { data: allStaff } = useCollection<User>(allStaffQuery);
 
@@ -108,7 +115,6 @@ export function DesktopDashboard() {
   const { data: studentData } = useDoc<User>(studentRef);
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState('tridy');
   const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined);
   const [isFullWeekView, setIsFullWeekView] = useState(false);
   
@@ -137,7 +143,7 @@ export function DesktopDashboard() {
   );
 
   useEffect(() => {
-    if (!isTeacherView || !firestore || weekDays.length === 0 || !user?.id || !substitutionsData) return;
+    if (!isPersonalView || !firestore || weekDays.length === 0 || !user?.id || !substitutionsData) return;
 
     const aggregateSchedules = async () => {
         setTeacherSchedulesLoading(true);
@@ -172,30 +178,45 @@ export function DesktopDashboard() {
                         s.originalLesson.period === index
                     );
 
+                    let shouldInclude = false;
+                    let finalLesson = { ...lesson };
+
                     if (sub) {
                         const isAssignedToMe = sub.changes.teacherIds?.includes(user.id);
                         const isCancelled = Array.isArray(sub.changes.type) ? sub.changes.type.includes('zruseno') : sub.changes.type === 'zruseno';
                         
+                        // User is substituting
                         if (isAssignedToMe && !isCancelled) {
-                            const virtualLesson: LessonBlock = {
+                            shouldInclude = true;
+                            finalLesson = {
                                 ...lesson,
                                 teacherId: user.id,
                                 teacherName: user.name,
                                 isSubstitution: true,
                             };
-                            
                             if (sub.changes.subjectId && subjects) {
                                 const newSubj = subjects.find(s => s.id === sub.changes.subjectId);
                                 if (newSubj) {
-                                    virtualLesson.subjectId = newSubj.id;
-                                    virtualLesson.subjectName = newSubj.name;
-                                    virtualLesson.subjectShortcut = newSubj.shortcut;
+                                    finalLesson.subjectId = newSubj.id;
+                                    finalLesson.subjectName = newSubj.name;
+                                    finalLesson.subjectShortcut = newSubj.shortcut;
                                 }
                             }
-                            teacherDayLessons[index] = virtualLesson;
+                        } 
+                        // User is original teacher and NOT replaced or is part of the new team
+                        else if (lesson.teacherId === user.id && !isCancelled) {
+                            const isReplaced = sub.changes.teacherIds && sub.changes.teacherIds.length > 0 && !sub.changes.teacherIds.includes(user.id);
+                            if (!isReplaced) {
+                                shouldInclude = true;
+                            }
                         }
                     } else if (lesson.teacherId === user.id) {
-                        teacherDayLessons[index] = lesson;
+                        shouldInclude = true;
+                    }
+
+                    if (shouldInclude) {
+                        // Avoid overwriting if possible, or handle conflicts
+                        teacherDayLessons[index] = finalLesson;
                     }
                 });
             }
@@ -214,29 +235,29 @@ export function DesktopDashboard() {
     };
 
     aggregateSchedules();
-  }, [isTeacherView, firestore, weekDays, user?.id, user?.organizationId, substitutionsData, subjects]);
+  }, [isPersonalView, firestore, weekDays, user?.id, user?.organizationId, substitutionsData, subjects]);
 
   const targetClassId = useMemo(() => {
-    if (isTeacherView) return undefined; // Teacher view is not class-based
-    if (hasRole('ucitel') || isSuperAdmin()) return selectedClassId;
+    if (isPersonalView) return undefined;
+    if (isAdmin) return selectedClassId;
     if (hasRole('ziak')) return user?.tridaId;
     if (hasRole('rodic')) return studentData?.tridaId;
     return undefined;
-  }, [hasRole, isSuperAdmin, isTeacherView, user, studentData, selectedClassId]);
+  }, [isAdmin, isPersonalView, user, studentData, selectedClassId, hasRole]);
   
   useEffect(() => {
-    if ((hasRole('ucitel') || isSuperAdmin()) && !isTeacherView && tridy && tridy.length > 0 && !selectedClassId) {
+    if (isAdmin && !isPersonalView && tridy && tridy.length > 0 && !selectedClassId) {
       setSelectedClassId(tridy[0].id);
-    } else if (!hasRole('ucitel') && !isSuperAdmin()) {
+    } else if (!isAdmin) {
       setSelectedClassId(user?.tridaId || studentData?.tridaId);
     }
-  }, [tridy, selectedClassId, hasRole, isSuperAdmin, isTeacherView, user?.tridaId, studentData?.tridaId]);
+  }, [tridy, selectedClassId, isAdmin, isPersonalView, user?.tridaId, studentData?.tridaId]);
 
 
   const schedulesQuery = useMemoFirebase(() => {
-      if (isTeacherView || !firestore || !targetClassId) return null;
+      if (isPersonalView || !firestore || !targetClassId) return null;
       return query(collection(firestore, 'rozvrhy'), where('tridaId', '==', targetClassId));
-  }, [firestore, targetClassId, isTeacherView]);
+  }, [firestore, targetClassId, isPersonalView]);
 
   const { data: schedulesData, isLoading: schedulesLoading } = useCollection<Rozvrh>(schedulesQuery);
 
@@ -319,7 +340,7 @@ export function DesktopDashboard() {
     };
   }, [studentClassData, allStaff, classTeacherData]);
 
-  const isLoading = isUserLoading || !user || orgsLoading || (isTeacherView ? teacherSchedulesLoading : schedulesLoading);
+  const isLoading = isUserLoading || !user || orgsLoading || (isPersonalView ? teacherSchedulesLoading : schedulesLoading);
 
   if (isLoading) {
     return <div className="flex h-full w-full items-center justify-center">Načítání dat...</div>;
@@ -371,7 +392,7 @@ export function DesktopDashboard() {
         <Card>
           <CardHeader className="flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-4">
-              {(hasRole('ucitel') || isSuperAdmin()) && !isTeacherView && (
+              {isAdmin && (
                 <>
                   <Select value={viewMode} onValueChange={setViewMode}>
                     <SelectTrigger className="w-[180px]">
@@ -379,8 +400,9 @@ export function DesktopDashboard() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="tridy">Třídy</SelectItem>
-                      <SelectItem value="ucitele">Učitelé</SelectItem>
-                      <SelectItem value="ucebny">Učebny</SelectItem>
+                      {isTeacher && <SelectItem value="muj-rozvrh">Můj rozvrh</SelectItem>}
+                      <SelectItem value="ucitele" disabled>Učitelé (připravujeme)</SelectItem>
+                      <SelectItem value="ucebny" disabled>Učebny (připravujeme)</SelectItem>
                     </SelectContent>
                   </Select>
                   {viewMode === 'tridy' && (
@@ -411,7 +433,7 @@ export function DesktopDashboard() {
                 </Button>
               </div>
               
-              {(hasRole('ziak') || hasRole('rodic')) && !isTeacherView && classInfo.className && (
+              {!isPersonalView && (hasRole('ziak') || hasRole('rodic')) && classInfo.className && (
                 <div className="flex items-center gap-3 text-sm">
                   <Separator orientation="vertical" className="h-8 hidden md:block" />
                   <div className="text-left">
@@ -437,11 +459,21 @@ export function DesktopDashboard() {
                   </div>
                 </div>
               )}
+
+              {isPersonalView && (
+                 <div className="flex items-center gap-3 text-sm">
+                    <Separator orientation="vertical" className="h-8 hidden md:block" />
+                    <div className="flex items-center gap-2 text-primary font-semibold">
+                        <UserIcon className="h-5 w-5" />
+                        <span>Váš osobní rozvrh</span>
+                    </div>
+                 </div>
+              )}
             </div>
           </CardHeader>
           <CardContent>
             {weekDays.map(day => {
-              const scheduleForDay = isTeacherView
+              const scheduleForDay = isPersonalView
                   ? teacherWeekSchedules.find(s => isSameDay(parseISO(s.datum), day))
                   : schedulesData?.find(s => isSameDay(parseISO(s.datum), day));
 
@@ -451,9 +483,9 @@ export function DesktopDashboard() {
                     dailySchedule={scheduleForDay}
                     eventsData={eventsData || []}
                     substitutionsData={substitutionsData || []}
-                    isTeacher={hasRole('ucitel') || isSuperAdmin()}
+                    isTeacher={hasRole('ucitel') || isAdmin}
                     userId={user.id}
-                    userClassId={isTeacherView ? undefined : targetClassId}
+                    userClassId={isPersonalView ? undefined : targetClassId}
                     day={day}
                     teachers={allStaff || []}
                     subjects={subjects || []}

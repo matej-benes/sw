@@ -1,3 +1,4 @@
+
 'use client';
 import React, { useState, useEffect } from 'react';
 import { cn } from "@/lib/utils";
@@ -357,7 +358,7 @@ function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, onSubstit
              }}
         >
             <div className="font-bold">{lesson.subjectShortcut}</div>
-            <div>{isTeacher ? lesson.className : lesson.teacherName}</div>
+            <div className="truncate w-full">{isTeacher ? lesson.className : lesson.teacherName}</div>
             <div className={cn("text-muted-foreground", isNewSubstitutedLesson && 'text-foreground/80')}>{lesson.ucebnaName}</div>
         </div>
     );
@@ -483,11 +484,11 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
         if (!dailySchedule) return null;
         const lesson = dailySchedule.hodiny[periodIndex];
         if (lesson) {
-            if (isTeacher) {
-                 return { lesson, classId: dailySchedule.tridaId };
-            } else {
-                if (dailySchedule.tridaId === userClassId) return { lesson, classId: dailySchedule.tridaId };
-            }
+            // Aggregated teacher view doesn't need class matching
+            if (userClassId === undefined) return { lesson, classId: lesson.classId };
+            
+            // Class view needs matching
+            if (dailySchedule.tridaId === userClassId) return { lesson, classId: dailySchedule.tridaId };
         }
         return null;
     };
@@ -675,7 +676,7 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                         <AlertDialogDescription>Tato akce je nevratná.</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel>Zět</AlertDialogCancel>
+                        <AlertDialogCancel>Zpět</AlertDialogCancel>
                         <AlertDialogAction onClick={handleDeleteSubstitution} className="bg-destructive hover:bg-destructive/90">
                             Zrušit suplování
                         </AlertDialogAction>

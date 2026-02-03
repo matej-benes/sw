@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
@@ -58,7 +59,11 @@ export function MobileDashboard() {
   const firestore = useFirestore();
   const { user, hasRole, isSuperAdmin, loading: isUserLoading } = useAuth();
   
-  const isTeacherView = hasRole('ucitel') && !isSuperAdmin();
+  const isTeacher = hasRole('ucitel');
+  const isAdmin = hasRole('administrator') || isSuperAdmin();
+  
+  const [viewMode, setViewMode] = useState(isTeacher ? 'muj-rozvrh' : 'tridy');
+  const isPersonalView = viewMode === 'muj-rozvrh';
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined);
@@ -76,14 +81,14 @@ export function MobileDashboard() {
 
   // Determine the target class ID based on role
   const targetClassId = useMemo(() => {
-    if (isTeacherView) return undefined;
-    if (hasRole('ucitel') || hasRole('administrator')) {
+    if (isPersonalView) return undefined;
+    if (isAdmin) {
       return selectedClassId;
     }
     if (hasRole('ziak')) return user?.tridaId;
     if (hasRole('rodic')) return studentData?.tridaId;
     return undefined;
-  }, [hasRole, user, studentData, selectedClassId, isTeacherView]);
+  }, [isAdmin, user, studentData, selectedClassId, isPersonalView, hasRole]);
 
   const teacherClassesQuery = useMemoFirebase(() => {
     if (!firestore || !user ) return null;
@@ -101,26 +106,26 @@ export function MobileDashboard() {
   useEffect(() => {
     if (selectedClassId) return;
 
-    if ((hasRole('ucitel') || hasRole('administrator')) && !isTeacherView) {
+    if (isAdmin && !isPersonalView) {
         if (teacherClasses && teacherClasses.length > 0) {
             setSelectedClassId(teacherClasses[0].id);
         }
-    } else if (!isTeacherView) { // Student or Parent
+    } else if (!isPersonalView) { // Student or Parent
         const classId = hasRole('ziak') ? user?.tridaId : studentData?.tridaId;
         if (classId) {
             setSelectedClassId(classId);
         }
     }
-  }, [hasRole, user, studentData, teacherClasses, selectedClassId, isTeacherView]);
+  }, [isAdmin, user, studentData, teacherClasses, selectedClassId, isPersonalView, hasRole]);
 
   const substitutionsQuery = useMemoFirebase(() => {
     if (!firestore || !user?.organizationId) return null;
-    if (isTeacherView) {
+    if (isPersonalView) {
         return query(collection(firestore, 'suplovani'), where('organizationId', '==', user.organizationId));
     }
     if (!targetClassId) return null;
     return query(collection(firestore, 'suplovani'), where('originalLesson.classId', '==', targetClassId));
-  }, [firestore, targetClassId, isTeacherView, user?.organizationId]);
+  }, [firestore, targetClassId, isPersonalView, user?.organizationId]);
 
   const { data: substitutionsData } = useCollection<Substitution>(substitutionsQuery);
 
@@ -129,9 +134,14 @@ export function MobileDashboard() {
     return collection(firestore, 'predmety');
   }, [firestore]));
 
+  const { data: allStaff } = useCollection<User>(useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, "users"), where("roles", "array-contains-any", ["ucitel", "asistent pedagoga", "vedouci pracovnik", "administrator"]));
+  }, [firestore]));
+
   // Fetch and aggregate schedule for teacher view
   useEffect(() => {
-    if (!isTeacherView || !firestore || !user?.id || !substitutionsData) return;
+    if (!isPersonalView || !firestore || !user?.id || !substitutionsData) return;
 
     const fetchAndAggregate = async () => {
         setTeacherScheduleLoading(true);
@@ -162,12 +172,16 @@ export function MobileDashboard() {
                     s.originalLesson.period === index
                 );
 
+                let shouldInclude = false;
+                let finalLesson = { ...lesson };
+
                 if (sub) {
                     const isAssignedToMe = sub.changes.teacherIds?.includes(user.id);
                     const isCancelled = Array.isArray(sub.changes.type) ? sub.changes.type.includes('zruseno') : sub.changes.type === 'zruseno';
                     
                     if (isAssignedToMe && !isCancelled) {
-                        const virtualLesson: LessonBlock = {
+                        shouldInclude = true;
+                        finalLesson = {
                             ...lesson,
                             teacherId: user.id,
                             teacherName: user.name,
@@ -176,15 +190,23 @@ export function MobileDashboard() {
                         if (sub.changes.subjectId && subjects) {
                             const newSubj = subjects.find(s => s.id === sub.changes.subjectId);
                             if (newSubj) {
-                                virtualLesson.subjectId = newSubj.id;
-                                virtualLesson.subjectName = newSubj.name;
-                                virtualLesson.subjectShortcut = newSubj.shortcut;
+                                finalLesson.subjectId = newSubj.id;
+                                finalLesson.subjectName = newSubj.name;
+                                finalLesson.subjectShortcut = newSubj.shortcut;
                             }
                         }
-                        teacherDayLessons[index] = virtualLesson;
+                    } else if (lesson.teacherId === user.id && !isCancelled) {
+                        const isReplaced = sub.changes.teacherIds && sub.changes.teacherIds.length > 0 && !sub.changes.teacherIds.includes(user.id);
+                        if (!isReplaced) {
+                            shouldInclude = true;
+                        }
                     }
                 } else if (lesson.teacherId === user.id) {
-                    teacherDayLessons[index] = lesson;
+                    shouldInclude = true;
+                }
+
+                if (shouldInclude) {
+                    teacherDayLessons[index] = finalLesson;
                 }
             });
         }
@@ -201,14 +223,14 @@ export function MobileDashboard() {
     };
 
     fetchAndAggregate();
-  }, [isTeacherView, firestore, currentDate, user?.id, user?.organizationId, substitutionsData, subjects]);
+  }, [isPersonalView, firestore, currentDate, user?.id, user?.organizationId, substitutionsData, subjects]);
 
 
   const dailySchedule = useDoc<Rozvrh>(useMemoFirebase(() => {
-    if (isTeacherView || !firestore || !targetClassId) return null;
+    if (isPersonalView || !firestore || !targetClassId) return null;
     const scheduleId = `${targetClassId}-${format(currentDate, 'yyyy-MM-dd')}`;
     return doc(firestore, 'rozvrhy', scheduleId);
-  }, [firestore, targetClassId, currentDate, isTeacherView]));
+  }, [firestore, targetClassId, currentDate, isPersonalView]));
   
   const eventsQuery = useMemoFirebase(() => {
     if (!firestore || !targetClassId) return null;
@@ -223,19 +245,12 @@ export function MobileDashboard() {
   const { data: eventsData, isLoading: eventsLoading } = useCollection<Udalost>(eventsQuery);
   const { data: zapisyData, isLoading: zapisyLoading } = useCollection<ZapisHodiny>(zapisyQuery);
   
-  const { data: teachers, isLoading: teachersLoading } = useCollection<User>(useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, "users"), where("roles", "array-contains", "ucitel"));
-  }, [firestore]));
-
   const handlePrevDay = () => setCurrentDate(prev => subDays(prev, 1));
   const handleNextDay = () => setCurrentDate(prev => addDays(prev, 1));
   const handleSetToday = () => setCurrentDate(new Date());
 
-  const canManage = hasRole('ucitel') || hasRole('administrator');
-  
-  const scheduleToRender = isTeacherView ? teacherDailySchedule : dailySchedule.data;
-  const isDataLoading = isUserLoading || studentLoading || teachersLoading || (subjects === null) || eventsLoading || zapisyLoading || (isTeacherView ? teacherScheduleLoading : (dailySchedule.isLoading || (canManage && teacherClassesLoading)));
+  const scheduleToRender = isPersonalView ? teacherDailySchedule : dailySchedule.data;
+  const isDataLoading = isUserLoading || studentLoading || (subjects === null) || eventsLoading || zapisyLoading || (isPersonalView ? teacherScheduleLoading : (dailySchedule.isLoading || (isAdmin && teacherClassesLoading)));
 
   if (isDataLoading) {
     return <div className="flex h-full w-full items-center justify-center">Načítání...</div>;
@@ -265,7 +280,21 @@ export function MobileDashboard() {
             </Button>
           </div>
           
-          {canManage && !isTeacherView && (
+          {isAdmin && (
+            <div className="mb-4">
+              <Select value={viewMode} onValueChange={setViewMode}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Zobrazit..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tridy">Třídy</SelectItem>
+                  {isTeacher && <SelectItem value="muj-rozvrh">Můj rozvrh</SelectItem>}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {viewMode === 'tridy' && isAdmin && (
             <div className="mb-4">
               <Select value={selectedClassId || ''} onValueChange={setSelectedClassId}>
                 <SelectTrigger>
@@ -285,11 +314,11 @@ export function MobileDashboard() {
             eventsData={eventsData || []}
             substitutionsData={substitutionsData || []}
             zapisyData={zapisyData || []}
-            isTeacher={canManage}
+            isTeacher={isAdmin || isTeacher}
             userId={user.id}
             userClassId={targetClassId}
             day={currentDate}
-            teachers={teachers || []}
+            teachers={allStaff || []}
             subjects={subjects || []}
           />
         </CardContent>
