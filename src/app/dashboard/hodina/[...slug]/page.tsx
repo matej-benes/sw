@@ -1,8 +1,9 @@
+
 'use client';
 import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, BookOpen, User, Home, Clock, FileText, MoreVertical, VenetianMask, XCircle, Save, Pencil, PencilRuler } from 'lucide-react';
+import { ArrowLeft, BookOpen, User, Home, Clock, FileText, MoreVertical, VenetianMask, XCircle, Save, Pencil, PencilRuler, UserPlus, X } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useFirestore, useDoc, useMemoFirebase, useCollection, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { doc, query, where, collection, getDocs, limit, writeBatch, Timestamp } from 'firebase/firestore';
@@ -32,7 +33,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { MultiSelect } from '@/components/ui/multi-select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import { GradingDialog } from '@/components/grading-dialog';
 
 function SubstitutionDialog({
@@ -58,6 +60,7 @@ function SubstitutionDialog({
     const [subTeacherIds, setSubTeacherIds] = useState<string[]>([]);
     const [subSubjectId, setSubSubjectId] = useState('');
     const [note, setNote] = useState('');
+    const [isTeacherPickerOpen, setIsTeacherPickerOpen] = useState(false);
 
     useEffect(() => {
         if (isOpen && lessonInfo) {
@@ -124,9 +127,9 @@ function SubstitutionDialog({
     if (!lessonInfo) return null;
     
     const { lesson, period } = lessonInfo;
-    const teacherOptions = teachers.map(t => ({ value: t.id, label: t.name }));
 
     return (
+        <>
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
             <DialogContent>
                 <DialogHeader>
@@ -151,12 +154,33 @@ function SubstitutionDialog({
                         <div className="space-y-4 pt-4 border-t">
                             <div className="grid gap-2">
                                 <Label>Suplující učitel/é</Label>
-                                <MultiSelect
-                                    options={teacherOptions}
-                                    onValueChange={setSubTeacherIds}
-                                    defaultValue={subTeacherIds}
-                                    placeholder="Vyberte učitele..."
-                                />
+                                <div className="space-y-2">
+                                    <Button 
+                                        type="button"
+                                        variant="outline" 
+                                        className="w-full justify-start" 
+                                        onClick={() => setIsTeacherPickerOpen(true)}
+                                    >
+                                        <UserPlus className="mr-2 h-4 w-4" />
+                                        Vybrat vyučujícího / vyučující
+                                    </Button>
+                                    {subTeacherIds.length > 0 && (
+                                        <div className="flex flex-wrap gap-1">
+                                            {subTeacherIds.map(id => {
+                                                const t = teachers.find(t => t.id === id);
+                                                return t ? (
+                                                    <Badge key={id} variant="secondary" className="flex items-center gap-1 pr-1">
+                                                        {t.name}
+                                                        <X 
+                                                            className="h-3 w-3 cursor-pointer hover:text-destructive" 
+                                                            onClick={() => setSubTeacherIds(prev => prev.filter(tid => tid !== id))} 
+                                                        />
+                                                    </Badge>
+                                                ) : null;
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <div className="grid gap-2">
                                 <Label>Nový předmět (nepovinné)</Label>
@@ -182,6 +206,35 @@ function SubstitutionDialog({
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+
+        <Dialog open={isTeacherPickerOpen} onOpenChange={setIsTeacherPickerOpen}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>Vybrat vyučující</DialogTitle>
+                    <DialogDescription>Vyberte jednoho nebo více kolegů pro suplování.</DialogDescription>
+                </DialogHeader>
+                <div className="py-4 max-h-[50vh] overflow-y-auto space-y-1">
+                    {teachers.map(t => (
+                        <div 
+                            key={t.id} 
+                            className="flex items-center space-x-3 p-3 hover:bg-muted rounded-md cursor-pointer transition-colors"
+                            onClick={() => {
+                                setSubTeacherIds(prev => 
+                                    prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id]
+                                );
+                            }}
+                        >
+                            <Checkbox checked={subTeacherIds.includes(t.id)} onCheckedChange={() => {}} />
+                            <Label className="flex-grow cursor-pointer font-medium">{t.name}</Label>
+                        </div>
+                    ))}
+                </div>
+                <DialogFooter>
+                    <Button onClick={() => setIsTeacherPickerOpen(false)} className="w-full sm:w-auto">Hotovo</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+        </>
     );
 }
 
