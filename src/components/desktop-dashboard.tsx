@@ -58,6 +58,7 @@ import type {
   Omluvenka,
   Organization,
   LessonBlock,
+  ZapisHodiny,
 } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Separator } from '@/components/ui/separator';
@@ -88,10 +89,6 @@ export function DesktopDashboard() {
   const isAdmin = hasRole('administrator') || isSuperAdmin();
   const isOnlyStudentParent = !isAdmin && !isTeacher;
   
-  // Logic: 
-  // - Admin defaults to 'tridy'
-  // - Teacher (non-admin) defaults to 'muj-rozvrh'
-  // - Student/Parent defaults to 'tridy' (their own class)
   const initialViewMode = isAdmin ? 'tridy' : (isTeacher ? 'muj-rozvrh' : 'tridy');
   const [viewMode, setViewMode] = useState(initialViewMode);
   const isPersonalView = viewMode === 'muj-rozvrh';
@@ -162,23 +159,23 @@ export function DesktopDashboard() {
 
   const substitutionsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    
-    // Robustly find an organization ID
     const effectiveOrgId = user?.organizationId || (tridy && tridy.length > 0 ? tridy[0].organizationId : null);
-    
     if (effectiveOrgId) {
         return query(collection(firestore, 'suplovani'), where('organizationId', '==', effectiveOrgId));
     }
-    
-    // Fallback: if we have a target class but no org ID, fetch specifically for that class
     if (!isPersonalView && targetClassId) {
         return query(collection(firestore, 'suplovani'), where('originalLesson.classId', '==', targetClassId));
     }
-    
     return null;
   }, [firestore, user?.organizationId, tridy, targetClassId, isPersonalView]);
 
   const { data: substitutionsData } = useCollection<Substitution>(substitutionsQuery);
+
+  const zapisyQuery = useMemoFirebase(() => {
+    if (!firestore || !targetClassId) return null;
+    return query(collection(firestore, 'zapisyHodin'), where('tridaId', '==', targetClassId));
+  }, [firestore, targetClassId]);
+  const { data: zapisyData } = useCollection<ZapisHodiny>(zapisyQuery);
 
   useEffect(() => {
     if (!isPersonalView || !firestore || weekDays.length === 0 || !user?.id || !substitutionsData) return;
@@ -186,7 +183,6 @@ export function DesktopDashboard() {
     const aggregateSchedules = async () => {
         setTeacherSchedulesLoading(true);
         const weekSchedules: Rozvrh[] = [];
-        
         let resolvedTimeSlots = defaultTimeSlots; 
 
         for (const day of weekDays) {
@@ -196,7 +192,6 @@ export function DesktopDashboard() {
                 where('datum', '==', dayStr)
             );
             const querySnapshot = await getDocs(q);
-
             const schedulesForDay = querySnapshot.docs.map(d => d.data() as Rozvrh);
             
             if (schedulesForDay.length > 0 && schedulesForDay[0].timeSlots.length > 0) {
@@ -209,21 +204,17 @@ export function DesktopDashboard() {
             for (const schedule of schedulesForDay) {
                 schedule.hodiny.forEach((lesson, index) => {
                     if (!lesson) return;
-
                     const sub = subsToday.find(s => 
                         s.originalLesson.classId === schedule.tridaId && 
                         s.originalLesson.period === index
                     );
-
                     let shouldInclude = false;
                     let finalLesson = { ...lesson };
-
                     if (sub) {
                         const isAssignedToMe = sub.changes.teacherIds?.includes(user.id);
                         const isCancelled = Array.isArray(sub.changes.type) 
                             ? sub.changes.type.includes('zruseno') 
                             : sub.changes.type === 'zruseno';
-                        
                         if (isAssignedToMe && !isCancelled) {
                             shouldInclude = true;
                             finalLesson = {
@@ -242,20 +233,14 @@ export function DesktopDashboard() {
                             }
                         } else if (lesson.teacherId === user.id && !isCancelled) {
                             const isReplaced = sub.changes.teacherIds && sub.changes.teacherIds.length > 0 && !sub.changes.teacherIds.includes(user.id);
-                            if (!isReplaced) {
-                                shouldInclude = true;
-                            }
+                            if (!isReplaced) shouldInclude = true;
                         }
                     } else if (lesson.teacherId === user.id) {
                         shouldInclude = true;
                     }
-
-                    if (shouldInclude) {
-                        teacherDayLessons[index] = finalLesson;
-                    }
+                    if (shouldInclude) teacherDayLessons[index] = finalLesson;
                 });
             }
-            
             weekSchedules.push({
                 id: `teacher-schedule-${dayStr}`,
                 tridaId: user.id, 
@@ -269,7 +254,6 @@ export function DesktopDashboard() {
         setTeacherWeekSchedules(weekSchedules);
         setTeacherSchedulesLoading(false);
     };
-
     aggregateSchedules();
   }, [isPersonalView, firestore, weekDays, user?.id, user?.organizationId, substitutionsData, subjects]);
 
@@ -280,7 +264,6 @@ export function DesktopDashboard() {
       setSelectedClassId(user?.tridaId || studentData?.tridaId);
     }
   }, [tridy, selectedClassId, isAdmin, isPersonalView, user?.tridaId, studentData?.tridaId]);
-
 
   const schedulesQuery = useMemoFirebase(() => {
       if (isPersonalView || !firestore || !targetClassId) return null;
@@ -379,19 +362,10 @@ export function DesktopDashboard() {
         <Card className="mt-10 max-w-2xl mx-auto">
             <CardHeader>
                 <CardTitle className="text-2xl">Vítejte ve ŠkolaWeb!</CardTitle>
-                <CardDescription>
-                    Pro plné využití aplikace je nejprve potřeba vytvořit vaši školu nebo organizaci. 
-                    Tento krok je vyžadován pouze jednou.
-                </CardDescription>
+                <CardDescription>Pro plné využití aplikace je nejprve potřeba vytvořit vaši školu nebo organizaci.</CardDescription>
             </CardHeader>
-            <CardContent>
-                <p>Kliknutím na tlačítko níže přejdete na stránku pro správu organizací, kde můžete zadat základní údaje o vaší instituci.</p>
-            </CardContent>
-            <CardFooter>
-                <Button onClick={() => router.push('/dashboard/sprava-systemu/organizace')}>
-                    Vytvořit organizaci
-                </Button>
-            </CardFooter>
+            <CardContent><p>Kliknutím na tlačítko níže přejdete na stránku pro správu organizací.</p></CardContent>
+            <CardFooter><Button onClick={() => router.push('/dashboard/sprava-systemu/organizace')}>Vytvořit organizaci</Button></CardFooter>
         </Card>
     );
   }
@@ -415,9 +389,7 @@ export function DesktopDashboard() {
                             onClick={() => router.push(action.href)}
                         >
                             <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-3">
-                                <div className={cn("p-3 rounded-full", action.color)}>
-                                    <action.icon className="h-6 w-6" />
-                                </div>
+                                <div className={cn("p-3 rounded-full", action.color)}><action.icon className="h-6 w-6" /></div>
                                 <span className="font-medium text-sm">{action.title}</span>
                             </CardContent>
                         </Card>
@@ -426,15 +398,10 @@ export function DesktopDashboard() {
             </div>
         )}
 
-        <div 
-            className="flex items-center gap-2 cursor-pointer group pt-4"
-            onClick={() => setIsFullWeekView(prev => !prev)}
-        >
+        <div className="flex items-center gap-2 cursor-pointer group pt-4" onClick={() => setIsFullWeekView(prev => !prev)}>
             <div>
                 <h1 className="text-3xl font-bold tracking-tight">Kalendář</h1>
-                <p className="text-muted-foreground">
-                {isFullWeekView ? 'Váš týdenní přehled událostí.' : 'Váš přehled na dnešek a zítřek.'}
-                </p>
+                <p className="text-muted-foreground">{isFullWeekView ? 'Váš týdenní přehled.' : 'Váš přehled na dnešek a zítřek.'}</p>
             </div>
             <ChevronDown className={cn("h-6 w-6 text-muted-foreground transition-transform group-hover:text-foreground", isFullWeekView && "rotate-180")} />
         </div>
@@ -445,25 +412,17 @@ export function DesktopDashboard() {
               {(isAdmin || isTeacher) && (
                 <>
                   <Select value={viewMode} onValueChange={setViewMode}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Zobrazit podle..." />
-                    </SelectTrigger>
+                    <SelectTrigger className="w-[180px]"><SelectValue placeholder="Zobrazit podle..." /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="tridy">Třídy</SelectItem>
                       {isTeacher && <SelectItem value="muj-rozvrh">Můj rozvrh</SelectItem>}
-                      <SelectItem value="ucitele" disabled>Učitelé (připravujeme)</SelectItem>
-                      <SelectItem value="ucebny" disabled>Učebny (připravujeme)</SelectItem>
                     </SelectContent>
                   </Select>
                   {viewMode === 'tridy' && isAdmin && (
                     <Select value={selectedClassId} onValueChange={handleClassChange}>
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Vyberte třídu" />
-                      </SelectTrigger>
+                      <SelectTrigger className="w-[180px]"><SelectValue placeholder="Vyberte třídu" /></SelectTrigger>
                       <SelectContent>
-                        {tridyOptions.map(option => (
-                          <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                        ))}
+                        {tridyOptions.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   )}
@@ -471,53 +430,24 @@ export function DesktopDashboard() {
               )}
               
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon" onClick={handlePrevWeek}>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button variant="outline" className="w-48" onClick={handleSetToday}>
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {weekLabel}
-                </Button>
-                <Button variant="outline" size="icon" onClick={handleNextWeek}>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+                <Button variant="outline" size="icon" onClick={handlePrevWeek}><ChevronLeft className="h-4 w-4" /></Button>
+                <Button variant="outline" className="w-48" onClick={handleSetToday}><CalendarIcon className="mr-2 h-4 w-4" />{weekLabel}</Button>
+                <Button variant="outline" size="icon" onClick={handleNextWeek}><ChevronRight className="h-4 w-4" /></Button>
               </div>
               
               {!isPersonalView && (hasRole('ziak') || hasRole('rodic')) && classInfo.className && (
                 <div className="flex items-center gap-3 text-sm">
                   <Separator orientation="vertical" className="h-8 hidden md:block" />
                   <div className="text-left">
-                      {hasRole('rodic') && studentData && (
-                          <p className="font-semibold text-base">Dítě: {studentData.name}</p>
-                      )}
+                      {hasRole('rodic') && studentData && <p className="font-semibold text-base">Dítě: {studentData.name}</p>}
                       <p className="font-semibold text-lg">{classInfo.className}</p>
                       <div className="text-sm text-muted-foreground">
-                        <p>
-                          <span className="font-semibold">Třídní učitel:</span> {classInfo.classTeacherName}
-                        </p>
-                        {classInfo.substitutes.length > 0 && (
-                           <p>
-                             <span className="font-semibold">{classInfo.substitutes.length > 1 ? 'Zástupci:' : 'Zástupce:'}</span> {classInfo.substitutes.join(', ')}
-                           </p>
-                        )}
-                        {classInfo.assistants.length > 0 && (
-                          <p>
-                            <span className="font-semibold">{classInfo.assistants.length > 1 ? 'Asistenti:' : 'Asistent:'}</span> {classInfo.assistants.join(', ')}
-                          </p>
-                        )}
+                        <p><span className="font-semibold">Třídní učitel:</span> {classInfo.classTeacherName}</p>
+                        {classInfo.substitutes.length > 0 && <p><span className="font-semibold">{classInfo.substitutes.length > 1 ? 'Zástupci:' : 'Zástupce:'}</span> {classInfo.substitutes.join(', ')}</p>}
+                        {classInfo.assistants.length > 0 && <p><span className="font-semibold">{classInfo.assistants.length > 1 ? 'Asistenti:' : 'Asistent:'}</span> {classInfo.assistants.join(', ')}</p>}
                       </div>
                   </div>
                 </div>
-              )}
-
-              {isPersonalView && (
-                 <div className="flex items-center gap-3 text-sm">
-                    <Separator orientation="vertical" className="h-8 hidden md:block" />
-                    <div className="flex items-center gap-2 text-primary font-semibold">
-                        <UserIcon className="h-5 w-5" />
-                        <span>Váš osobní rozvrh</span>
-                    </div>
-                 </div>
               )}
             </div>
           </CardHeader>
@@ -533,6 +463,7 @@ export function DesktopDashboard() {
                     dailySchedule={scheduleForDay}
                     eventsData={eventsData || []}
                     substitutionsData={substitutionsData || []}
+                    zapisyData={zapisyData || []}
                     isTeacher={hasRole('ucitel') || isAdmin}
                     userId={user.id}
                     userClassId={isPersonalView ? undefined : targetClassId}
