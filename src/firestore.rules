@@ -94,12 +94,12 @@ service cloud.firestore {
 
     match /rozvrhy/{rozvrhId} {
         allow read: if isSignedIn();
-        allow write: if hasAnyRole(['administrator', 'ucitel']);
+        allow write: if hasRole('administrator');
     }
     
     match /scheduleTemplates/{templateId} {
         allow read: if isSignedIn();
-        allow write: if hasAnyRole(['administrator', 'ucitel']);
+        allow write: if hasRole('administrator');
     }
 
     match /poznamky-zaku/{poznamkaId} {
@@ -134,7 +134,7 @@ service cloud.firestore {
 
     match /absences/{absenceId} {
       allow read: if isSignedIn();
-      allow write: if hasAnyRole(['administrator', 'ucitel']);
+      allow write: if hasRole('administrator');
     }
     
     match /omluvenky/{omluvenkaId} {
@@ -168,7 +168,7 @@ service cloud.firestore {
     
     match /suplovani/{substitutionId} {
         allow read: if isSignedIn();
-        allow write: if hasAnyRole(['administrator']);
+        allow write: if hasRole('administrator');
     }
   }
 }

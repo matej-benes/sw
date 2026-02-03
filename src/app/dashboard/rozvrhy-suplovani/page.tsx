@@ -25,7 +25,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Input } from "@/components/ui/input";
+import { Input } from "@/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay, getDay, isSameDay } from "date-fns";
@@ -228,7 +228,7 @@ function LessonEditDialog({
 }
 
 
-function ScheduleEditor() {
+function ScheduleEditor({ isAdministrator }: { isAdministrator: boolean }) {
     const firestore = useFirestore();
     const { toast } = useToast();
 
@@ -360,6 +360,7 @@ function ScheduleEditor() {
     };
     
     const handleCellClick = (dayIndex: number, periodIndex: number) => {
+        if (!isAdministrator) return;
         setEditingCell({ dayIndex, periodIndex });
         setIsLessonDialogOpen(true);
     }
@@ -432,14 +433,18 @@ function ScheduleEditor() {
                             {classes?.map(c => <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                     <Button variant="outline" onClick={() => setIsTimeSlotDialogOpen(true)} disabled={!selectedClassId}>
-                        <Edit className="mr-2 h-4 w-4" />
-                        Upravit časy
-                    </Button>
-                    <Button onClick={handleSave} disabled={!selectedClassId || isDataLoading || isSaving}>
-                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                        Uložit šablonu
-                    </Button>
+                     {isAdministrator && (
+                        <>
+                            <Button variant="outline" onClick={() => setIsTimeSlotDialogOpen(true)} disabled={!selectedClassId}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Upravit časy
+                            </Button>
+                            <Button onClick={handleSave} disabled={!selectedClassId || isDataLoading || isSaving}>
+                                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                Uložit šablonu
+                            </Button>
+                        </>
+                     )}
                 </div>
             </CardHeader>
             <CardContent>
@@ -469,7 +474,10 @@ function ScheduleEditor() {
                                         return (
                                             <div 
                                                 key={`${day}-${periodIndex}`} 
-                                                className="p-1 border-b border-r min-h-[70px] hover:bg-accent/50 cursor-pointer transition-colors"
+                                                className={cn(
+                                                    "p-1 border-b border-r min-h-[70px] transition-colors",
+                                                    isAdministrator ? "hover:bg-accent/50 cursor-pointer" : "cursor-default"
+                                                )}
                                                 onClick={() => handleCellClick(dayIndex, periodIndex)}
                                             >
                                                 {lesson ? (
@@ -479,9 +487,11 @@ function ScheduleEditor() {
                                                         <p className="text-muted-foreground">{lesson.ucebnaName}</p>
                                                     </div>
                                                 ) : (
-                                                    <div className="h-full w-full flex items-center justify-center">
-                                                        <PlusCircle className="h-4 w-4 text-muted-foreground" />
-                                                    </div>
+                                                    isAdministrator && (
+                                                        <div className="h-full w-full flex items-center justify-center">
+                                                            <PlusCircle className="h-4 w-4 text-muted-foreground" />
+                                                        </div>
+                                                    )
                                                 )}
                                             </div>
                                         )
@@ -512,7 +522,7 @@ function ScheduleEditor() {
     );
 }
 
-function AbsencePlanner() {
+function AbsencePlanner({ isAdministrator }: { isAdministrator: boolean }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const { user } = useAuth();
@@ -588,68 +598,75 @@ function AbsencePlanner() {
                 <CardDescription>Zde můžete zadávat absence učitelů, které slouží jako podklad pro suplování.</CardDescription>
             </CardHeader>
             <CardContent className="grid md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                    <h3 className="font-semibold text-lg">Nová absence</h3>
-                     <div className="grid gap-1.5">
-                        <Label>Učitel</Label>
-                        <Select value={teacherId} onValueChange={setTeacherId} disabled={teachersLoading}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Vyberte učitele" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {teachers?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
+                {isAdministrator ? (
+                    <div className="space-y-4">
+                        <h3 className="font-semibold text-lg">Nová absence</h3>
+                        <div className="grid gap-1.5">
+                            <Label>Učitel</Label>
+                            <Select value={teacherId} onValueChange={setTeacherId} disabled={teachersLoading}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Vyberte učitele" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {teachers?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid gap-1.5">
+                            <Label>Datum od - do</Label>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                <Button
+                                    id="date"
+                                    variant={"outline"}
+                                    className={cn(
+                                    "w-full justify-start text-left font-normal",
+                                    !date && "text-muted-foreground"
+                                    )}
+                                >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {date?.from ? (
+                                    date.to ? (
+                                        <>
+                                        {format(date.from, "LLL dd, y")} -{" "}
+                                        {format(date.to, "LLL dd, y")}
+                                        </>
+                                    ) : (
+                                        format(date.from, "LLL dd, y")
+                                    )
+                                    ) : (
+                                    <span>Vyberte datum</span>
+                                    )}
+                                </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                    initialFocus
+                                    mode="range"
+                                    defaultMonth={date?.from}
+                                    selected={date}
+                                    onSelect={setDate}
+                                    numberOfMonths={2}
+                                    locale={cs}
+                                />
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                        <div className="grid gap-1.5">
+                            <Label>Důvod (nepovinné)</Label>
+                            <Textarea value={reason} onChange={e => setReason(e.target.value)} />
+                        </div>
+                        <Button onClick={handleSave} disabled={isSaving}>
+                            {isSaving ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
+                            Uložit absenci
+                        </Button>
                     </div>
-                     <div className="grid gap-1.5">
-                        <Label>Datum od - do</Label>
-                         <Popover>
-                            <PopoverTrigger asChild>
-                            <Button
-                                id="date"
-                                variant={"outline"}
-                                className={cn(
-                                "w-full justify-start text-left font-normal",
-                                !date && "text-muted-foreground"
-                                )}
-                            >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {date?.from ? (
-                                date.to ? (
-                                    <>
-                                    {format(date.from, "LLL dd, y")} -{" "}
-                                    {format(date.to, "LLL dd, y")}
-                                    </>
-                                ) : (
-                                    format(date.from, "LLL dd, y")
-                                )
-                                ) : (
-                                <span>Vyberte datum</span>
-                                )}
-                            </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                                initialFocus
-                                mode="range"
-                                defaultMonth={date?.from}
-                                selected={date}
-                                onSelect={setDate}
-                                numberOfMonths={2}
-                                locale={cs}
-                            />
-                            </PopoverContent>
-                        </Popover>
+                ) : (
+                    <div className="flex flex-col items-center justify-center border border-dashed rounded-lg p-8 bg-muted/20">
+                        <Info className="h-10 w-10 text-muted-foreground mb-4" />
+                        <p className="text-center text-muted-foreground">Absence učitelů může zadávat pouze administrátor.</p>
                     </div>
-                    <div className="grid gap-1.5">
-                        <Label>Důvod (nepovinné)</Label>
-                        <Textarea value={reason} onChange={e => setReason(e.target.value)} />
-                    </div>
-                    <Button onClick={handleSave} disabled={isSaving}>
-                        {isSaving ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
-                        Uložit absenci
-                    </Button>
-                </div>
+                )}
 
                 <div className="space-y-4">
                     <h3 className="font-semibold text-lg">Seznam zadaných absencí</h3>
@@ -661,7 +678,7 @@ function AbsencePlanner() {
                                         <TableHead>Učitel</TableHead>
                                         <TableHead>Od</TableHead>
                                         <TableHead>Do</TableHead>
-                                        <TableHead></TableHead>
+                                        {isAdministrator && <TableHead></TableHead>}
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -670,15 +687,17 @@ function AbsencePlanner() {
                                             <TableCell className="font-medium">{getTeacherName(absence.teacherId)}</TableCell>
                                             <TableCell>{format(parseISO(absence.startDate), "d.M.yyyy")}</TableCell>
                                             <TableCell>{format(parseISO(absence.endDate), "d.M.yyyy")}</TableCell>
-                                            <TableCell className="text-right">
-                                                <Button variant="ghost" size="icon" onClick={() => handleDelete(absence.id)}>
-                                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                                </Button>
-                                            </TableCell>
+                                            {isAdministrator && (
+                                                <TableCell className="text-right">
+                                                    <Button variant="ghost" size="icon" onClick={() => handleDelete(absence.id)}>
+                                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                                    </Button>
+                                                </TableCell>
+                                            )}
                                         </TableRow>
                                     )) : (
                                         <TableRow>
-                                            <TableCell colSpan={4} className="text-center h-24">Žádné absence k zobrazení.</TableCell>
+                                            <TableCell colSpan={isAdministrator ? 4 : 3} className="text-center h-24">Žádné absence k zobrazení.</TableCell>
                                         </TableRow>
                                     )}
                                 </TableBody>
@@ -691,7 +710,7 @@ function AbsencePlanner() {
     );
 }
 
-function SubstitutionPlanner() {
+function SubstitutionPlanner({ isAdministrator }: { isAdministrator: boolean }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const [date, setDate] = useState(new Date());
@@ -773,7 +792,11 @@ function SubstitutionPlanner() {
                  <div className="lg:col-span-2">
                     <h3 className="font-semibold">Detail suplování</h3>
                     <div className="mt-4 border rounded-lg p-6 h-full flex items-center justify-center bg-muted/50">
-                        <p className="text-muted-foreground">Vyberte hodinu vlevo pro zadání suplování.</p>
+                        <p className="text-muted-foreground">
+                            {isAdministrator 
+                                ? "Vyberte hodinu vlevo pro zadání suplování." 
+                                : "Plánování suplování může provádět pouze administrátor."}
+                        </p>
                     </div>
                 </div>
 
@@ -782,7 +805,7 @@ function SubstitutionPlanner() {
     );
 }
 
-function SchedulePreview() {
+function SchedulePreview({ isAdministrator }: { isAdministrator: boolean }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
@@ -894,7 +917,7 @@ function SchedulePreview() {
                                     <th className="p-2 text-left font-semibold">Předmět</th>
                                     <th className="p-2 text-left font-semibold">Učitel</th>
                                     <th className="p-2 text-left font-semibold">Učebna</th>
-                                    <th className="p-2 text-center font-semibold">Akce</th>
+                                    {isAdministrator && <th className="p-2 text-center font-semibold">Akce</th>}
                                 </tr>
                            </thead>
                             <tbody>
@@ -913,7 +936,7 @@ function SchedulePreview() {
                                                         {event.nazev} ({event.typ})
                                                     </div>
                                                 </td>
-                                                <td className="p-2 text-center"></td>
+                                                {isAdministrator && <td className="p-2 text-center"></td>}
                                             </tr>
                                         )
                                     }
@@ -927,30 +950,32 @@ function SchedulePreview() {
                                                     <td className="p-2 font-semibold">{lesson.subjectName} ({lesson.subjectShortcut})</td>
                                                     <td className="p-2">{lesson.teacherName}</td>
                                                     <td className="p-2">{lesson.ucebnaName}</td>
-                                                    <td className="p-2 text-center">
-                                                        <AlertDialog>
-                                                            <AlertDialogTrigger asChild>
-                                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                                                                    <X className="h-4 w-4" />
-                                                                </Button>
-                                                            </AlertDialogTrigger>
-                                                            <AlertDialogContent>
-                                                                <AlertDialogHeader>
-                                                                    <AlertDialogTitle>Opravdu chcete smazat tuto hodinu?</AlertDialogTitle>
-                                                                    <AlertDialogDescription>
-                                                                        Tato akce trvale odstraní hodinu <strong>{lesson.subjectName}</strong> z rozvrhu pro den <strong>{format(selectedDate, "d. M. yyyy")}.</strong> Tato změna se neprojeví v šabloně.
-                                                                    </AlertDialogDescription>
-                                                                </AlertDialogHeader>
-                                                                <AlertDialogFooter>
-                                                                    <AlertDialogCancel>Zrušit</AlertDialogCancel>
-                                                                    <AlertDialogAction onClick={() => handleDeleteLesson(index)}>Smazat</AlertDialogAction>
-                                                                </AlertDialogFooter>
-                                                            </AlertDialogContent>
-                                                        </AlertDialog>
-                                                    </td>
+                                                    {isAdministrator && (
+                                                        <td className="p-2 text-center">
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+                                                                        <X className="h-4 w-4" />
+                                                                    </Button>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent>
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>Opravdu chcete smazat tuto hodinu?</AlertDialogTitle>
+                                                                        <AlertDialogDescription>
+                                                                            Tato akce trvale odstraní hodinu <strong>{lesson.subjectName}</strong> z rozvrhu pro den <strong>{format(selectedDate, "d. M. yyyy")}.</strong> Tato změna se neprojeví v šabloně.
+                                                                        </AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel>Zrušit</AlertDialogCancel>
+                                                                        <AlertDialogAction onClick={() => handleDeleteLesson(index)}>Smazat</AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+                                                        </td>
+                                                    )}
                                                 </>
                                             ) : (
-                                                <td colSpan={4} className="p-2 text-center text-muted-foreground italic">Volná hodina</td>
+                                                <td colSpan={isAdministrator ? 4 : 3} className="p-2 text-center text-muted-foreground italic">Volná hodina</td>
                                             )}
                                         </tr>
                                     );
@@ -969,6 +994,7 @@ export default function RozvrhySuplovaniPage() {
     const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
     const { hasRole } = useAuth();
     const isAdministrator = hasRole('administrator');
+    
     return (
         <div className="space-y-6">
             <div>
@@ -983,30 +1009,32 @@ export default function RozvrhySuplovaniPage() {
                         <TabsTrigger value="suplovani">Plánování suplování</TabsTrigger>
                         {isAdministrator && <TabsTrigger value="nahled">Náhled a úpravy</TabsTrigger>}
                     </TabsList>
-                    <div className="flex gap-2">
-                        <Button onClick={() => setIsGeneratorOpen(true)}>
-                            <VenetianMask className="mr-2 h-4 w-4" />
-                            Generovat rozvrh z šablon
-                        </Button>
-                        <Button>
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Přidat novou akci
-                        </Button>
-                    </div>
+                    {isAdministrator && (
+                        <div className="flex gap-2">
+                            <Button onClick={() => setIsGeneratorOpen(true)}>
+                                <VenetianMask className="mr-2 h-4 w-4" />
+                                Generovat rozvrh z šablon
+                            </Button>
+                            <Button>
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Přidat novou akci
+                            </Button>
+                        </div>
+                    )}
 
                 </div>
                 <TabsContent value="rozvrhy" className="mt-4">
-                   <ScheduleEditor />
+                   <ScheduleEditor isAdministrator={isAdministrator} />
                 </TabsContent>
                  <TabsContent value="absence" className="mt-4">
-                    <AbsencePlanner />
+                    <AbsencePlanner isAdministrator={isAdministrator} />
                 </TabsContent>
                 <TabsContent value="suplovani" className="mt-4">
-                    <SubstitutionPlanner />
+                    <SubstitutionPlanner isAdministrator={isAdministrator} />
                 </TabsContent>
                  {isAdministrator && (
                     <TabsContent value="nahled" className="mt-4">
-                        <SchedulePreview />
+                        <SchedulePreview isAdministrator={isAdministrator} />
                     </TabsContent>
                  )}
             </Tabs>
