@@ -1,3 +1,4 @@
+
 'use client';
 import React, { useState } from 'react';
 import { cn } from "@/lib/utils";
@@ -175,7 +176,7 @@ export function MobileTimetableList({
              return isSameDay(subDate, day) && sub.originalLesson.period === index && sub.originalLesson.classId === dailySchedule.tridaId;
         });
         
-        const zapis = zapisyData.find(z => z.datum === format(day, 'yyyy-MM-dd') && parseInt(z.hodina) === period);
+        const zapis = zapisyData.find(z => z.datum === format(day, 'yyyy-MM-dd') && parseInt(z.hodina) === period && z.tridaId === dailySchedule.tridaId);
 
         if (substitution) {
             const isCancelled = Array.isArray(substitution.changes?.type) 
