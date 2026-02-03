@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, MessageSquare, User as UserIcon, PencilRuler, ClipboardCheck, UserX, FileText, BookCopy } from "lucide-react";
+import { Home, MessageSquare, PencilRuler, UserX, BookCopy, GraduationCap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUnreadMessages } from "@/hooks/use-unread-messages";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,7 @@ const navItems = [
     { href: "/dashboard", icon: Home, label: "Nástěnka" },
     { href: "/dashboard/hodnoceni", icon: PencilRuler, label: "Klasifikace" },
     { href: "/dashboard/absence", icon: UserX, label: "Absence" },
-    { href: "/dashboard/chovani", icon: FileText, label: "Chování" },
+    { href: "/dashboard/vyuka/vyucujici", icon: GraduationCap, label: "Vyučující" },
     { href: "/dashboard/zpravy", icon: MessageSquare, label: "Zprávy" },
     { href: "/dashboard/vysvedceni", icon: BookCopy, label: "Vysvědčení" },
 ];
@@ -42,7 +42,7 @@ export function MobileBottomNav() {
                                     </Badge>
                                 )}
                             </div>
-                            <span className="text-[10px] text-center">{item.label}</span>
+                            <span className="text-[10px] text-center truncate w-full px-1">{item.label}</span>
                         </Link>
                     );
                 })}
