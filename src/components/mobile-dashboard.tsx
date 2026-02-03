@@ -75,8 +75,10 @@ export function MobileDashboard() {
   
   const isTeacher = hasRole('ucitel');
   const isAdmin = hasRole('administrator') || isSuperAdmin();
+  const isOnlyStudentParent = !isAdmin && !isTeacher;
   
-  const [viewMode, setViewMode] = useState(isTeacher ? 'muj-rozvrh' : 'tridy');
+  const initialViewMode = isAdmin ? 'tridy' : (isTeacher ? 'muj-rozvrh' : 'tridy');
+  const [viewMode, setViewMode] = useState(initialViewMode);
   const isPersonalView = viewMode === 'muj-rozvrh';
 
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -319,7 +321,7 @@ export function MobileDashboard() {
             </Button>
           </div>
           
-          {isAdmin && (
+          {(isAdmin || isTeacher) && (
             <div className="mb-4">
               <Select value={viewMode} onValueChange={setViewMode}>
                 <SelectTrigger>

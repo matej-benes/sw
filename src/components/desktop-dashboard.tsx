@@ -86,8 +86,14 @@ export function DesktopDashboard() {
 
   const isTeacher = hasRole('ucitel');
   const isAdmin = hasRole('administrator') || isSuperAdmin();
+  const isOnlyStudentParent = !isAdmin && !isTeacher;
   
-  const [viewMode, setViewMode] = useState(isAdmin ? 'tridy' : 'muj-rozvrh');
+  // Logic: 
+  // - Admin defaults to 'tridy'
+  // - Teacher (non-admin) defaults to 'muj-rozvrh'
+  // - Student/Parent defaults to 'tridy' (their own class)
+  const initialViewMode = isAdmin ? 'tridy' : (isTeacher ? 'muj-rozvrh' : 'tridy');
+  const [viewMode, setViewMode] = useState(initialViewMode);
   const isPersonalView = viewMode === 'muj-rozvrh';
 
   const { data: organizations, isLoading: orgsLoading } = useCollection<Organization>(
@@ -436,7 +442,7 @@ export function DesktopDashboard() {
         <Card>
           <CardHeader className="flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap items-center gap-4">
-              {isAdmin && (
+              {(isAdmin || isTeacher) && (
                 <>
                   <Select value={viewMode} onValueChange={setViewMode}>
                     <SelectTrigger className="w-[180px]">
@@ -449,7 +455,7 @@ export function DesktopDashboard() {
                       <SelectItem value="ucebny" disabled>Učebny (připravujeme)</SelectItem>
                     </SelectContent>
                   </Select>
-                  {viewMode === 'tridy' && (
+                  {viewMode === 'tridy' && isAdmin && (
                     <Select value={selectedClassId} onValueChange={handleClassChange}>
                       <SelectTrigger className="w-[180px]">
                         <SelectValue placeholder="Vyberte třídu" />
