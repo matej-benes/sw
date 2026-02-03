@@ -22,6 +22,11 @@ import {
   Calendar as CalendarIcon,
   ChevronDown,
   User as UserIcon,
+  Users,
+  School,
+  Book,
+  Home,
+  UserCheck,
 } from 'lucide-react';
 import { TimetableWidget } from '@/components/timetable-widget';
 import {
@@ -63,6 +68,14 @@ const defaultTimeSlots = [
     "07:55-08:40", "08:55-09:40", "09:55-10:40", "10:45-11:30",
     "11:35-12:20", "12:30-13:15", "13:20-14:05", "14:15-15:00",
     "15:05-15:50", "15:55-16:40"
+];
+
+const adminQuickActions = [
+    { title: "Evidence osob", icon: Users, href: "/dashboard/sprava-systemu/evidence-osob", color: "bg-blue-500/10 text-blue-600" },
+    { title: "Třídy", icon: School, href: "/dashboard/sprava-systemu/tridy", color: "bg-green-500/10 text-green-600" },
+    { title: "Předměty", icon: Book, href: "/dashboard/sprava-systemu/predmety", color: "bg-purple-500/10 text-purple-600" },
+    { title: "Učebny", icon: Home, href: "/dashboard/sprava-systemu/ucebny", color: "bg-orange-500/10 text-orange-600" },
+    { title: "Zápis", icon: UserCheck, href: "/dashboard/prijimaci-rizeni", color: "bg-pink-500/10 text-pink-600" },
 ];
 
 export function DesktopDashboard() {
@@ -246,6 +259,7 @@ export function DesktopDashboard() {
                 hodiny: teacherDayLessons,
             });
         }
+        weekSchedules.sort((a, b) => a.datum.localeCompare(b.datum));
         setTeacherWeekSchedules(weekSchedules);
         setTeacherSchedulesLoading(false);
     };
@@ -384,8 +398,30 @@ export function DesktopDashboard() {
           isClassTeacher={isClassTeacher}
       />
       <div className="space-y-6">
+        {isAdmin && (
+            <div className="space-y-4">
+                <h2 className="text-xl font-semibold tracking-tight">Rychlý přístup - Správa</h2>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    {adminQuickActions.map((action) => (
+                        <Card 
+                            key={action.title} 
+                            className="cursor-pointer hover:shadow-md transition-all hover:border-primary/50"
+                            onClick={() => router.push(action.href)}
+                        >
+                            <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-3">
+                                <div className={cn("p-3 rounded-full", action.color)}>
+                                    <action.icon className="h-6 w-6" />
+                                </div>
+                                <span className="font-medium text-sm">{action.title}</span>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+            </div>
+        )}
+
         <div 
-            className="flex items-center gap-2 cursor-pointer group"
+            className="flex items-center gap-2 cursor-pointer group pt-4"
             onClick={() => setIsFullWeekView(prev => !prev)}
         >
             <div>

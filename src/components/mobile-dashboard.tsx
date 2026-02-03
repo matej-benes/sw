@@ -19,6 +19,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar as CalendarIcon,
+  Users,
+  School,
+  Book,
+  Home,
+  UserCheck,
 } from 'lucide-react';
 import { MobileTimetableList } from '@/components/mobile-timetable-list';
 import {
@@ -47,6 +52,8 @@ import type {
   LessonBlock,
 } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
+import { useRouter } from 'next/navigation';
+import { cn } from '@/lib/utils';
 
 const defaultTimeSlots = [
     "07:55-08:40", "08:55-09:40", "09:55-10:40", "10:45-11:30",
@@ -54,9 +61,17 @@ const defaultTimeSlots = [
     "15:05-15:50", "15:55-16:40"
 ];
 
+const adminQuickActions = [
+    { title: "Lidé", icon: Users, href: "/dashboard/sprava-systemu/evidence-osob", color: "bg-blue-500/10 text-blue-600" },
+    { title: "Třídy", icon: School, href: "/dashboard/sprava-systemu/tridy", color: "bg-green-500/10 text-green-600" },
+    { title: "Předměty", icon: Book, href: "/dashboard/sprava-systemu/predmety", color: "bg-purple-500/10 text-purple-600" },
+    { title: "Zápis", icon: UserCheck, href: "/dashboard/prijimaci-rizeni", color: "bg-pink-500/10 text-pink-600" },
+];
+
 export function MobileDashboard() {
   const firestore = useFirestore();
   const { user, hasRole, isSuperAdmin, loading: isUserLoading } = useAuth();
+  const router = useRouter();
   
   const isTeacher = hasRole('ucitel');
   const isAdmin = hasRole('administrator') || isSuperAdmin();
@@ -118,14 +133,12 @@ export function MobileDashboard() {
   const substitutionsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     
-    // Robustly find an organization ID
     const effectiveOrgId = user?.organizationId || (teacherClasses && teacherClasses.length > 0 ? teacherClasses[0].organizationId : null);
     
     if (effectiveOrgId) {
         return query(collection(firestore, 'suplovani'), where('organizationId', '==', effectiveOrgId));
     }
     
-    // Fallback for students
     if (!isPersonalView && targetClassId) {
         return query(collection(firestore, 'suplovani'), where('originalLesson.classId', '==', targetClassId));
     }
@@ -152,7 +165,6 @@ export function MobileDashboard() {
         setTeacherScheduleLoading(true);
 
         const dayStr = format(currentDate, 'yyyy-MM-dd');
-        // Fetch all schedules for the date. We'll filter by teacher in memory.
         const q = query(
             collection(firestore, 'rozvrhy'), 
             where('datum', '==', dayStr)
@@ -268,6 +280,26 @@ export function MobileDashboard() {
 
   return (
     <div className="space-y-4">
+      {isAdmin && (
+        <div className="space-y-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground px-1">Správa</h2>
+            <div className="grid grid-cols-4 gap-2">
+                {adminQuickActions.map((action) => (
+                    <div 
+                        key={action.title} 
+                        className="flex flex-col items-center gap-1 cursor-pointer active:scale-95 transition-transform"
+                        onClick={() => router.push(action.href)}
+                    >
+                        <div className={cn("p-3 rounded-xl", action.color)}>
+                            <action.icon className="h-5 w-5" />
+                        </div>
+                        <span className="text-[10px] font-medium text-center">{action.title}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Rozvrh</CardTitle>
