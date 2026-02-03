@@ -282,11 +282,11 @@ function LessonTooltipContent({ lesson, dayInfo, period }: { lesson: LessonBlock
                 <span className="text-muted-foreground">Třída:</span>
                 <span>{lesson.className}</span>
 
+                <span className="text-muted-foreground">Učebna:</span>
+                <span>{lesson.ucebnaName || 'N/A'}</span>
+
                 <span className="text-muted-foreground">Den (vyuč. hodina):</span>
                 <span>{dayInfo.short} {dayInfo.date} ({period})</span>
-
-                <span className="text-muted-foreground">Komentář:</span>
-                <span>-</span>
             </div>
         </div>
     )
@@ -408,9 +408,7 @@ function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, onSubstit
                 backgroundColor: isNewSubstitutedLesson ? 'hsl(346.8 77.2% 49.8% / 0.2)' : isSubstituted ? 'hsl(var(--muted))' : getSubjectColor(lesson.subjectId),
              }}
         >
-            <div className="font-bold">{lesson.subjectShortcut}</div>
-            <div className="truncate w-full">{isTeacher ? lesson.className : lesson.teacherName}</div>
-            <div className={cn("text-muted-foreground", isNewSubstitutedLesson && 'text-foreground/80')}>{lesson.ucebnaName}</div>
+            <div className="font-bold text-sm">{lesson.subjectShortcut}</div>
         </div>
     );
     
@@ -747,3 +745,5 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
         </div>
     );
 }
+
+    
