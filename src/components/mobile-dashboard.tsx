@@ -116,13 +116,22 @@ export function MobileDashboard() {
   }, [isAdmin, user, studentData, teacherClasses, selectedClassId, isPersonalView, hasRole]);
 
   const substitutionsQuery = useMemoFirebase(() => {
-    if (!firestore || !user?.organizationId) return null;
-    if (isPersonalView) {
-        return query(collection(firestore, 'suplovani'), where('organizationId', '==', user.organizationId));
+    if (!firestore) return null;
+    
+    // Robustly find an organization ID
+    const effectiveOrgId = user?.organizationId || (teacherClasses && teacherClasses.length > 0 ? teacherClasses[0].organizationId : null);
+    
+    if (effectiveOrgId) {
+        return query(collection(firestore, 'suplovani'), where('organizationId', '==', effectiveOrgId));
     }
-    if (!targetClassId) return null;
-    return query(collection(firestore, 'suplovani'), where('originalLesson.classId', '==', targetClassId));
-  }, [firestore, targetClassId, isPersonalView, user?.organizationId]);
+    
+    // Fallback for students
+    if (!isPersonalView && targetClassId) {
+        return query(collection(firestore, 'suplovani'), where('originalLesson.classId', '==', targetClassId));
+    }
+    
+    return null;
+  }, [firestore, targetClassId, isPersonalView, user?.organizationId, teacherClasses]);
 
   const { data: substitutionsData } = useCollection<Substitution>(substitutionsQuery);
 
@@ -248,7 +257,7 @@ export function MobileDashboard() {
   const handleSetToday = () => setCurrentDate(new Date());
 
   const scheduleToRender = isPersonalView ? teacherDailySchedule : dailySchedule.data;
-  const isDataLoading = isUserLoading || studentLoading || (subjects === null) || eventsLoading || zapisyLoading || (isPersonalView ? teacherScheduleLoading : (dailySchedule.isLoading || (isAdmin && teacherClassesLoading)));
+  const isDataLoading = isUserLoading || studentLoading || (subjects === null) || eventsLoading || zapisyLoading || (isPersonalView ? teacherScheduleLoading : (dailySchedule.isLoading || (isAdmin && teacherClassesLoading) || !substitutionsData));
 
   if (isDataLoading) {
     return <div className="flex h-full w-full items-center justify-center">Načítání...</div>;

@@ -133,12 +133,33 @@ export function DesktopDashboard() {
     return [today, addDays(today, 1)];
   }, [currentDate, isFullWeekView]);
 
-  const { data: substitutionsData } = useCollection<Substitution>(
-    useMemoFirebase(
-      () => (firestore && user?.organizationId ? query(collection(firestore, 'suplovani'), where('organizationId', '==', user.organizationId)) : null),
-      [firestore, user?.organizationId]
-    )
-  );
+  const targetClassId = useMemo(() => {
+    if (isPersonalView) return undefined;
+    if (isAdmin) return selectedClassId;
+    if (hasRole('ziak')) return user?.tridaId;
+    if (hasRole('rodic')) return studentData?.tridaId;
+    return undefined;
+  }, [isAdmin, isPersonalView, user, studentData, selectedClassId, hasRole]);
+
+  const substitutionsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    
+    // Robustly find an organization ID
+    const effectiveOrgId = user?.organizationId || (tridy && tridy.length > 0 ? tridy[0].organizationId : null);
+    
+    if (effectiveOrgId) {
+        return query(collection(firestore, 'suplovani'), where('organizationId', '==', effectiveOrgId));
+    }
+    
+    // Fallback: if we have a target class but no org ID, fetch specifically for that class
+    if (!isPersonalView && targetClassId) {
+        return query(collection(firestore, 'suplovani'), where('originalLesson.classId', '==', targetClassId));
+    }
+    
+    return null;
+  }, [firestore, user?.organizationId, tridy, targetClassId, isPersonalView]);
+
+  const { data: substitutionsData } = useCollection<Substitution>(substitutionsQuery);
 
   useEffect(() => {
     if (!isPersonalView || !firestore || weekDays.length === 0 || !user?.id || !substitutionsData) return;
@@ -151,7 +172,6 @@ export function DesktopDashboard() {
 
         for (const day of weekDays) {
             const dayStr = format(day, 'yyyy-MM-dd');
-            // Querying all schedules for the date. We'll filter by teacher in memory.
             const q = query(
                 collection(firestore, 'rozvrhy'), 
                 where('datum', '==', dayStr)
@@ -233,14 +253,6 @@ export function DesktopDashboard() {
     aggregateSchedules();
   }, [isPersonalView, firestore, weekDays, user?.id, user?.organizationId, substitutionsData, subjects]);
 
-  const targetClassId = useMemo(() => {
-    if (isPersonalView) return undefined;
-    if (isAdmin) return selectedClassId;
-    if (hasRole('ziak')) return user?.tridaId;
-    if (hasRole('rodic')) return studentData?.tridaId;
-    return undefined;
-  }, [isAdmin, isPersonalView, user, studentData, selectedClassId, hasRole]);
-  
   useEffect(() => {
     if (isAdmin && !isPersonalView && tridy && tridy.length > 0 && !selectedClassId) {
       setSelectedClassId(tridy[0].id);
@@ -336,7 +348,7 @@ export function DesktopDashboard() {
     };
   }, [studentClassData, allStaff, classTeacherData]);
 
-  const isLoading = isUserLoading || !user || orgsLoading || (isPersonalView ? teacherSchedulesLoading : schedulesLoading);
+  const isLoading = isUserLoading || !user || orgsLoading || (isPersonalView ? teacherSchedulesLoading : (schedulesLoading || !substitutionsData));
 
   if (isLoading) {
     return <div className="flex h-full w-full items-center justify-center">Načítání dat...</div>;

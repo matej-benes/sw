@@ -2,23 +2,20 @@
 
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { doc } from 'firebase/firestore';
-import type { Rozvrh, User } from '@/lib/types';
+import { useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase';
+import { doc, collection, query, where } from 'firebase/firestore';
+import type { Rozvrh, User, Substitution, Predmet, User as AppUser, LessonBlock } from '@/lib/types';
 import { format, isSameDay, parseISO } from 'date-fns';
 import { cs } from 'date-fns/locale';
-import { MobileTimetableList } from '@/components/mobile-timetable-list';
-import { useIsMobile } from '@/hooks/use-is-mobile';
-import { TimetableWidget } from '@/components/timetable-widget';
 import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, XCircle } from 'lucide-react';
 import { addDays, subDays } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 export default function RozvrhPage() {
   const { user, hasRole, loading: userLoading } = useAuth();
   const firestore = useFirestore();
-  const isMobile = useIsMobile();
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const studentRef = useMemoFirebase(() => {
@@ -30,7 +27,7 @@ export default function RozvrhPage() {
   const { data: studentData, isLoading: studentLoading } = useDoc<User>(studentRef);
 
   const targetClassId = useMemo(() => {
-    if (hasRole('ucitel')) return null; // Teacher view is handled differently, this page is for students/parents
+    if (hasRole('ucitel')) return null;
     if (hasRole('ziak')) return user?.tridaId;
     if (hasRole('rodic')) return studentData?.tridaId;
     return undefined;
@@ -46,10 +43,30 @@ export default function RozvrhPage() {
   }, [scheduleId, firestore]);
   const { data: scheduleData, isLoading: scheduleLoading } = useDoc<Rozvrh>(scheduleRef);
 
+  // Fetch substitutions
+  const substitutionsQuery = useMemoFirebase(() => {
+    if (!firestore || !targetClassId) return null;
+    return query(collection(firestore, 'suplovani'), where('originalLesson.classId', '==', targetClassId));
+  }, [firestore, targetClassId]);
+  const { data: substitutionsData } = useCollection<Substitution>(substitutionsQuery);
+
+  // Fetch all staff and subjects to resolve names for substituted lessons
+  const staffQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'users'), where('roles', 'array-contains-any', ['ucitel', 'administrator']));
+  }, [firestore]);
+  const { data: allStaff } = useCollection<AppUser>(staffQuery);
+
+  const subjectsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'predmety');
+  }, [firestore]);
+  const { data: allSubjects } = useCollection<Predmet>(subjectsQuery);
+
   const handlePrevDay = () => setCurrentDate(prev => subDays(prev, 1));
   const handleNextDay = () => setCurrentDate(prev => addDays(prev, 1));
 
-  const isLoading = userLoading || studentLoading || scheduleLoading;
+  const isLoading = userLoading || studentLoading || scheduleLoading || !substitutionsData || !allStaff || !allSubjects;
 
   const title = hasRole('rodic') ? 'Rozvrh dítěte' : 'Váš rozvrh';
   const description = 'Přehled vyučovacích hodin.';
@@ -92,21 +109,66 @@ export default function RozvrhPage() {
                         </tr>
                     </thead>
                     <tbody>
-                        {scheduleData.hodiny.map((lesson, index) => (
-                             <tr key={index} className="border-t">
-                                <td className="p-2 font-medium text-center">{index + 1}.</td>
-                                <td className="p-2 text-muted-foreground">{scheduleData.timeSlots[index]}</td>
-                                {lesson ? (
-                                    <>
-                                        <td className="p-2 font-semibold">{lesson.subjectName}</td>
-                                        <td className="p-2">{lesson.teacherName}</td>
-                                        <td className="p-2">{lesson.ucebnaName || '-'}</td>
-                                    </>
-                                ) : (
-                                    <td colSpan={3} className="p-2 text-center text-muted-foreground italic">Volná hodina</td>
-                                )}
-                            </tr>
-                        ))}
+                        {scheduleData.hodiny.map((originalLesson, index) => {
+                            const sub = substitutionsData.find(s => 
+                                s.date === scheduleData.datum && 
+                                s.originalLesson.period === index && 
+                                s.originalLesson.classId === targetClassId
+                            );
+
+                            const isCancelled = sub && (Array.isArray(sub.changes.type) ? sub.changes.type.includes('zruseno') : sub.changes.type === 'zruseno');
+                            
+                            let displayLesson: LessonBlock | null = originalLesson;
+                            let isSubstituted = false;
+
+                            if (sub && !isCancelled) {
+                                isSubstituted = true;
+                                if (originalLesson) {
+                                    displayLesson = { ...originalLesson };
+                                    if (sub.changes.teacherIds && sub.changes.teacherIds.length > 0) {
+                                        displayLesson.teacherName = sub.changes.teacherIds
+                                            .map(id => allStaff.find(s => s.id === id)?.name)
+                                            .filter(Boolean)
+                                            .join(', ');
+                                    }
+                                    if (sub.changes.subjectId) {
+                                        const newSubj = allSubjects.find(s => s.id === sub.changes.subjectId);
+                                        if (newSubj) {
+                                            displayLesson.subjectName = newSubj.name;
+                                            displayLesson.subjectShortcut = newSubj.shortcut;
+                                        }
+                                    }
+                                    if (sub.changes.ucebnaId) {
+                                        displayLesson.ucebnaName = sub.changes.ucebnaId; // Simplified
+                                    }
+                                }
+                            }
+
+                            return (
+                                <tr key={index} className={cn("border-t", isSubstituted && "bg-destructive/10")}>
+                                    <td className="p-2 font-medium text-center">{index + 1}.</td>
+                                    <td className="p-2 text-muted-foreground">{scheduleData.timeSlots[index]}</td>
+                                    {isCancelled ? (
+                                        <td colSpan={3} className="p-2 text-center text-destructive font-bold flex items-center justify-center gap-2">
+                                            <XCircle className="h-4 w-4" /> Odpadá ({originalLesson?.subjectShortcut})
+                                        </td>
+                                    ) : displayLesson ? (
+                                        <>
+                                            <td className="p-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-semibold">{displayLesson.subjectName}</span>
+                                                    {isSubstituted && <Badge variant="destructive" className="text-[10px] h-4">SUPL</Badge>}
+                                                </div>
+                                            </td>
+                                            <td className="p-2">{displayLesson.teacherName}</td>
+                                            <td className="p-2">{displayLesson.ucebnaName || '-'}</td>
+                                        </>
+                                    ) : (
+                                        <td colSpan={3} className="p-2 text-center text-muted-foreground italic">Volná hodina</td>
+                                    )}
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>

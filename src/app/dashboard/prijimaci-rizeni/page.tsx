@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useMemo } from 'react';
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
-import { collection, query, doc, writeBatch } from 'firebase/firestore';
+import { collection, query, doc, writeBatch, limit, getDocs } from 'firebase/firestore';
 import type { PrijimaciRizeni } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -59,18 +59,27 @@ export default function PrijimaciRizeniPage() {
         if (!firestore || !selectedApplication) return;
 
         try {
+            const orgsQuery = query(collection(firestore, 'organizations'), limit(1));
+            const orgsSnap = await getDocs(orgsQuery);
+            if (orgsSnap.empty) {
+                toast({ variant: 'destructive', title: 'Chyba', description: 'V systému neexistuje žádná organizace.' });
+                return;
+            }
+            const organizationId = orgsSnap.docs[0].id;
+
             const batch = writeBatch(firestore);
 
             // 1. Create Student User
             const studentPin = Math.floor(100000 + Math.random() * 900000).toString();
             const studentUserRef = doc(collection(firestore, 'users'));
-            const studentEmail = `${selectedApplication.jmenoDitete.toLowerCase().replace(/\s/g, '.')}@skolaweb.cz`; // Temporary email
+            const studentEmail = `${selectedApplication.jmenoDitete.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s/g, '.')}@skolaweb.cz`; // Temporary email
             batch.set(studentUserRef, {
                 name: selectedApplication.jmenoDitete,
                 email: studentEmail,
                 datumNarozeni: selectedApplication.datumNarozeniDitete,
                 roles: ['ziak'],
                 pin: studentPin,
+                organizationId: organizationId,
             });
 
             // 2. Create Parent User
@@ -82,6 +91,7 @@ export default function PrijimaciRizeniPage() {
                 roles: ['rodic'],
                 pin: parentPin,
                 studentId: studentUserRef.id,
+                organizationId: organizationId,
             });
 
             // 3. Update application status
