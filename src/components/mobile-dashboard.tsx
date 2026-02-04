@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
@@ -54,6 +55,8 @@ import type {
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 
 const defaultTimeSlots = [
     "07:55-08:40", "08:55-09:40", "09:55-10:40", "10:45-11:30",
@@ -75,7 +78,7 @@ export function MobileDashboard() {
   
   const isTeacher = hasRole('ucitel');
   const isAdmin = hasRole('administrator') || isSuperAdmin();
-  const isOnlyStudentParent = !isAdmin && !isTeacher;
+  const isParent = hasRole('rodic');
   
   const initialViewMode = isAdmin ? 'tridy' : (isTeacher ? 'muj-rozvrh' : 'tridy');
   const [viewMode, setViewMode] = useState(initialViewMode);
@@ -87,62 +90,45 @@ export function MobileDashboard() {
   const [teacherDailySchedule, setTeacherDailySchedule] = useState<Rozvrh | null>(null);
   const [teacherScheduleLoading, setTeacherScheduleLoading] = useState(false);
 
-  const studentRef = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
-    // Fix: Use activeStudentId for parents to ensure the correct child is loaded
-    const studentId = hasRole('rodic') ? activeStudentId : (hasRole('ziak') ? user.id : user.studentId);
-    if (!studentId) return null;
-    return doc(firestore, 'users', studentId);
-  }, [firestore, user, hasRole, activeStudentId]);
-  const { data: studentData, isLoading: studentLoading } = useDoc<User>(studentRef);
+  // Parent specific data
+  const studentIds = useMemo(() => user?.studentIds || (user?.studentId ? [user.studentId] : []), [user]);
+  const studentsQuery = useMemoFirebase(() => {
+    if (!firestore || !isParent || studentIds.length === 0) return null;
+    return query(collection(firestore, 'users'), where('id', 'in', studentIds));
+  }, [firestore, isParent, studentIds]);
+  const { data: studentsDataFetched } = useCollection<User>(studentsQuery);
 
-  const targetClassId = useMemo(() => {
-    if (isPersonalView) return undefined;
-    if (isAdmin) {
-      return selectedClassId;
-    }
-    if (hasRole('ziak')) return user?.tridaId;
-    if (hasRole('rodic')) return studentData?.tridaId;
-    return undefined;
-  }, [isAdmin, user, studentData, selectedClassId, isPersonalView, hasRole]);
+  const studentTridaIds = useMemo(() => {
+    if (isPersonalView) return [];
+    if (isAdmin) return selectedClassId ? [selectedClassId] : [];
+    if (isParent && studentsDataFetched) return [...new Set(studentsDataFetched.map(s => s.tridaId).filter(Boolean))] as string[];
+    if (hasRole('ziak') && user?.tridaId) return [user.tridaId];
+    return [];
+  }, [isAdmin, isParent, studentsDataFetched, user?.tridaId, selectedClassId, isPersonalView]);
 
-  const teacherClassesQuery = useMemoFirebase(() => {
-    if (!firestore || !user ) return null;
-     if (hasRole('administrator')) {
-      return collection(firestore, 'tridy');
-    }
-    if (hasRole('ucitel')) {
-        return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
-    }
-    return null;
-  }, [firestore, user, hasRole]);
-  const { data: teacherClasses, isLoading: teacherClassesLoading } = useCollection<Trida>(teacherClassesQuery);
+  const parentClassesQuery = useMemoFirebase(() => {
+    if (!firestore || studentTridaIds.length === 0) return null;
+    return query(collection(firestore, 'tridy'), where('id', 'in', studentTridaIds));
+  }, [firestore, studentTridaIds]);
+  const { data: parentClasses } = useCollection<Trida>(parentClassesQuery);
+
+  const allTridyQuery = useMemoFirebase(() => (firestore ? collection(firestore, 'tridy') : null), [firestore]);
+  const { data: allTridy, isLoading: tridyLoading } = useCollection<Trida>(allTridyQuery);
     
   useEffect(() => {
-    // If not admin and child/user has a class, auto-select it
-    if (!isAdmin && !isPersonalView) { 
-        const classId = hasRole('ziak') ? user?.tridaId : studentData?.tridaId;
-        if (classId) {
-            setSelectedClassId(classId);
-        }
+    if (isAdmin && !isPersonalView && allTridy && allTridy.length > 0 && !selectedClassId) {
+      setSelectedClassId(allTridy[0].id);
     }
-  }, [isAdmin, user, studentData, isPersonalView, hasRole]);
+  }, [allTridy, selectedClassId, isAdmin, isPersonalView]);
 
   const substitutionsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    
-    const effectiveOrgId = user?.organizationId || (teacherClasses && teacherClasses.length > 0 ? teacherClasses[0].organizationId : null);
-    
+    const effectiveOrgId = user?.organizationId || (allTridy && allTridy.length > 0 ? allTridy[0].organizationId : null);
     if (effectiveOrgId) {
         return query(collection(firestore, 'suplovani'), where('organizationId', '==', effectiveOrgId));
     }
-    
-    if (!isPersonalView && targetClassId) {
-        return query(collection(firestore, 'suplovani'), where('originalLesson.classId', '==', targetClassId));
-    }
-    
     return null;
-  }, [firestore, targetClassId, isPersonalView, user?.organizationId, teacherClasses]);
+  }, [firestore, user?.organizationId, allTridy]);
 
   const { data: substitutionsData } = useCollection<Substitution>(substitutionsQuery);
 
@@ -155,6 +141,29 @@ export function MobileDashboard() {
     if (!firestore) return null;
     return query(collection(firestore, "users"), where("roles", "array-contains-any", ["ucitel", "asistent pedagoga", "vedouci pracovnik", "administrator"]));
   }, [firestore]));
+
+  const schedulesQuery = useMemoFirebase(() => {
+    if (isPersonalView || !firestore || studentTridaIds.length === 0) return null;
+    return query(
+      collection(firestore, 'rozvrhy'), 
+      where('tridaId', 'in', studentTridaIds), 
+      where('datum', '==', format(currentDate, 'yyyy-MM-dd'))
+    );
+  }, [firestore, studentTridaIds, currentDate, isPersonalView]);
+  const { data: schedulesData, isLoading: schedulesLoading } = useCollection<Rozvrh>(schedulesQuery);
+
+  const eventsQuery = useMemoFirebase(() => {
+    if (!firestore || isPersonalView || studentTridaIds.length === 0) return null;
+    return query(collection(firestore, 'udalosti'), where('tridyIds', 'array-contains-any', studentTridaIds));
+  }, [firestore, studentTridaIds, isPersonalView]);
+  
+  const zapisyQuery = useMemoFirebase(() => {
+    if (!firestore || isPersonalView || studentTridaIds.length === 0) return null;
+    return query(collection(firestore, 'zapisyHodin'), where('tridaId', 'in', studentTridaIds));
+  }, [firestore, studentTridaIds, isPersonalView]);
+
+  const { data: eventsData, isLoading: eventsLoading } = useCollection<Udalost>(eventsQuery);
+  const { data: zapisyData, isLoading: zapisyLoading } = useCollection<ZapisHodiny>(zapisyQuery);
 
   useEffect(() => {
     if (!isPersonalView || !firestore || !user?.id || !substitutionsData) return;
@@ -242,35 +251,11 @@ export function MobileDashboard() {
     fetchAndAggregate();
   }, [isPersonalView, firestore, currentDate, user?.id, user?.organizationId, substitutionsData, subjects]);
 
-
-  const dailySchedule = useDoc<Rozvrh>(useMemoFirebase(() => {
-    if (isPersonalView || !firestore || !targetClassId) return null;
-    const scheduleId = `${targetClassId}-${format(currentDate, 'yyyy-MM-dd')}`;
-    return doc(firestore, 'rozvrhy', scheduleId);
-  }, [firestore, targetClassId, currentDate, isPersonalView]));
-  
-  const eventsQuery = useMemoFirebase(() => {
-    if (!firestore || !targetClassId) return null;
-    return query(collection(firestore, 'udalosti'), where('tridyIds', 'array-contains', targetClassId));
-  }, [firestore, targetClassId]);
-  
-  const zapisyQuery = useMemoFirebase(() => {
-    if (!firestore || !targetClassId) return null;
-    return query(collection(firestore, 'zapisyHodin'), where('tridaId', '==', targetClassId));
-  }, [firestore, targetClassId]);
-
-  const { data: eventsData, isLoading: eventsLoading } = useCollection<Udalost>(eventsQuery);
-  const { data: zapisyData, isLoading: zapisyLoading } = useCollection<ZapisHodiny>(zapisyQuery);
-  
-  const handlePrevDay = () => setCurrentDate(prev => subDays(prev, 1));
-  const handleNextDay = () => setCurrentDate(prev => addDays(prev, 1));
-  const handleSetToday = () => setCurrentDate(new Date());
-
-  const scheduleToRender = isPersonalView ? teacherDailySchedule : dailySchedule.data;
-  const isDataLoading = isUserLoading || studentLoading || (subjects === null) || eventsLoading || zapisyLoading || (isPersonalView ? teacherScheduleLoading : (dailySchedule.isLoading || (isAdmin && teacherClassesLoading) || !substitutionsData));
+  const scheduleToRender = isPersonalView ? teacherDailySchedule : (schedulesData?.length === 1 ? schedulesData[0] : null);
+  const isDataLoading = isUserLoading || (subjects === null) || eventsLoading || zapisyLoading || (isPersonalView ? teacherScheduleLoading : (schedulesLoading || tridyLoading || !substitutionsData));
 
   if (isDataLoading) {
-    return <div className="flex h-full w-full items-center justify-center">Načítání...</div>;
+    return <div className="flex h-full w-full items-center justify-center py-20">Načítání...</div>;
   }
    if (!user) {
      return <div className="flex h-full w-full items-center justify-center">Uživatel nenalezen.</div>;
@@ -303,16 +288,16 @@ export function MobileDashboard() {
           <CardTitle>Rozvrh</CardTitle>
           <CardDescription>Váš denní přehled.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3">
           <div className="flex items-center justify-between gap-2 mb-4">
-            <Button variant="outline" size="icon" onClick={handlePrevDay}>
+            <Button variant="outline" size="icon" onClick={() => setCurrentDate(prev => subDays(prev, 1))}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button variant="outline" className="flex-grow" onClick={handleSetToday}>
+            <Button variant="outline" className="flex-grow" onClick={() => setCurrentDate(new Date())}>
               <CalendarIcon className="mr-2 h-4 w-4" />
               {format(currentDate, 'EEEE, d. MMMM', { locale: cs })}
             </Button>
-            <Button variant="outline" size="icon" onClick={handleNextDay}>
+            <Button variant="outline" size="icon" onClick={() => setCurrentDate(prev => addDays(prev, 1))}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
@@ -338,7 +323,7 @@ export function MobileDashboard() {
                   <SelectValue placeholder="Vyberte třídu" />
                 </SelectTrigger>
                 <SelectContent>
-                  {teacherClasses?.map(c => (
+                  {allTridy?.map(c => (
                     <SelectItem key={c.id} value={c.id}>{c.nazev}</SelectItem>
                   ))}
                 </SelectContent>
@@ -346,18 +331,63 @@ export function MobileDashboard() {
             </div>
           )}
 
-          <MobileTimetableList
-            dailySchedule={scheduleToRender}
-            eventsData={eventsData || []}
-            substitutionsData={substitutionsData || []}
-            zapisyData={zapisyData || []}
-            isTeacher={isAdmin || isTeacher}
-            userId={user.id}
-            userClassId={targetClassId}
-            day={currentDate}
-            teachers={allStaff || []}
-            subjects={subjects || []}
-          />
+          {(!isPersonalView && isParent && studentsDataFetched && studentsDataFetched.length > 0) ? (
+            <div className="space-y-10">
+              {studentsDataFetched.map(student => {
+                const studentClass = parentClasses?.find(c => c.id === student.tridaId);
+                const studentSchedule = schedulesData?.find(s => s.tridaId === student.tridaId && isSameDay(parseISO(s.datum), currentDate));
+                
+                const teacher = allStaff?.find(t => t.id === studentClass?.ucitelId);
+                const substitutes = (studentClass?.zastupciIds || []).map(id => allStaff?.find(t => t.id === id)?.name).filter(Boolean);
+
+                return (
+                  <div key={student.id} className="space-y-4">
+                    <div className="flex items-center justify-between gap-3 bg-muted/30 p-3 rounded-xl border border-muted/50">
+                       <div className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10 ring-1 ring-primary/20 ring-offset-1">
+                             <AvatarImage src={student.avatarUrl} />
+                             <AvatarFallback className="bg-primary/5 text-primary font-bold">{student.name.charAt(0)}</AvatarFallback>
+                          </Avatar>
+                          <div className="overflow-hidden">
+                             <h4 className="font-extrabold text-sm truncate">{student.name}</h4>
+                             <p className="text-[10px] text-primary font-bold">{studentClass?.nazev || 'Bez třídy'}</p>
+                          </div>
+                       </div>
+                       <div className="text-right flex flex-col items-end">
+                          <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-tighter">Třídní učitel</p>
+                          <p className="text-[10px] font-semibold truncate max-w-[100px]">{teacher?.name || 'N/A'}</p>
+                       </div>
+                    </div>
+                    <MobileTimetableList
+                      dailySchedule={studentSchedule || null}
+                      eventsData={eventsData || []}
+                      substitutionsData={substitutionsData || []}
+                      zapisyData={zapisyData || []}
+                      isTeacher={false}
+                      userId={user.id}
+                      userClassId={student.tridaId}
+                      day={currentDate}
+                      teachers={allStaff || []}
+                      subjects={subjects || []}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <MobileTimetableList
+              dailySchedule={scheduleToRender}
+              eventsData={eventsData || []}
+              substitutionsData={substitutionsData || []}
+              zapisyData={zapisyData || []}
+              isTeacher={isAdmin || isTeacher}
+              userId={user.id}
+              userClassId={isPersonalView ? undefined : studentTridaIds[0]}
+              day={currentDate}
+              teachers={allStaff || []}
+              subjects={subjects || []}
+            />
+          )}
         </CardContent>
       </Card>
     </div>

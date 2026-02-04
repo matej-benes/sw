@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
@@ -44,8 +45,8 @@ import { cs } from 'date-fns/locale';
 import { WhatsNewDialog } from '@/components/dashboard/whats-new-dialog';
 import { useRouter } from 'next/navigation';
 
-import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, useDoc } from '@/firebase';
-import { collection, query, where, getDocs, doc, writeBatch, getDoc } from 'firebase/firestore';
+import { useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
+import { collection, query, where, getDocs, doc, writeBatch, getDoc, limit } from 'firebase/firestore';
 import type {
   Trida,
   User,
@@ -64,6 +65,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { useUnreadMessages } from '@/hooks/use-unread-messages';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 
 const defaultTimeSlots = [
     "07:55-08:40", "08:55-09:40", "09:55-10:40", "10:45-11:30",
@@ -87,24 +90,47 @@ export function DesktopDashboard() {
 
   const isTeacher = hasRole('ucitel');
   const isAdmin = hasRole('administrator') || isSuperAdmin();
-  const isOnlyStudentParent = !isAdmin && !isTeacher;
+  const isParent = hasRole('rodic');
   
   const initialViewMode = isAdmin ? 'tridy' : (isTeacher ? 'muj-rozvrh' : 'tridy');
   const [viewMode, setViewMode] = useState(initialViewMode);
   const isPersonalView = viewMode === 'muj-rozvrh';
 
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined);
+  const [isFullWeekView, setIsFullWeekView] = useState(false);
+  
+  const [teacherWeekSchedules, setTeacherWeekSchedules] = useState<Rozvrh[]>([]);
+  const [teacherSchedulesLoading, setTeacherSchedulesLoading] = useState(false);
+
+  // Parent specific data
+  const studentIds = useMemo(() => user?.studentIds || (user?.studentId ? [user.studentId] : []), [user]);
+  const studentsQuery = useMemoFirebase(() => {
+    if (!firestore || !isParent || studentIds.length === 0) return null;
+    return query(collection(firestore, 'users'), where('id', 'in', studentIds));
+  }, [firestore, isParent, studentIds]);
+  const { data: studentsDataFetched } = useCollection<User>(studentsQuery);
+
+  const studentTridaIds = useMemo(() => {
+    if (isPersonalView) return [];
+    if (isAdmin) return selectedClassId ? [selectedClassId] : [];
+    if (isParent && studentsDataFetched) return [...new Set(studentsDataFetched.map(s => s.tridaId).filter(Boolean))] as string[];
+    if (hasRole('ziak') && user?.tridaId) return [user.tridaId];
+    return [];
+  }, [isAdmin, isParent, studentsDataFetched, user?.tridaId, selectedClassId, isPersonalView]);
+
+  const parentClassesQuery = useMemoFirebase(() => {
+    if (!firestore || studentTridaIds.length === 0) return null;
+    return query(collection(firestore, 'tridy'), where('id', 'in', studentTridaIds));
+  }, [firestore, studentTridaIds]);
+  const { data: parentClasses } = useCollection<Trida>(parentClassesQuery);
+
   const { data: organizations, isLoading: orgsLoading } = useCollection<Organization>(
-    useMemoFirebase(
-      () => (firestore ? collection(firestore, 'organizations') : null),
-      [firestore]
-    )
+    useMemoFirebase(() => (firestore ? collection(firestore, 'organizations') : null), [firestore])
   );
 
-  const { data: tridy } = useCollection<Trida>(
-    useMemoFirebase(
-      () => (firestore ? collection(firestore, 'tridy') : null),
-      [firestore]
-    )
+  const { data: allTridy } = useCollection<Trida>(
+    useMemoFirebase(() => (firestore ? collection(firestore, 'tridy') : null), [firestore])
   );
   
   const allStaffQuery = useMemoFirebase(() => {
@@ -114,27 +140,8 @@ export function DesktopDashboard() {
   const { data: allStaff } = useCollection<User>(allStaffQuery);
 
   const { data: subjects } = useCollection<Predmet>(
-    useMemoFirebase(
-      () => (firestore ? collection(firestore, 'predmety') : null),
-      [firestore]
-    )
+    useMemoFirebase(() => (firestore ? collection(firestore, 'predmety') : null), [firestore])
   );
-
-  const studentRef = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
-    // Fix: Use activeStudentId for parents, fallback to studentId for legacy or user.id for students
-    const studentId = hasRole('rodic') ? activeStudentId : (hasRole('ziak') ? user.id : user.studentId);
-    if (!studentId) return null;
-    return doc(firestore, 'users', studentId);
-  }, [firestore, user, hasRole, activeStudentId]);
-  const { data: studentData } = useDoc<User>(studentRef);
-
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined);
-  const [isFullWeekView, setIsFullWeekView] = useState(false);
-  
-  const [teacherWeekSchedules, setTeacherWeekSchedules] = useState<Rozvrh[]>([]);
-  const [teacherSchedulesLoading, setTeacherSchedulesLoading] = useState(false);
 
   const weekDays = useMemo(() => {
     const start = startOfWeek(currentDate, { weekStartsOn: 1 });
@@ -150,33 +157,37 @@ export function DesktopDashboard() {
     return [today, addDays(today, 1)];
   }, [currentDate, isFullWeekView]);
 
-  const targetClassId = useMemo(() => {
-    if (isPersonalView) return undefined;
-    if (isAdmin) return selectedClassId;
-    if (hasRole('ziak')) return user?.tridaId;
-    if (hasRole('rodic')) return studentData?.tridaId;
-    return undefined;
-  }, [isAdmin, isPersonalView, user, studentData, selectedClassId, hasRole]);
-
   const substitutionsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    const effectiveOrgId = user?.organizationId || (tridy && tridy.length > 0 ? tridy[0].organizationId : null);
+    const effectiveOrgId = user?.organizationId || (allTridy && allTridy.length > 0 ? allTridy[0].organizationId : null);
     if (effectiveOrgId) {
         return query(collection(firestore, 'suplovani'), where('organizationId', '==', effectiveOrgId));
     }
-    if (!isPersonalView && targetClassId) {
-        return query(collection(firestore, 'suplovani'), where('originalLesson.classId', '==', targetClassId));
-    }
     return null;
-  }, [firestore, user?.organizationId, tridy, targetClassId, isPersonalView]);
+  }, [firestore, user?.organizationId, allTridy]);
 
   const { data: substitutionsData } = useCollection<Substitution>(substitutionsQuery);
 
   const zapisyQuery = useMemoFirebase(() => {
-    if (!firestore || !targetClassId) return null;
-    return query(collection(firestore, 'zapisyHodin'), where('tridaId', '==', targetClassId));
-  }, [firestore, targetClassId]);
+    if (!firestore || isPersonalView || studentTridaIds.length === 0) return null;
+    return query(collection(firestore, 'zapisyHodin'), where('tridaId', 'in', studentTridaIds));
+  }, [firestore, studentTridaIds, isPersonalView]);
   const { data: zapisyData } = useCollection<ZapisHodiny>(zapisyQuery);
+
+  const schedulesQuery = useMemoFirebase(() => {
+      if (isPersonalView || !firestore || studentTridaIds.length === 0) return null;
+      return query(collection(firestore, 'rozvrhy'), where('tridaId', 'in', studentTridaIds));
+  }, [firestore, studentTridaIds, isPersonalView]);
+  const { data: schedulesData, isLoading: schedulesLoading } = useCollection<Rozvrh>(schedulesQuery);
+
+  const eventsQuery = useMemoFirebase(() => {
+    if (!firestore || isPersonalView || studentTridaIds.length === 0) return null; 
+    return query(
+      collection(firestore, 'udalosti'),
+      where('tridyIds', 'array-contains-any', studentTridaIds)
+    );
+  }, [firestore, studentTridaIds, isPersonalView]);
+  const { data: eventsData } = useCollection<Udalost>(eventsQuery);
 
   useEffect(() => {
     if (!isPersonalView || !firestore || weekDays.length === 0 || !user?.id || !substitutionsData) return;
@@ -259,56 +270,12 @@ export function DesktopDashboard() {
   }, [isPersonalView, firestore, weekDays, user?.id, user?.organizationId, substitutionsData, subjects]);
 
   useEffect(() => {
-    if (isAdmin && !isPersonalView && tridy && tridy.length > 0 && !selectedClassId) {
-      setSelectedClassId(tridy[0].id);
-    } else if (!isAdmin) {
-      setSelectedClassId(user?.tridaId || studentData?.tridaId);
+    if (isAdmin && !isPersonalView && allTridy && allTridy.length > 0 && !selectedClassId) {
+      setSelectedClassId(allTridy[0].id);
+    } else if (!isAdmin && !isParent) {
+      setSelectedClassId(user?.tridaId);
     }
-  }, [tridy, selectedClassId, isAdmin, isPersonalView, user?.tridaId, studentData?.tridaId]);
-
-  const schedulesQuery = useMemoFirebase(() => {
-      if (isPersonalView || !firestore || !targetClassId) return null;
-      return query(collection(firestore, 'rozvrhy'), where('tridaId', '==', targetClassId));
-  }, [firestore, targetClassId, isPersonalView]);
-
-  const { data: schedulesData, isLoading: schedulesLoading } = useCollection<Rozvrh>(schedulesQuery);
-
-  const eventsQuery = useMemoFirebase(() => {
-    if (!firestore || !targetClassId) return null; 
-    return query(
-      collection(firestore, 'udalosti'),
-      where('tridyIds', 'array-contains', targetClassId)
-    );
-  }, [firestore, targetClassId]);
-  const { data: eventsData } = useCollection<Udalost>(eventsQuery);
-
-  const teacherClassesQuery = useMemoFirebase(() => {
-    if (!firestore || !user || !hasRole('ucitel')) return null;
-    return query(collection(firestore, 'tridy'), where('ucitelId', '==', user.id));
-  }, [firestore, user, hasRole]);
-  const { data: teacherClasses } = useCollection<Trida>(teacherClassesQuery);
-  const isClassTeacher = (teacherClasses?.length || 0) > 0;
-
-  const pendingExcusesQuery = useMemoFirebase(() => {
-      if (!firestore || !isClassTeacher || !teacherClasses || teacherClasses.length === 0) return null;
-      const classIds = teacherClasses.map(c => c.id);
-      if (classIds.length === 0) return null;
-      return query(collection(firestore, 'omluvenky'), where('status', '==', 'pending'), where('tridaId', 'in', classIds));
-  }, [firestore, isClassTeacher, teacherClasses]);
-
-  const { data: pendingExcuses } = useCollection<Omluvenka>(pendingExcusesQuery);
-
-  const studentClassRef = useMemoFirebase(() => {
-    if (!firestore || !studentData?.tridaId) return null;
-    return doc(firestore, 'tridy', studentData.tridaId);
-  }, [firestore, studentData]);
-  const { data: studentClassData } = useDoc<Trida>(studentClassRef);
-
-  const classTeacherRef = useMemoFirebase(() => {
-    if (!firestore || !studentClassData?.ucitelId) return null;
-    return doc(firestore, 'users', studentClassData.ucitelId);
-  }, [firestore, studentClassData]);
-  const { data: classTeacherData } = useDoc<User>(classTeacherRef);
+  }, [allTridy, selectedClassId, isAdmin, isPersonalView, user?.tridaId, isParent]);
 
   const weekLabel = useMemo(() => {
     const start = startOfWeek(currentDate, { weekStartsOn: 1 });
@@ -318,8 +285,8 @@ export function DesktopDashboard() {
 
   const tridyOptions = useMemo(
     () =>
-      tridy?.map((t) => ({ value: t.id, label: t.nazev })) || [],
-    [tridy]
+      allTridy?.map((t) => ({ value: t.id, label: t.nazev })) || [],
+    [allTridy]
   );
 
   const handlePrevWeek = useCallback(() => {
@@ -337,25 +304,11 @@ export function DesktopDashboard() {
    const handleClassChange = useCallback((value: string) => {
     setSelectedClassId(value);
   }, []);
-  
-  const classInfo = useMemo(() => {
-    if (!studentClassData || !allStaff) {
-      return { className: null, classTeacherName: null, substitutes: [], assistants: [] };
-    }
-    const substitutes = (studentClassData.zastupciIds || []).map(id => allStaff.find(t => t.id === id)?.name).filter(Boolean) as string[];
-    const assistants = (studentClassData.asistentiIds || []).map(id => allStaff.find(t => t.id === id)?.name).filter(Boolean) as string[];
-    return {
-      className: studentClassData.nazev,
-      classTeacherName: classTeacherData?.name || 'Nenalezen',
-      substitutes,
-      assistants,
-    };
-  }, [studentClassData, allStaff, classTeacherData]);
 
   const isLoading = isUserLoading || !user || orgsLoading || (isPersonalView ? teacherSchedulesLoading : (schedulesLoading || !substitutionsData));
 
   if (isLoading) {
-    return <div className="flex h-full w-full items-center justify-center">Načítání dat...</div>;
+    return <div className="flex h-full w-full items-center justify-center py-20">Načítání dat...</div>;
   }
 
   if (!isLoading && organizations && organizations.length === 0) {
@@ -375,8 +328,8 @@ export function DesktopDashboard() {
     <>
       <WhatsNewDialog 
           unreadMessagesCount={unreadCount} 
-          pendingExcusesCount={pendingExcuses?.length || 0}
-          isClassTeacher={isClassTeacher}
+          pendingExcusesCount={0} // Logic handled in Dialog component usually
+          isClassTeacher={isTeacher}
       />
       <div className="space-y-6">
         {isAdmin && (
@@ -435,43 +388,102 @@ export function DesktopDashboard() {
                 <Button variant="outline" className="w-48" onClick={handleSetToday}><CalendarIcon className="mr-2 h-4 w-4" />{weekLabel}</Button>
                 <Button variant="outline" size="icon" onClick={handleNextWeek}><ChevronRight className="h-4 w-4" /></Button>
               </div>
-              
-              {!isPersonalView && (hasRole('ziak') || hasRole('rodic')) && classInfo.className && (
-                <div className="flex items-center gap-3 text-sm">
-                  <Separator orientation="vertical" className="h-8 hidden md:block" />
-                  <div className="text-left">
-                      {hasRole('rodic') && studentData && <p className="font-semibold text-base">Dítě: {studentData.name}</p>}
-                      <p className="font-semibold text-lg">{classInfo.className}</p>
-                      <div className="text-sm text-muted-foreground">
-                        <p><span className="font-semibold">Třídní učitel:</span> {classInfo.classTeacherName}</p>
-                        {classInfo.substitutes.length > 0 && <p><span className="font-semibold">{classInfo.substitutes.length > 1 ? 'Zástupci:' : 'Zástupce:'}</span> {classInfo.substitutes.join(', ')}</p>}
-                        {classInfo.assistants.length > 0 && <p><span className="font-semibold">{classInfo.assistants.length > 1 ? 'Asistenti:' : 'Asistent:'}</span> {classInfo.assistants.join(', ')}</p>}
-                      </div>
-                  </div>
-                </div>
-              )}
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-10">
             {weekDays.map(day => {
-              const scheduleForDay = isPersonalView
-                  ? teacherWeekSchedules.find(s => isSameDay(parseISO(s.datum), day))
-                  : schedulesData?.find(s => isSameDay(parseISO(s.datum), day));
-
+              const isToday = isSameDay(day, new Date());
               return (
-                <div key={day.toISOString()}>
-                  <TimetableWidget
-                    dailySchedule={scheduleForDay}
-                    eventsData={eventsData || []}
-                    substitutionsData={substitutionsData || []}
-                    zapisyData={zapisyData || []}
-                    isTeacher={hasRole('ucitel') || isAdmin}
-                    userId={user.id}
-                    userClassId={isPersonalView ? undefined : targetClassId}
-                    day={day}
-                    teachers={allStaff || []}
-                    subjects={subjects || []}
-                  />
+                <div key={day.toISOString()} className="space-y-6">
+                  <div className={cn("flex items-center gap-3 py-3 border-b-2", isToday ? "border-primary" : "border-muted")}>
+                    <div className={cn("p-2 rounded-lg", isToday ? "bg-primary text-primary-foreground" : "bg-muted")}>
+                       <CalendarIcon className="h-5 w-5" />
+                    </div>
+                    <div>
+                       <h3 className="text-xl font-bold capitalize">{format(day, 'EEEE', { locale: cs })}</h3>
+                       <p className="text-sm text-muted-foreground">{format(day, 'd. MMMM yyyy', { locale: cs })}</p>
+                    </div>
+                  </div>
+
+                  {(!isPersonalView && isParent && studentsDataFetched && studentsDataFetched.length > 0) ? (
+                    <div className="space-y-8 pl-4">
+                      {studentsDataFetched.map(student => {
+                        const studentClass = parentClasses?.find(c => c.id === student.tridaId);
+                        const studentSchedule = schedulesData?.find(s => s.tridaId === student.tridaId && isSameDay(parseISO(s.datum), day));
+                        
+                        const teacher = allStaff?.find(t => t.id === studentClass?.ucitelId);
+                        const substitutes = (studentClass?.zastupciIds || []).map(id => allStaff?.find(t => t.id === id)?.name).filter(Boolean);
+                        const assistants = (studentClass?.asistentiIds || []).map(id => allStaff?.find(t => t.id === id)?.name).filter(Boolean);
+
+                        return (
+                          <div key={student.id} className="space-y-4 p-5 rounded-2xl bg-muted/20 border shadow-sm">
+                             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-muted pb-4">
+                                <div className="flex items-center gap-4">
+                                   <Avatar className="h-12 w-12 ring-2 ring-primary/10 ring-offset-2">
+                                      <AvatarImage src={student.avatarUrl} />
+                                      <AvatarFallback className="bg-primary/5 text-primary text-lg font-bold">{student.name.charAt(0)}</AvatarFallback>
+                                   </Avatar>
+                                   <div>
+                                      <h4 className="text-xl font-extrabold tracking-tight">{student.name}</h4>
+                                      <div className="flex items-center gap-2 mt-0.5">
+                                         <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/20 border-none px-2 py-0">
+                                            {studentClass?.nazev || 'Bez třídy'}
+                                         </Badge>
+                                      </div>
+                                   </div>
+                                </div>
+                                <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+                                   <div className="space-y-0.5">
+                                      <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Třídní učitel</p>
+                                      <p className="font-semibold">{teacher?.name || 'Nenalezen'}</p>
+                                   </div>
+                                   {substitutes.length > 0 && (
+                                      <div className="space-y-0.5">
+                                         <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Zástupci</p>
+                                         <p className="font-medium text-muted-foreground">{substitutes.join(', ')}</p>
+                                      </div>
+                                   )}
+                                   {assistants.length > 0 && (
+                                      <div className="space-y-0.5">
+                                         <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Asistenti</p>
+                                         <p className="font-medium text-muted-foreground">{assistants.join(', ')}</p>
+                                      </div>
+                                   )}
+                                </div>
+                             </div>
+                             <TimetableWidget
+                                dailySchedule={studentSchedule}
+                                eventsData={eventsData || []}
+                                substitutionsData={substitutionsData || []}
+                                zapisyData={zapisyData || []}
+                                isTeacher={false}
+                                userId={user.id}
+                                userClassId={student.tridaId}
+                                day={day}
+                                teachers={allStaff || []}
+                                subjects={subjects || []}
+                             />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <TimetableWidget
+                      dailySchedule={isPersonalView
+                        ? teacherWeekSchedules.find(s => isSameDay(parseISO(s.datum), day))
+                        : schedulesData?.find(s => s.tridaId === studentTridaIds[0] && isSameDay(parseISO(s.datum), day))
+                      }
+                      eventsData={eventsData || []}
+                      substitutionsData={substitutionsData || []}
+                      zapisyData={zapisyData || []}
+                      isTeacher={hasRole('ucitel') || isAdmin}
+                      userId={user.id}
+                      userClassId={isPersonalView ? undefined : studentTridaIds[0]}
+                      day={day}
+                      teachers={allStaff || []}
+                      subjects={subjects || []}
+                    />
+                  )}
                 </div>
               )
             })}
