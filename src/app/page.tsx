@@ -1,8 +1,9 @@
+
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -30,19 +31,32 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
-export default function LoginPage() {
+function LoginForm() {
   const { user, signIn, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const [isSigningIn, setIsSigningIn] = useState(false);
+
+  const emailParam = searchParams.get('email');
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: emailParam || '',
+    }
   });
+
+  useEffect(() => {
+    if (emailParam) {
+      setValue('email', emailParam);
+    }
+  }, [emailParam, setValue]);
 
   useEffect(() => {
     if (!loading && user) {
@@ -81,7 +95,7 @@ export default function LoginPage() {
             <Logo className="mx-auto h-12 w-12 text-primary" />
             <CardTitle className="mt-4 text-2xl">Vítejte ve ŠkolaWeb</CardTitle>
             <CardDescription>
-              Zadejte své přihlašovací údaje pro vstup do systému.
+              {emailParam ? `Přihlášení k účtu ${emailParam}` : 'Zadejte své přihlašovací údaje pro vstup do systému.'}
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit(onSubmit)}>
@@ -117,7 +131,7 @@ export default function LoginPage() {
             <CardFooter className="flex-col gap-4">
               <Button type="submit" className="w-full" disabled={isSigningIn}>
                 {isSigningIn && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Přihlásit se
+                {emailParam ? 'Přihlásit a přepnout' : 'Přihlásit se'}
               </Button>
             </CardFooter>
           </form>
@@ -146,4 +160,12 @@ export default function LoginPage() {
       </p>
     </main>
   );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen w-full items-center justify-center bg-background"><Logo className="h-24 w-24 animate-boot-pulse text-primary" /></div>}>
+      <LoginForm />
+    </Suspense>
+  )
 }

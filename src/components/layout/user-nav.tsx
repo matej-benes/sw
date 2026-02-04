@@ -14,7 +14,7 @@ import {
   DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/use-auth';
-import { LogOut, User as UserIcon, Baby, Check } from 'lucide-react';
+import { LogOut, User as UserIcon, Baby, Check, UserPlus, Users, X } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { useRouter } from 'next/navigation';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
@@ -22,7 +22,7 @@ import { collection, query, where } from 'firebase/firestore';
 import type { User } from '@/lib/types';
 
 export function UserNav() {
-  const { user, signOut, hasRole, activeStudentId, setActiveStudentId } = useAuth();
+  const { user, signOut, hasRole, activeStudentId, setActiveStudentId, savedAccounts, switchAccount, addAccount, removeSavedAccount } = useAuth();
   const router = useRouter();
   const firestore = useFirestore();
 
@@ -56,6 +56,8 @@ export function UserNav() {
     'vedouci pracovnik': 'Vedoucí pracovník',
     'asistent pedagoga': 'Asistent pedagoga',
   };
+
+  const otherAccounts = savedAccounts.filter(a => a.id !== user.id);
 
   return (
     <div className="flex items-center gap-4">
@@ -104,6 +106,40 @@ export function UserNav() {
               </DropdownMenuRadioGroup>
             </>
           )}
+
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-xs font-semibold uppercase text-muted-foreground">Účty</DropdownMenuLabel>
+          <DropdownMenuGroup>
+            {otherAccounts.map(account => (
+              <DropdownMenuItem key={account.id} className="flex items-center justify-between group">
+                <div className="flex items-center gap-2 flex-grow cursor-pointer" onClick={() => switchAccount(account)}>
+                  <Avatar className="h-6 w-6">
+                    <AvatarImage src={account.avatarUrl} />
+                    <AvatarFallback className="text-[8px]">{getInitials(account.name)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-medium">{account.name}</span>
+                    <span className="text-[10px] text-muted-foreground">{account.email}</span>
+                  </div>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeSavedAccount(account.id);
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuItem onClick={() => addAccount()} className="text-primary font-medium">
+              <UserPlus className="mr-2 h-4 w-4" />
+              <span>Přidat další účet</span>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
 
           <DropdownMenuSeparator />
           <DropdownMenuGroup>

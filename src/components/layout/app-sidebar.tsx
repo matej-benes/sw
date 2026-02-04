@@ -1,3 +1,4 @@
+
 'use client';
 import { useAuth } from '@/hooks/use-auth';
 import { usePathname } from 'next/navigation';
@@ -7,6 +8,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Badge } from '@/components/ui/badge';
 import { useUnreadMessages } from '@/hooks/use-unread-messages';
 import { Logo } from '@/components/logo';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
     MessageSquare,
     Backpack,
@@ -27,8 +29,11 @@ import {
     UserX,
     FileText,
     GraduationCap,
+    UserPlus,
+    ChevronDown,
 } from 'lucide-react';
 import { Separator } from '../ui/separator';
+import { useState } from 'react';
 
 const mainNavLinks = [
     { name: 'Komunikace', href: '/dashboard/zpravy', icon: MessageSquare },
@@ -73,15 +78,22 @@ const teachingLinks = [
     { name: 'Vyučující', href: '/dashboard/vyuka/vyucujici', icon: GraduationCap },
 ];
 
+function getInitials(name: string) {
+    if (!name) return '';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase();
+}
+
 export function AppSidebar() {
-  const { hasRole, isSuperAdmin } = useAuth();
+  const { user, hasRole, isSuperAdmin, savedAccounts, switchAccount, addAccount } = useAuth();
   const { unreadCount } = useUnreadMessages();
   const pathname = usePathname();
+  const [showAccounts, setShowAccounts] = useState(false);
   
   const isAdministrator = hasRole('administrator');
   const isTeacher = hasRole('ucitel');
   const isParentOrStudent = hasRole('rodic') || hasRole('ziak');
-  const superAdmin = isSuperAdmin();
+  
+  const otherAccounts = savedAccounts.filter(a => a.id !== user?.id);
 
   const renderNavLinks = (links: {name: string, href: string, icon?: any}[], isSubMenu = false) => (
     links.map(link => {
@@ -118,6 +130,58 @@ export function AppSidebar() {
                 <span className="text-lg font-bold uppercase tracking-wider text-foreground">ŠkolaWeb</span>
             </Link>
         </div>
+
+        {/* Account Switcher - prominent on Mobile Sidebar */}
+        <div className="px-4 py-3">
+            <div 
+                className="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer border bg-muted/20"
+                onClick={() => setShowAccounts(!showAccounts)}
+            >
+                <div className="flex items-center gap-3 overflow-hidden">
+                    <Avatar className="h-9 w-9 shrink-0">
+                        <AvatarImage src={user?.avatarUrl} />
+                        <AvatarFallback>{getInitials(user?.name || '')}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col overflow-hidden">
+                        <span className="text-sm font-bold truncate">{user?.name}</span>
+                        <span className="text-[10px] text-muted-foreground truncate">{user?.email}</span>
+                    </div>
+                </div>
+                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", showAccounts && "rotate-180")} />
+            </div>
+
+            {showAccounts && (
+                <div className="mt-2 space-y-1 animate-in slide-in-from-top-2 duration-200">
+                    {otherAccounts.map(account => (
+                        <div 
+                            key={account.id} 
+                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted cursor-pointer"
+                            onClick={() => switchAccount(account)}
+                        >
+                            <Avatar className="h-7 w-7">
+                                <AvatarImage src={account.avatarUrl} />
+                                <AvatarFallback className="text-[10px]">{getInitials(account.name)}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col">
+                                <span className="text-xs font-medium">{account.name}</span>
+                                <span className="text-[10px] text-muted-foreground">{account.email}</span>
+                            </div>
+                        </div>
+                    ))}
+                    <div 
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted cursor-pointer text-primary"
+                        onClick={() => addAccount()}
+                    >
+                        <div className="h-7 w-7 flex items-center justify-center rounded-full bg-primary/10">
+                            <UserPlus className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs font-semibold">Přidat účet</span>
+                    </div>
+                    <Separator className="my-2" />
+                </div>
+            )}
+        </div>
+
         <div className="flex-1 overflow-y-auto">
             <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
                  {renderNavLinks(mainNavLinks)}

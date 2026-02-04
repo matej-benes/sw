@@ -14,6 +14,13 @@ export interface Organization {
   type: OrganizationType;
 }
 
+export interface SavedAccount {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl?: string;
+}
+
 export interface User {
   id: string;
   name: string;

@@ -1,7 +1,7 @@
 
 'use client';
 
-import type { User, Role } from '@/lib/types';
+import type { User, Role, SavedAccount } from '@/lib/types';
 import { useRouter, usePathname } from 'next/navigation';
 import React, { createContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { useFirestore } from '@/firebase';
@@ -9,6 +9,8 @@ import { getAuth, signInWithEmailAndPassword, signOut as firebaseSignOut, onIdTo
 import { doc, onSnapshot } from 'firebase/firestore';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import { Logo } from '@/components/logo';
+
+const SAVED_ACCOUNTS_KEY = 'skolaweb_saved_accounts';
 
 interface AuthContextType {
   user: User | null;
@@ -20,6 +22,10 @@ interface AuthContextType {
   activeOrganizationId: string | null;
   activeStudentId: string | null;
   setActiveStudentId: (id: string | null) => void;
+  savedAccounts: SavedAccount[];
+  switchAccount: (account: SavedAccount) => Promise<void>;
+  addAccount: () => Promise<void>;
+  removeSavedAccount: (id: string) => void;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -28,6 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeStudentId, setActiveStudentId] = useState<string | null>(null);
+  const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
   
   const router = useRouter();
   const pathname = usePathname();
@@ -35,6 +42,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const auth = getAuth();
   
   const activeOrganizationId = useMemo(() => user?.organizationId || null, [user]);
+
+  // Load saved accounts on mount
+  useEffect(() => {
+    const saved = localStorage.getItem(SAVED_ACCOUNTS_KEY);
+    if (saved) {
+      try {
+        setSavedAccounts(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse saved accounts:", e);
+      }
+    }
+  }, []);
+
+  // Update saved accounts when current user changes
+  useEffect(() => {
+    if (user) {
+      setSavedAccounts(prev => {
+        const exists = prev.find(a => a.id === user.id);
+        const updated = exists 
+          ? prev.map(a => a.id === user.id ? { id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl } : a)
+          : [...prev, { id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl }];
+        
+        localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(updated));
+        return updated;
+      });
+    }
+  }, [user]);
 
   useEffect(() => {
     let unsubscribeDoc: (() => void) | null = null;
@@ -128,6 +162,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.push('/');
   };
 
+  const switchAccount = async (account: SavedAccount) => {
+    await firebaseSignOut(auth);
+    router.push(`/?email=${encodeURIComponent(account.email)}`);
+  };
+
+  const addAccount = async () => {
+    await firebaseSignOut(auth);
+    router.push('/');
+  };
+
+  const removeSavedAccount = (id: string) => {
+    setSavedAccounts(prev => {
+      const updated = prev.filter(a => a.id !== id);
+      localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const hasRole = useCallback((role: Role) => {
     if (user?.isSuperAdmin) return true;
     return user?.roles?.includes(role) ?? false;
@@ -146,7 +198,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isSuperAdmin,
     activeOrganizationId,
     activeStudentId,
-    setActiveStudentId
+    setActiveStudentId,
+    savedAccounts,
+    switchAccount,
+    addAccount,
+    removeSavedAccount
   };
 
    if (loading) {
