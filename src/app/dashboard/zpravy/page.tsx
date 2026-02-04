@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
@@ -47,7 +48,7 @@ function RecipientDialog({ isOpen, onOpenChange, allUsers, allClasses, selectedR
   const teacherRecipientOptions = useMemo(() => {
     if (!allUsers) return [];
     
-    // Pokud je uživatel rodič nebo žák, primárně mu chceme ukázat učitele
+    // Načteme všechny učitele a administrátory
     const teachers = allUsers.filter(u => u.roles?.includes('ucitel') || u.roles?.includes('administrator'));
     
     if (!hasRole('ucitel') && user) {
@@ -80,18 +81,18 @@ function RecipientDialog({ isOpen, onOpenChange, allUsers, allClasses, selectedR
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full max-w-2xl h-auto max-h-[80vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="w-full max-w-2xl h-auto max-h-[80vh] flex flex-col p-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-0">
           <DialogTitle>Vybrat příjemce</DialogTitle>
         </DialogHeader>
         <Command className="flex-grow overflow-hidden">
-          <CommandInput placeholder="Hledat..." />
+          <CommandInput placeholder="Hledat jméno nebo třídu..." />
           <CommandList className="max-h-full">
             <CommandEmpty>Nenalezeno.</CommandEmpty>
             {hasRole('ucitel') && (
               <CommandGroup heading="Třídy">
                 {allClasses.map(c => (
-                  <CommandItem key={c.id} onSelect={() => onToggleRecipient(c.id)}>
+                  <CommandItem key={c.id} onSelect={() => onToggleRecipient(c.id)} className="cursor-pointer">
                     <Checkbox checked={selectedRecipients.includes(c.id)} className="mr-2" />
                     <span>Třída {c.nazev}</span>
                   </CommandItem>
@@ -100,13 +101,13 @@ function RecipientDialog({ isOpen, onOpenChange, allUsers, allClasses, selectedR
             )}
             <CommandGroup heading={hasRole('ucitel') ? 'Uživatelé' : 'Učitelé'}>
               {teacherRecipientOptions.map(opt => (
-                <CommandItem key={opt.user.id} onSelect={() => onToggleRecipient(opt.user.id)}>
+                <CommandItem key={opt.user.id} onSelect={() => onToggleRecipient(opt.user.id)} className="cursor-pointer">
                   <Checkbox checked={selectedRecipients.includes(opt.user.id)} className="mr-2" />
                   <span>{opt.label}</span>
                 </CommandItem>
               ))}
               {hasRole('ucitel') && allUsers.filter(u => !u.roles?.includes('ucitel') && !u.roles?.includes('administrator') && u.id !== user?.id).map(u => (
-                <CommandItem key={u.id} onSelect={() => onToggleRecipient(u.id)}>
+                <CommandItem key={u.id} onSelect={() => onToggleRecipient(u.id)} className="cursor-pointer">
                   <Checkbox checked={selectedRecipients.includes(u.id)} className="mr-2" />
                   <span>{u.name} ({u.roles?.join(', ')})</span>
                 </CommandItem>
@@ -114,7 +115,7 @@ function RecipientDialog({ isOpen, onOpenChange, allUsers, allClasses, selectedR
             </CommandGroup>
           </CommandList>
         </Command>
-        <DialogFooter>
+        <DialogFooter className="p-6 pt-0 border-t mt-auto">
           <Button onClick={() => onOpenChange(false)}>Hotovo</Button>
         </DialogFooter>
       </DialogContent>
@@ -219,7 +220,7 @@ export default function ZpravyPage() {
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   
-  // Načtení uživatelů - opraveno tak, aby načítalo všechny uživatele stejné školy
+  // Načtení uživatelů ze stejné organizace
   const usersQuery = useMemoFirebase(() => {
     if (!firestore || !user?.organizationId) return null;
     return query(collection(firestore, "users"), where("organizationId", "==", user.organizationId));
@@ -400,7 +401,7 @@ export default function ZpravyPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Komunikace</h1>
-          <p className="text-muted-foreground">Posílejte a přijímejte zprávy.</p>
+          <p className="text-muted-foreground">Posílejte a přijímejte zprávy v rámci školy.</p>
         </div>
 
         <Tabs defaultValue="inbox" className="w-full">
@@ -461,19 +462,19 @@ export default function ZpravyPage() {
                             </TableHeader>
                             <TableBody>
                                 {isDataLoading ? (
-                                    <TableRow><TableCell colSpan={4} className="text-center">Načítání...</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={4} className="text-center h-24">Načítání zpráv...</TableCell></TableRow>
                                 ) : receivedMessages?.length === 0 ? (
-                                    <TableRow><TableCell colSpan={4} className="text-center">Žádné doručené zprávy.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">Žádné doručené zprávy.</TableCell></TableRow>
                                 ) : (
                                     receivedMessages?.map(msg => (
                                         <TableRow key={msg.id} onClick={() => handleRowClick(msg)} className={cn("cursor-pointer", !hasUserReadMessage(msg) && "font-bold")}>
                                             <TableCell className="text-center">
                                                 {!hasUserReadMessage(msg) && <div className="h-2 w-2 rounded-full bg-primary mx-auto"></div>}
                                             </TableCell>
-                                            <TableCell>{getSenderName(msg.senderId)}</TableCell>
+                                            <TableCell className="whitespace-nowrap">{getSenderName(msg.senderId)}</TableCell>
                                             <TableCell>
                                                 <div className="flex flex-col">
-                                                    <span className="max-w-sm truncate">{msg.text}</span>
+                                                    <span className="max-w-[200px] md:max-w-sm truncate">{msg.text}</span>
                                                     {hasRole('rodic') && (
                                                         <div className="flex flex-wrap gap-1 mt-1">
                                                             {getRelevantChildren(msg).map(child => (
@@ -485,7 +486,7 @@ export default function ZpravyPage() {
                                                     )}
                                                 </div>
                                             </TableCell>
-                                            <TableCell className="text-right whitespace-nowrap">{format((msg.createdAt as Timestamp).toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
+                                            <TableCell className="text-right whitespace-nowrap text-muted-foreground">{format((msg.createdAt as Timestamp).toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
                                         </TableRow>
                                     ))
                                 )}
@@ -509,15 +510,15 @@ export default function ZpravyPage() {
                             </TableHeader>
                             <TableBody>
                                  {isDataLoading ? (
-                                    <TableRow><TableCell colSpan={3} className="text-center">Načítání...</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={3} className="text-center h-24">Načítání...</TableCell></TableRow>
                                 ) : sentMessages?.length === 0 ? (
-                                    <TableRow><TableCell colSpan={3} className="text-center">Žádné odeslané zprávy.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={3} className="text-center h-24 text-muted-foreground">Žádné odeslané zprávy.</TableCell></TableRow>
                                 ) : (
                                     sentMessages?.map(msg => (
                                         <TableRow key={msg.id} onClick={() => handleRowClick(msg)} className="cursor-pointer">
-                                            <TableCell className="max-w-[200px] truncate">{getRecipientNames(msg.recipientIds)}</TableCell>
-                                            <TableCell className="max-w-sm truncate">{msg.text}</TableCell>
-                                            <TableCell className="text-right whitespace-nowrap">{format((msg.createdAt as Timestamp).toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
+                                            <TableCell className="max-w-[150px] md:max-w-[200px] truncate">{getRecipientNames(msg.recipientIds)}</TableCell>
+                                            <TableCell className="max-w-[200px] md:max-w-sm truncate">{msg.text}</TableCell>
+                                            <TableCell className="text-right whitespace-nowrap text-muted-foreground">{format((msg.createdAt as Timestamp).toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
                                         </TableRow>
                                     ))
                                 )}

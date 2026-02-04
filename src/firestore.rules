@@ -4,52 +4,56 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Global Functions
+    // --- POMOCNÉ FUNKCE (HELPER FUNCTIONS) ---
+
     function isSignedIn() {
       return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function isSuperAdmin() {
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuperAdmin == true;
-    }
-    
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
     function hasRole(role) {
       return isSignedIn() && getUserData().roles.hasAny([role]);
     }
-
+    
     function hasAnyRole(roles) {
       return isSignedIn() && getUserData().roles.hasAny(roles);
     }
-    
-    function isMyStudent(studentId) {
-        let parentData = getUserData();
-        let isParent = parentData.roles.hasAny(['rodic']);
-        let studentIds = parentData.get('studentIds', []);
-        let legacyStudentId = parentData.get('studentId', '');
-        return isParent && (studentId in studentIds || legacyStudentId == studentId);
+
+    function isSuperAdmin() {
+      return isSignedIn() && getUserData().isSuperAdmin == true;
     }
 
-    function isParentOfAny(ids) {
+    // Funkce pro ověření, zda je žák dítětem přihlášeného rodiče
+    function isMyStudent(studentId) {
         let parentData = getUserData();
-        if (!parentData.roles.hasAny(['rodic'])) return false;
+        let sIds = parentData.get('studentIds', []);
+        let legacyId = parentData.get('studentId', '');
+        return hasRole('rodic') && (studentId in sIds || studentId == legacyId);
+    }
+
+    // Funkce pro ověření přístupu ke zprávě (pro rodiče dětí v seznamu příjemců)
+    function isParentOfAny(recipientIds) {
+        let parentData = getUserData();
+        if (!hasRole('rodic')) return false;
         let myStudents = parentData.get('studentIds', []);
         let legacyId = parentData.get('studentId', '');
-        return ids.hasAny(myStudents) || (legacyId != '' && legacyId in ids);
+        
+        // Kontrola, zda se ID některého z mých dětí nachází v seznamu příjemců
+        return recipientIds.hasAny(myStudents) || (legacyId != '' && legacyId in recipientIds);
     }
-    
-    // Per-Collection Rules
+
+    // --- PRAVIDLA PRO KOLEKCE ---
 
     match /users/{userId} {
       allow list: if isSignedIn();
-      // Umožníme uživatelům přečíst základní info o komkoli ze stejné organizace (kvůli jménům ve zprávách)
+      // Umožníme číst profil: sobě, adminovi, rodiči (své dítě) nebo komukoli ze stejné školy (pro zobrazení jmen)
       allow get: if isSignedIn() && (
         isOwner(userId) || 
         hasRole('administrator') || 
@@ -61,41 +65,57 @@ service cloud.firestore {
       allow delete: if hasRole('administrator');
     }
     
+    match /organizations/{organizationId} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+
     match /grades/{gradeId} {
-        let user_data = getUserData();
-        let user_roles = user_data.roles;
-
-        allow get: if isSignedIn() && (
-            user_roles.hasAny(['administrator', 'ucitel']) ||
-            resource.data.ziakId == request.auth.uid ||
-            isMyStudent(resource.data.ziakId)
-        );
-
-        allow list: if isSignedIn() && (
-            user_roles.hasAny(['administrator']) ||
-            (user_roles.hasAny(['ucitel']) && request.query.where.ucitelId == request.auth.uid) ||
-            (user_roles.hasAny(['ziak']) && request.query.where.ziakId == request.auth.uid) ||
-            (user_roles.hasAny(['rodic']) && isMyStudent(request.query.where.ziakId))
-        );
-
-        allow create, update, delete: if isSignedIn() && user_roles.hasAny(['administrator', 'ucitel']);
+      allow read: if isSignedIn() && (
+        hasAnyRole(['ucitel', 'administrator']) || 
+        resource.data.ziakId == request.auth.uid || 
+        isMyStudent(resource.data.ziakId)
+      );
+      allow write: if hasAnyRole(['ucitel', 'administrator']);
     }
 
     match /tridy/{tridaId} {
       allow read: if isSignedIn();
-      allow write: if hasAnyRole(['administrator', 'ucitel']);
+      allow write: if hasAnyRole(['ucitel', 'administrator']);
     }
-
+    
     match /predmety/{predmetId} {
       allow read: if isSignedIn();
-      allow write: if hasAnyRole(['administrator', 'ucitel']);
+      allow write: if hasAnyRole(['ucitel', 'administrator']);
     }
-
+    
     match /ucebny/{ucebnaId} {
       allow read: if isSignedIn();
-      allow write: if hasAnyRole(['administrator', 'ucitel']);
+      allow write: if hasRole('administrator');
     }
-
+    
+    match /poznamky-zaku/{poznamkaId} {
+        allow read: if isSignedIn() && (
+          hasAnyRole(['ucitel', 'administrator']) || 
+          resource.data.studentId == request.auth.uid || 
+          isMyStudent(resource.data.studentId)
+        );
+        allow write: if hasAnyRole(['ucitel', 'administrator']);
+    }
+    
+    match /messages/{messageId} {
+      allow create: if isSignedIn();
+      allow get, list: if isSignedIn() && (
+        resource.data.senderId == request.auth.uid || 
+        request.auth.uid in resource.data.recipientIds ||
+        isParentOfAny(resource.data.recipientIds)
+      );
+      allow update: if isSignedIn() && (
+        request.auth.uid in resource.data.recipientIds || 
+        isParentOfAny(resource.data.recipientIds)
+      );
+    }
+    
     match /rozvrhy/{rozvrhId} {
         allow read: if isSignedIn();
         allow write: if hasRole('administrator');
@@ -105,81 +125,58 @@ service cloud.firestore {
         allow read: if isSignedIn();
         allow write: if hasRole('administrator');
     }
-
-    match /poznamky-zaku/{poznamkaId} {
-        allow get: if isSignedIn() && (
-          hasAnyRole(['ucitel', 'administrator']) || 
-          resource.data.studentId == request.auth.uid || 
-          isMyStudent(resource.data.studentId)
-        );
-        allow list: if (hasAnyRole(['ucitel', 'administrator'])) ||
-                    (hasRole('ziak') && request.query.where.studentId == request.auth.uid) ||
-                    (hasRole('rodic') && isMyStudent(request.query.where.studentId));
-        allow write: if hasAnyRole(['ucitel', 'administrator']);
-    }
-
+    
     match /udalosti/{udalostId} {
         allow read: if isSignedIn();
         allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
     
-    match /messages/{messageId} {
-      allow create: if isSignedIn();
-      allow get: if isSignedIn() && (
-        resource.data.senderId == request.auth.uid || 
-        request.auth.uid in resource.data.recipientIds || 
-        isParentOfAny(resource.data.recipientIds)
-      );
-      allow list: if isSignedIn();
-      allow update: if isSignedIn() && (
-        request.auth.uid in resource.data.recipientIds || 
-        isParentOfAny(resource.data.recipientIds)
-      );
-      allow delete: if false; 
+    match /suplovani/{substitutionId} {
+        allow read: if isSignedIn();
+        allow write: if hasRole('administrator');
     }
-
+    
     match /zapisyHodin/{zapisId} {
         allow read: if isSignedIn();
         allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
-
+    
     match /absences/{absenceId} {
-      allow read: if isSignedIn();
-      allow write: if hasRole('administrator');
+        allow read: if isSignedIn() && (
+          hasAnyRole(['ucitel', 'administrator']) || 
+          resource.data.studentId == request.auth.uid || 
+          isMyStudent(resource.data.studentId)
+        );
+        allow write: if hasRole('administrator');
     }
     
     match /omluvenky/{omluvenkaId} {
-        allow read, write: if isSignedIn();
+        allow read: if isSignedIn() && (
+          hasAnyRole(['ucitel', 'administrator']) || 
+          resource.data.studentId == request.auth.uid || 
+          isOwner(resource.data.parentId)
+        );
+        allow write: if isSignedIn();
     }
     
     match /ukoly/{ukolId} {
         allow read: if isSignedIn();
         allow write: if hasAnyRole(['administrator', 'ucitel']);
     }
-
-    match /prijimaci-rizeni/{rizeniId} {
-      allow create: if true;
-      allow read, update, delete: if hasRole('administrator');
-    }
     
-    match /organizations/{organizationId} {
-      allow read: if isSignedIn();
-      allow write: if isSuperAdmin();
+    match /prijimaci-rizeni/{rizeniId} {
+        allow create: if true; // Veřejný formulář
+        allow read, update, delete: if hasRole('administrator');
     }
     
     match /zaznamy-schuzek/{zaznamId} {
-      allow read: if isSignedIn();
-      allow write: if hasAnyRole(['ucitel', 'administrator']);
-    }
-    
-    match /oznameni/{oznameniId} {
-      allow read: if isSignedIn();
-      allow write: if hasAnyRole(['ucitel', 'administrator']);
-    }
-    
-    match /suplovani/{substitutionId} {
         allow read: if isSignedIn();
-        allow write: if hasRole('administrator');
+        allow write: if hasAnyRole(['ucitel', 'administrator']);
+    }
+    
+     match /oznameni/{oznameniId} {
+        allow read: if isSignedIn();
+        allow write: if hasAnyRole(['ucitel', 'administrator']);
     }
   }
 }

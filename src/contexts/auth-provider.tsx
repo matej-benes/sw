@@ -5,7 +5,7 @@ import type { User, Role, SavedAccount } from '@/lib/types';
 import { useRouter, usePathname } from 'next/navigation';
 import React, { createContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { useFirestore } from '@/firebase';
-import { getAuth, signInWithEmailAndPassword, signOut as firebaseSignOut, onIdTokenChanged, type User as FirebaseUser } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, signOut as firebaseSignOut, onIdTokenChanged } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import { Logo } from '@/components/logo';
@@ -89,10 +89,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
               setUser(userData);
               
-              // Set default active student for parents
+              // Set default active student for parents if not set or if current active is not in list
               if (userData.roles.includes('rodic')) {
                 const kids = userData.studentIds || (userData.studentId ? [userData.studentId] : []);
-                if (kids.length > 0 && !activeStudentId) {
+                if (kids.length > 0 && (!activeStudentId || !kids.includes(activeStudentId))) {
                   setActiveStudentId(kids[0]);
                 }
               }
