@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
@@ -55,7 +56,7 @@ function RecipientDialog({ isOpen, onOpenChange, allUsers, allClasses, selectedR
     const assistants = studentClass.asistentiIds?.map(id => allUsers.find(u => u.id === id)).filter(Boolean) as User[];
     
     const specialRoles: { user: User, role: string }[] = [];
-    if(classTeacher) specialRoles.push({ user: classTeacher, role: 'Třídní učitel'});
+    if(classTeacher) specialRoles.push({ user: classTeacher, role: 'Tříní učitel'});
     substitutes.forEach(sub => specialRoles.push({ user: sub, role: 'Zástupce třídního' }));
     assistants.forEach(as => specialRoles.push({ user: as, role: 'Asistent pedagoga ve vaší třídě' }));
 
@@ -231,7 +232,10 @@ export default function ZpravyPage() {
     }
     setMessagesLoading(true);
 
-    const receivedQuery = query(collection(firestore, 'messages'), where('recipientIds', 'array-contains', user.id));
+    const studentIds = user.studentIds || (user.studentId ? [user.studentId] : []);
+    const searchIds = [user.id, ...studentIds];
+
+    const receivedQuery = query(collection(firestore, 'messages'), where('recipientIds', 'array-contains-any', searchIds));
     const sentQuery = query(collection(firestore, 'messages'), where('senderId', '==', user.id));
 
     const unsubscribeReceived = onSnapshot(receivedQuery, (snapshot) => {
@@ -248,14 +252,13 @@ export default function ZpravyPage() {
       setSentMessages(messages.sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis()));
     }, (error) => {
         console.error("Error fetching sent messages: ", error);
-        // Loading state is handled by received messages listener
     });
 
     return () => {
       unsubscribeReceived();
       unsubscribeSent();
     };
-  }, [firestore, user?.id]);
+  }, [firestore, user?.id, user?.studentIds, user?.studentId]);
 
 
   const handleSendMessage = async () => {
@@ -344,11 +347,18 @@ export default function ZpravyPage() {
     setSelectedMessage(message);
     setIsDetailOpen(true);
     // Mark as read if it's a received message and not already read
-    if (user && firestore && message.recipientIds.includes(user.id) && !message.readBy.includes(user.id)) {
-      const messageRef = doc(firestore, 'messages', message.id);
-      updateDocumentNonBlocking(messageRef, {
-        readBy: arrayUnion(user.id)
-      });
+    if (user && firestore && !message.readBy.includes(user.id)) {
+      // Check if user is either a recipient or parent of a recipient
+      const studentIds = user.studentIds || (user.studentId ? [user.studentId] : []);
+      const isRecipient = message.recipientIds.includes(user.id);
+      const isParentOfRecipient = message.recipientIds.some(id => studentIds.includes(id));
+
+      if (isRecipient || isParentOfRecipient) {
+        const messageRef = doc(firestore, 'messages', message.id);
+        updateDocumentNonBlocking(messageRef, {
+          readBy: arrayUnion(user.id)
+        });
+      }
     }
   };
 
@@ -367,6 +377,13 @@ export default function ZpravyPage() {
       if (!allUsers) return '';
       return recipientIds.map(id => allUsers.find(u => u.id === id)?.name || 'Neznámý').join(', ');
   }, [allUsers]);
+
+  const getRelevantChildren = useCallback((message: Message) => {
+    if (!user || !hasRole('rodic') || !allUsers) return [];
+    const studentIds = user.studentIds || (user.studentId ? [user.studentId] : []);
+    const matchingIds = message.recipientIds.filter(id => studentIds.includes(id));
+    return matchingIds.map(id => allUsers.find(u => u.id === id)).filter(Boolean) as User[];
+  }, [user, hasRole, allUsers]);
 
 
   return (
@@ -445,7 +462,20 @@ export default function ZpravyPage() {
                                                 {!hasUserReadMessage(msg) && <div className="h-2 w-2 rounded-full bg-primary"></div>}
                                             </TableCell>
                                             <TableCell>{getSenderName(msg.senderId)}</TableCell>
-                                            <TableCell className="max-w-sm truncate">{msg.text}</TableCell>
+                                            <TableCell>
+                                                <div className="flex flex-col">
+                                                    <span className="max-w-sm truncate">{msg.text}</span>
+                                                    {hasRole('rodic') && (
+                                                        <div className="flex flex-wrap gap-1 mt-1">
+                                                            {getRelevantChildren(msg).map(child => (
+                                                                <Badge key={child.id} variant="outline" className="text-[10px] h-4 px-1 py-0 border-primary/30 text-primary font-normal">
+                                                                    Pro: {child.name}
+                                                                </Badge>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </TableCell>
                                             <TableCell className="text-right">{format((msg.createdAt as Timestamp).toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
                                         </TableRow>
                                     ))

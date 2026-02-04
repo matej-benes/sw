@@ -36,6 +36,14 @@ service cloud.firestore {
         let legacyStudentId = parentData.get('studentId', '');
         return isParent && (studentId in studentIds || legacyStudentId == studentId);
     }
+
+    function isParentOfAny(ids) {
+        let parentData = getUserData();
+        if (!parentData.roles.hasAny(['rodic'])) return false;
+        let myStudents = parentData.get('studentIds', []);
+        let legacyId = parentData.get('studentId', '');
+        return ids.hasAny(myStudents) || (legacyId != '' && legacyId in ids);
+    }
     
     // Per-Collection Rules
 
@@ -111,9 +119,16 @@ service cloud.firestore {
     
     match /messages/{messageId} {
       allow create: if isSignedIn();
-      allow get: if isSignedIn() && (resource.data.senderId == request.auth.uid || request.auth.uid in resource.data.recipientIds);
+      allow get: if isSignedIn() && (
+        resource.data.senderId == request.auth.uid || 
+        request.auth.uid in resource.data.recipientIds || 
+        isParentOfAny(resource.data.recipientIds)
+      );
       allow list: if isSignedIn();
-      allow update(write): if isSignedIn() && request.auth.uid in resource.data.recipientIds;
+      allow update: if isSignedIn() && (
+        request.auth.uid in resource.data.recipientIds || 
+        isParentOfAny(resource.data.recipientIds)
+      );
       allow delete: if false; 
     }
 

@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { useFirestore } from '@/firebase';
@@ -20,7 +21,10 @@ export function useUnreadMessages() {
         }
         
         setIsLoading(true);
-        const q = query(collection(firestore, 'messages'), where('recipientIds', 'array-contains', user.id));
+        const studentIds = user.studentIds || (user.studentId ? [user.studentId] : []);
+        const searchIds = [user.id, ...studentIds];
+
+        const q = query(collection(firestore, 'messages'), where('recipientIds', 'array-contains-any', searchIds));
         
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const messages = snapshot.docs.map(doc => doc.data() as Message);
@@ -29,15 +33,14 @@ export function useUnreadMessages() {
             setIsLoading(false);
         }, (error) => {
             // Firestore permission errors or other errors will be caught here.
-            // We can log them but we don't want to crash the app.
             console.error("Error fetching unread messages count:", error);
             setIsLoading(false);
-            setUnreadCount(0); // Reset count on error
+            setUnreadCount(0); 
         });
 
         return () => unsubscribe();
 
-    }, [firestore, user?.id]);
+    }, [firestore, user?.id, user?.studentIds, user?.studentId]);
 
     return { unreadCount, isLoading };
 }
