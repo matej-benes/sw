@@ -7,8 +7,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { Loader2, Send, UserPlus, Inbox, Send as SendIcon, Pencil, CheckCircle, Eye, Reply } from 'lucide-react';
-import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
-import { collection, doc, query, where, Timestamp, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
+import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
+import { collection, doc, query, where, Timestamp, arrayUnion, onSnapshot } from 'firebase/firestore';
 import type { Trida, User, Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import {
@@ -42,16 +42,33 @@ function getInitials(name: string) {
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
 }
 
-function RecipientDialog({ isOpen, onOpenChange, allUsers, allClasses, selectedRecipients, onToggleRecipient, hasRole }: { isOpen: boolean, onOpenChange: (open: boolean) => void, allUsers: User[], allClasses: Trida[], selectedRecipients: string[], onToggleRecipient: (id: string) => void, hasRole: (role: any) => boolean }) {
+function RecipientDialog({ 
+    isOpen, 
+    onOpenChange, 
+    allUsers, 
+    allClasses, 
+    selectedRecipients, 
+    onToggleRecipient, 
+    hasRole 
+}: { 
+    isOpen: boolean, 
+    onOpenChange: (open: boolean) => void, 
+    allUsers: User[] | null, 
+    allClasses: Trida[] | null, 
+    selectedRecipients: string[], 
+    onToggleRecipient: (id: string) => void, 
+    hasRole: (role: any) => boolean 
+}) {
   const { user } = useAuth();
+  const users = allUsers || [];
+  const classes = allClasses || [];
 
   const teacherRecipientOptions = useMemo(() => {
-    if (!allUsers) return [];
-    
-    // Načteme všechny učitele a administrátory
-    const teachers = allUsers.filter(u => u.roles?.includes('ucitel') || u.roles?.includes('administrator'));
+    // Načteme všechny učitele a administrátory ze školy
+    const teachers = users.filter(u => u.roles?.some(r => ['ucitel', 'administrator'].includes(r)));
     
     if (!hasRole('ucitel') && user) {
+        // Pro rodiče a žáky najdeme jejich konkrétní učitele
         const myClassIds = new Set<string>();
         if (hasRole('ziak') && user.tridaId) {
             myClassIds.add(user.tridaId);
@@ -59,7 +76,7 @@ function RecipientDialog({ isOpen, onOpenChange, allUsers, allClasses, selectedR
         if (hasRole('rodic')) {
             const childrenIds = user.studentIds || (user.studentId ? [user.studentId] : []);
             childrenIds.forEach(cid => {
-                const child = allUsers.find(u => u.id === cid);
+                const child = users.find(u => u.id === cid);
                 if (child?.tridaId) myClassIds.add(child.tridaId);
             });
         }
@@ -67,7 +84,7 @@ function RecipientDialog({ isOpen, onOpenChange, allUsers, allClasses, selectedR
         return teachers.map(t => {
             let label = t.name;
             const isSpecial = Array.from(myClassIds).some(cid => {
-                const cls = allClasses.find(c => c.id === cid);
+                const cls = classes.find(c => c.id === cid);
                 return cls && (cls.ucitelId === t.id || cls.zastupciIds?.includes(t.id) || cls.asistentiIds?.includes(t.id));
             });
             if (isSpecial) label += " (Váš vyučující)";
@@ -77,7 +94,7 @@ function RecipientDialog({ isOpen, onOpenChange, allUsers, allClasses, selectedR
     }
 
     return teachers.map(t => ({ user: t, label: t.name }));
-  }, [user, hasRole, allUsers, allClasses]);
+  }, [user, hasRole, users, classes]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -85,34 +102,40 @@ function RecipientDialog({ isOpen, onOpenChange, allUsers, allClasses, selectedR
         <DialogHeader className="p-6 pb-0">
           <DialogTitle>Vybrat příjemce</DialogTitle>
         </DialogHeader>
-        <Command className="flex-grow overflow-hidden">
+        <Command className="flex-grow overflow-hidden pointer-events-auto">
           <CommandInput placeholder="Hledat jméno nebo třídu..." />
           <CommandList className="max-h-full">
             <CommandEmpty>Nenalezeno.</CommandEmpty>
-            {hasRole('ucitel') && (
-              <CommandGroup heading="Třídy">
-                {allClasses.map(c => (
-                  <CommandItem key={c.id} onSelect={() => onToggleRecipient(c.id)} className="cursor-pointer">
-                    <Checkbox checked={selectedRecipients.includes(c.id)} className="mr-2" />
-                    <span>Třída {c.nazev}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
+            {(users.length === 0 && classes.length === 0) ? (
+                <div className="p-4 text-center text-muted-foreground">Načítání seznamu...</div>
+            ) : (
+                <>
+                {hasRole('ucitel') && (
+                    <CommandGroup heading="Třídy">
+                        {classes.map(c => (
+                        <CommandItem key={c.id} onSelect={() => onToggleRecipient(c.id)} className="cursor-pointer">
+                            <Checkbox checked={selectedRecipients.includes(c.id)} className="mr-2" />
+                            <span>Třída {c.nazev}</span>
+                        </CommandItem>
+                        ))}
+                    </CommandGroup>
+                )}
+                <CommandGroup heading={hasRole('ucitel') ? 'Uživatelé' : 'Učitelé'}>
+                    {teacherRecipientOptions.map(opt => (
+                        <CommandItem key={opt.user.id} onSelect={() => onToggleRecipient(opt.user.id)} className="cursor-pointer">
+                        <Checkbox checked={selectedRecipients.includes(opt.user.id)} className="mr-2" />
+                        <span>{opt.label}</span>
+                        </CommandItem>
+                    ))}
+                    {hasRole('ucitel') && users.filter(u => !u.roles?.some(r => ['ucitel', 'administrator'].includes(r)) && u.id !== user?.id).map(u => (
+                        <CommandItem key={u.id} onSelect={() => onToggleRecipient(u.id)} className="cursor-pointer">
+                        <Checkbox checked={selectedRecipients.includes(u.id)} className="mr-2" />
+                        <span>{u.name} ({u.roles?.join(', ')})</span>
+                        </CommandItem>
+                    ))}
+                </CommandGroup>
+                </>
             )}
-            <CommandGroup heading={hasRole('ucitel') ? 'Uživatelé' : 'Učitelé'}>
-              {teacherRecipientOptions.map(opt => (
-                <CommandItem key={opt.user.id} onSelect={() => onToggleRecipient(opt.user.id)} className="cursor-pointer">
-                  <Checkbox checked={selectedRecipients.includes(opt.user.id)} className="mr-2" />
-                  <span>{opt.label}</span>
-                </CommandItem>
-              ))}
-              {hasRole('ucitel') && allUsers.filter(u => !u.roles?.includes('ucitel') && !u.roles?.includes('administrator') && u.id !== user?.id).map(u => (
-                <CommandItem key={u.id} onSelect={() => onToggleRecipient(u.id)} className="cursor-pointer">
-                  <Checkbox checked={selectedRecipients.includes(u.id)} className="mr-2" />
-                  <span>{u.name} ({u.roles?.join(', ')})</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
           </CommandList>
         </Command>
         <DialogFooter className="p-6 pt-0 border-t mt-auto">
@@ -161,7 +184,7 @@ function MessageDetailDialog({ message, isOpen, onOpenChange, allUsers, onReply 
                 <div className="text-sm">
                     <p><span className="font-semibold text-muted-foreground">Odesílatel:</span> {sender?.name || 'Neznámý'}</p>
                     <p><span className="font-semibold text-muted-foreground">Příjemci:</span> {recipients}</p>
-                    <p><span className="font-semibold text-muted-foreground">Datum:</span> {format((message.createdAt as Timestamp).toDate(), 'PPP p', { locale: cs })}</p>
+                    <p><span className="font-semibold text-muted-foreground">Datum:</span> {message.createdAt ? format((message.createdAt as Timestamp).toDate(), 'PPP p', { locale: cs }) : '...'}</p>
                 </div>
                 <Separator />
                 <p className="whitespace-pre-wrap">{message.text}</p>
@@ -252,7 +275,11 @@ export default function ZpravyPage() {
 
     const unsubscribeReceived = onSnapshot(receivedQuery, (snapshot) => {
       const messages = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Message[];
-      setReceivedMessages(messages.sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis()));
+      setReceivedMessages(messages.sort((a, b) => {
+          const timeA = (a.createdAt as Timestamp)?.toMillis() || 0;
+          const timeB = (b.createdAt as Timestamp)?.toMillis() || 0;
+          return timeB - timeA;
+      }));
       setMessagesLoading(false);
     }, (error) => {
       console.error("Error fetching received messages: ", error);
@@ -261,7 +288,11 @@ export default function ZpravyPage() {
 
     const unsubscribeSent = onSnapshot(sentQuery, (snapshot) => {
       const messages = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as Message[];
-      setSentMessages(messages.sort((a, b) => (b.createdAt as Timestamp).toMillis() - (a.createdAt as Timestamp).toMillis()));
+      setSentMessages(messages.sort((a, b) => {
+          const timeA = (a.createdAt as Timestamp)?.toMillis() || 0;
+          const timeB = (b.createdAt as Timestamp)?.toMillis() || 0;
+          return timeB - timeA;
+      }));
     }, (error) => {
         console.error("Error fetching sent messages: ", error);
     });
@@ -486,7 +517,7 @@ export default function ZpravyPage() {
                                                     )}
                                                 </div>
                                             </TableCell>
-                                            <TableCell className="text-right whitespace-nowrap text-muted-foreground">{format((msg.createdAt as Timestamp).toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
+                                            <TableCell className="text-right whitespace-nowrap text-muted-foreground">{msg.createdAt ? format((msg.createdAt as Timestamp).toDate(), 'd. M. yyyy', { locale: cs }) : '...'}</TableCell>
                                         </TableRow>
                                     ))
                                 )}
@@ -518,7 +549,7 @@ export default function ZpravyPage() {
                                         <TableRow key={msg.id} onClick={() => handleRowClick(msg)} className="cursor-pointer">
                                             <TableCell className="max-w-[150px] md:max-w-[200px] truncate">{getRecipientNames(msg.recipientIds)}</TableCell>
                                             <TableCell className="max-w-[200px] md:max-w-sm truncate">{msg.text}</TableCell>
-                                            <TableCell className="text-right whitespace-nowrap text-muted-foreground">{format((msg.createdAt as Timestamp).toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
+                                            <TableCell className="text-right whitespace-nowrap text-muted-foreground">{msg.createdAt ? format((msg.createdAt as Timestamp).toDate(), 'd. M. yyyy', { locale: cs }) : '...'}</TableCell>
                                         </TableRow>
                                     ))
                                 )}
@@ -531,17 +562,15 @@ export default function ZpravyPage() {
 
       </div>
       
-      {allUsers && allClasses && (
-        <RecipientDialog 
-          isOpen={isRecipientDialogOpen}
-          onOpenChange={setIsRecipientDialogOpen}
-          allClasses={allClasses}
-          allUsers={allUsers}
-          selectedRecipients={selectedRecipients}
-          onToggleRecipient={handleToggleRecipient}
-          hasRole={hasRole}
-        />
-      )}
+      <RecipientDialog 
+        isOpen={isRecipientDialogOpen}
+        onOpenChange={setIsRecipientDialogOpen}
+        allClasses={allClasses || []}
+        allUsers={allUsers || []}
+        selectedRecipients={selectedRecipients}
+        onToggleRecipient={handleToggleRecipient}
+        hasRole={hasRole}
+      />
 
       {allUsers && (
         <MessageDetailDialog 

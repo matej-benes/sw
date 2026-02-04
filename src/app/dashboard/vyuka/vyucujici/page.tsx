@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo } from 'react';
@@ -31,8 +32,8 @@ function TeacherList({ student, allTeachers, scheduleTemplate, showAllTeachers }
 
     const teacherToSubjects = new Map<string, Set<string>>();
 
-    scheduleTemplate.days.forEach(day => {
-      day.lessons.forEach(lesson => {
+    scheduleTemplate.days?.forEach(day => {
+      day.lessons?.forEach(lesson => {
         if (lesson) {
           if (!teacherToSubjects.has(lesson.teacherId)) {
             teacherToSubjects.set(lesson.teacherId, new Set());
@@ -62,6 +63,7 @@ function TeacherList({ student, allTeachers, scheduleTemplate, showAllTeachers }
       <div className="flex flex-col items-center justify-center py-10 text-center border rounded-xl border-dashed bg-muted/20">
         <Users className="h-10 w-10 text-muted-foreground mb-4" />
         <p className="text-muted-foreground">Pro třídu tohoto žáka nebyli v rozvrhu nalezeni žádní vyučující.</p>
+        <p className="text-xs text-muted-foreground mt-1">Zkuste přepnout na zobrazení všech učitelů školy.</p>
       </div>
     );
   }
@@ -73,7 +75,7 @@ function TeacherList({ student, allTeachers, scheduleTemplate, showAllTeachers }
         const isMyTeacher = !!subjectsTaught;
 
         return (
-          <Card key={teacher.id} className={cn("overflow-hidden transition-all hover:shadow-md", isMyTeacher && "ring-1 ring-primary/20")}>
+          <Card key={teacher.id} className={cn("overflow-hidden transition-all hover:shadow-md", isMyTeacher && "ring-1 ring-primary/20 shadow-sm")}>
             <CardHeader className="flex flex-row items-center gap-4 pb-2">
               <Avatar className="h-14 w-14 border-2 border-background shadow-sm">
                 <AvatarImage src={teacher.avatarUrl} alt={teacher.name} />
@@ -84,7 +86,7 @@ function TeacherList({ student, allTeachers, scheduleTemplate, showAllTeachers }
               <div className="flex-1">
                 <CardTitle className="text-lg leading-tight">{teacher.name}</CardTitle>
                 <CardDescription className="flex items-center gap-1.5 mt-1">
-                  <Mail className="h-3 w-3" />
+                  <Mail className="h-3 w-3 text-muted-foreground" />
                   <span className="truncate max-w-[150px]">{teacher.email}</span>
                 </CardDescription>
               </div>
@@ -126,7 +128,8 @@ export default function VyucujiciPage() {
   const studentIds = useMemo(() => {
     if (!user) return [];
     if (hasRole('rodic')) {
-      return user.studentIds || (user.studentId ? [user.studentId] : []);
+      const ids = user.studentIds || (user.studentId ? [user.studentId] : []);
+      return ids;
     }
     if (hasRole('ziak')) {
       return [user.id];
@@ -143,7 +146,7 @@ export default function VyucujiciPage() {
 
   // 3. Načtení šablon rozvrhů pro všechny dotčené třídy
   const classIds = useMemo(() => {
-    if (!students) return [];
+    if (!students || students.length === 0) return [];
     return [...new Set(students.map(s => s.tridaId).filter(Boolean))] as string[];
   }, [students]);
 
@@ -164,7 +167,7 @@ export default function VyucujiciPage() {
   }, [firestore, user?.organizationId]);
   const { data: allTeachers, isLoading: teachersLoading } = useCollection<User>(teachersQuery);
 
-  const isLoading = studentsLoading || templatesLoading || teachersLoading;
+  const isLoading = studentsLoading || (classIds.length > 0 && templatesLoading) || teachersLoading;
 
   if (isLoading) {
     return (
