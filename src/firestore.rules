@@ -49,7 +49,13 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow list: if isSignedIn();
-      allow get: if isOwner(userId) || hasRole('administrator') || isMyStudent(userId);
+      // Umožníme uživatelům přečíst základní info o komkoli ze stejné organizace (kvůli jménům ve zprávách)
+      allow get: if isSignedIn() && (
+        isOwner(userId) || 
+        hasRole('administrator') || 
+        isMyStudent(userId) ||
+        getUserData().organizationId == resource.data.organizationId
+      );
       allow create: if hasRole('administrator');
       allow update: if isOwner(userId) || hasRole('administrator');
       allow delete: if hasRole('administrator');

@@ -26,7 +26,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
+} from "@/components/command";
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -46,11 +46,12 @@ function RecipientDialog({ isOpen, onOpenChange, allUsers, allClasses, selectedR
   const { user } = useAuth();
 
   const teacherRecipientOptions = useMemo(() => {
-    if (!user || !allUsers || !allClasses) return [];
+    if (!allUsers) return [];
     
-    // If not a teacher, we show teachers
-    if (!hasRole('ucitel')) {
-        // Collect class IDs for the user or their children
+    // Pokud je uživatel rodič nebo žák, primárně mu chceme ukázat učitele
+    const teachers = allUsers.filter(u => u.roles?.includes('ucitel') || u.roles?.includes('administrator'));
+    
+    if (!hasRole('ucitel') && user) {
         const myClassIds = new Set<string>();
         if (hasRole('ziak') && user.tridaId) {
             myClassIds.add(user.tridaId);
@@ -63,42 +64,19 @@ function RecipientDialog({ isOpen, onOpenChange, allUsers, allClasses, selectedR
             });
         }
 
-        const specialTeacherIds = new Set<string>();
-        const specialTeacherList: { user: User, label: string }[] = [];
-
-        myClassIds.forEach(cid => {
-            const cls = allClasses?.find(c => c.id === cid);
-            if (cls) {
-                const classTeacher = allUsers.find(u => u.id === cls.ucitelId);
-                if (classTeacher) {
-                    specialTeacherList.push({ user: classTeacher, label: `${classTeacher.name} (Třídní učitel - ${cls.nazev})` });
-                    specialTeacherIds.add(classTeacher.id);
-                }
-                cls.zastupciIds?.forEach(id => {
-                    const t = allUsers.find(u => u.id === id);
-                    if (t && !specialTeacherIds.has(id)) {
-                        specialTeacherList.push({ user: t, label: `${t.name} (Zástupce třídního - ${cls.nazev})` });
-                        specialTeacherIds.add(id);
-                    }
-                });
-                cls.asistentiIds?.forEach(id => {
-                    const t = allUsers.find(u => u.id === id);
-                    if (t && !specialTeacherIds.has(id)) {
-                        specialTeacherList.push({ user: t, label: `${t.name} (Asistent v ${cls.nazev})` });
-                        specialTeacherIds.add(id);
-                    }
-                });
-            }
+        return teachers.map(t => {
+            let label = t.name;
+            const isSpecial = Array.from(myClassIds).some(cid => {
+                const cls = allClasses.find(c => c.id === cid);
+                return cls && (cls.ucitelId === t.id || cls.zastupciIds?.includes(t.id) || cls.asistentiIds?.includes(t.id));
+            });
+            if (isSpecial) label += " (Váš vyučující)";
+            else label += " (Učitel)";
+            return { user: t, label };
         });
-
-        const otherTeachers = allUsers
-            .filter(u => u.roles.includes('ucitel') && !specialTeacherIds.has(u.id))
-            .map(t => ({ user: t, label: `${t.name} (Učitel)` }));
-
-        return [...specialTeacherList, ...otherTeachers];
     }
 
-    return []; // Teachers see allUsers anyway in the CommandGroup branch
+    return teachers.map(t => ({ user: t, label: t.name }));
   }, [user, hasRole, allUsers, allClasses]);
 
   return (
@@ -122,21 +100,18 @@ function RecipientDialog({ isOpen, onOpenChange, allUsers, allClasses, selectedR
               </CommandGroup>
             )}
             <CommandGroup heading={hasRole('ucitel') ? 'Uživatelé' : 'Učitelé'}>
-              {hasRole('ucitel') ? (
-                allUsers.filter(u => u.id !== user?.id).map(u => (
-                  <CommandItem key={u.id} onSelect={() => onToggleRecipient(u.id)}>
-                    <Checkbox checked={selectedRecipients.includes(u.id)} className="mr-2" />
-                    <span>{u.name}</span>
-                  </CommandItem>
-                ))
-              ) : (
-                teacherRecipientOptions.map(opt => (
-                  <CommandItem key={opt.user.id} onSelect={() => onToggleRecipient(opt.user.id)}>
-                    <Checkbox checked={selectedRecipients.includes(opt.user.id)} className="mr-2" />
-                    <span>{opt.label}</span>
-                  </CommandItem>
-                ))
-              )}
+              {teacherRecipientOptions.map(opt => (
+                <CommandItem key={opt.user.id} onSelect={() => onToggleRecipient(opt.user.id)}>
+                  <Checkbox checked={selectedRecipients.includes(opt.user.id)} className="mr-2" />
+                  <span>{opt.label}</span>
+                </CommandItem>
+              ))}
+              {hasRole('ucitel') && allUsers.filter(u => !u.roles?.includes('ucitel') && !u.roles?.includes('administrator') && u.id !== user?.id).map(u => (
+                <CommandItem key={u.id} onSelect={() => onToggleRecipient(u.id)}>
+                  <Checkbox checked={selectedRecipients.includes(u.id)} className="mr-2" />
+                  <span>{u.name} ({u.roles?.join(', ')})</span>
+                </CommandItem>
+              ))}
             </CommandGroup>
           </CommandList>
         </Command>
@@ -184,7 +159,7 @@ function MessageDetailDialog({ message, isOpen, onOpenChange, allUsers, onReply 
             </DialogHeader>
             <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
                 <div className="text-sm">
-                    <p><span className="font-semibold text-muted-foreground">Odesílatel:</span> {sender?.name}</p>
+                    <p><span className="font-semibold text-muted-foreground">Odesílatel:</span> {sender?.name || 'Neznámý'}</p>
                     <p><span className="font-semibold text-muted-foreground">Příjemci:</span> {recipients}</p>
                     <p><span className="font-semibold text-muted-foreground">Datum:</span> {format((message.createdAt as Timestamp).toDate(), 'PPP p', { locale: cs })}</p>
                 </div>
@@ -211,7 +186,7 @@ function MessageDetailDialog({ message, isOpen, onOpenChange, allUsers, onReply 
                     <Textarea 
                         id="quick-reply"
                         rows={4}
-                        placeholder={`Napsat odpověď pro ${sender?.name}...`}
+                        placeholder={`Napsat odpověď pro ${sender?.name || 'odesílatele'}...`}
                         value={replyText}
                         onChange={(e) => setReplyText(e.target.value)}
                     />
@@ -245,7 +220,7 @@ export default function ZpravyPage() {
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   
-  // --- Data Fetching ---
+  // Načtení uživatelů - opraveno tak, aby načítalo všechny uživatele stejné školy
   const usersQuery = useMemoFirebase(() => {
     if (!firestore || !user?.organizationId) return null;
     return query(collection(firestore, "users"), where("organizationId", "==", user.organizationId));
@@ -261,11 +236,6 @@ export default function ZpravyPage() {
   const [receivedMessages, setReceivedMessages] = useState<Message[]>([]);
   const [sentMessages, setSentMessages] = useState<Message[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(true);
-
-  const unreadMessagesCount = useMemo(() => {
-    if (!user || !receivedMessages) return 0;
-    return receivedMessages.filter(msg => !msg.readBy.includes(user.id)).length;
-  }, [user, receivedMessages]);
 
   useEffect(() => {
     if (!firestore || !user?.id) {
@@ -302,9 +272,14 @@ export default function ZpravyPage() {
     };
   }, [firestore, user?.id, user?.studentIds, user?.studentId]);
 
+  const unreadMessagesCount = useMemo(() => {
+    if (!user || !receivedMessages) return 0;
+    return receivedMessages.filter(msg => !msg.readBy.includes(user.id)).length;
+  }, [user, receivedMessages]);
+
 
   const handleSendMessage = async () => {
-    if (!user || !firestore || !allClasses) return;
+    if (!user || !firestore) return;
     if (!messageText.trim()) {
       toast({ variant: "destructive", title: "Prázdná zpráva" });
       return;
@@ -316,40 +291,38 @@ export default function ZpravyPage() {
 
     setIsSending(true);
 
-    let finalRecipientIds: string[] = [];
-    selectedRecipients.forEach(id => {
-      const classInfo = allClasses.find(c => c.id === id);
-      if (classInfo) {
-        // It's a class ID, add all students
-        finalRecipientIds.push(...(classInfo.ziaciIds || []));
-      } else {
-        // It's a user ID
-        finalRecipientIds.push(id);
-      }
-    });
-
-    finalRecipientIds = [...new Set(finalRecipientIds)].filter(id => id !== user.id);
-
-    if(finalRecipientIds.length === 0) {
-      toast({ variant: "destructive", title: "Nemůžete poslat zprávu sami sobě." });
-      setIsSending(false);
-      return;
-    }
-
-    const newMessage: Omit<Message, 'id'> = {
-      senderId: user.id,
-      recipientIds: finalRecipientIds,
-      text: messageText,
-      createdAt: Timestamp.now(),
-      readBy: [],
-      organizationId: user.organizationId || '',
-    };
-
     try {
-      await addDocumentNonBlocking(collection(firestore, 'messages'), newMessage);
-      toast({ title: 'Zpráva odeslána' });
-      setMessageText('');
-      setSelectedRecipients([]);
+        let finalRecipientIds: string[] = [];
+        selectedRecipients.forEach(id => {
+          const classInfo = allClasses?.find(c => c.id === id);
+          if (classInfo) {
+            finalRecipientIds.push(...(classInfo.ziaciIds || []));
+          } else {
+            finalRecipientIds.push(id);
+          }
+        });
+
+        finalRecipientIds = [...new Set(finalRecipientIds)].filter(id => id !== user.id);
+
+        if(finalRecipientIds.length === 0) {
+          toast({ variant: "destructive", title: "Nemůžete poslat zprávu sami sobě." });
+          setIsSending(false);
+          return;
+        }
+
+        const newMessage: Omit<Message, 'id'> = {
+          senderId: user.id,
+          recipientIds: finalRecipientIds,
+          text: messageText,
+          createdAt: Timestamp.now(),
+          readBy: [],
+          organizationId: user.organizationId || '',
+        };
+
+        await addDocumentNonBlocking(collection(firestore, 'messages'), newMessage);
+        toast({ title: 'Zpráva odeslána' });
+        setMessageText('');
+        setSelectedRecipients([]);
     } catch (e) {
       console.error(e);
       toast({ variant: 'destructive', title: 'Chyba při odesílání' });
@@ -390,26 +363,19 @@ export default function ZpravyPage() {
   const handleRowClick = (message: Message) => {
     setSelectedMessage(message);
     setIsDetailOpen(true);
-    // Mark as read if it's a received message and not already read
     if (user && firestore && !message.readBy.includes(user.id)) {
-      // Check if user is either a recipient or parent of a recipient
-      const studentIds = user.studentIds || (user.studentId ? [user.studentId] : []);
-      const isRecipient = message.recipientIds.includes(user.id);
-      const isParentOfRecipient = message.recipientIds.some(id => studentIds.includes(id));
-
-      if (isRecipient || isParentOfRecipient) {
-        const messageRef = doc(firestore, 'messages', message.id);
-        updateDocumentNonBlocking(messageRef, {
-          readBy: arrayUnion(user.id)
-        });
-      }
+      const messageRef = doc(firestore, 'messages', message.id);
+      updateDocumentNonBlocking(messageRef, {
+        readBy: arrayUnion(user.id)
+      });
     }
   };
 
   const isDataLoading = userLoading || usersLoading || classesLoading || messagesLoading;
 
   const getSenderName = useCallback((senderId: string) => {
-    return allUsers?.find(u => u.id === senderId)?.name || 'Neznámý';
+    const sender = allUsers?.find(u => u.id === senderId);
+    return sender?.name || 'Neznámý';
   }, [allUsers]);
 
   const hasUserReadMessage = useCallback((message: Message) => {
@@ -418,7 +384,7 @@ export default function ZpravyPage() {
   }, [user]);
   
   const getRecipientNames = useCallback((recipientIds: string[]) => {
-      if (!allUsers) return '';
+      if (!allUsers) return 'Načítání...';
       return recipientIds.map(id => allUsers.find(u => u.id === id)?.name || 'Neznámý').join(', ');
   }, [allUsers]);
 
@@ -503,7 +469,7 @@ export default function ZpravyPage() {
                                     receivedMessages?.map(msg => (
                                         <TableRow key={msg.id} onClick={() => handleRowClick(msg)} className={cn("cursor-pointer", !hasUserReadMessage(msg) && "font-bold")}>
                                             <TableCell className="text-center">
-                                                {!hasUserReadMessage(msg) && <div className="h-2 v-2 rounded-full bg-primary"></div>}
+                                                {!hasUserReadMessage(msg) && <div className="h-2 w-2 rounded-full bg-primary mx-auto"></div>}
                                             </TableCell>
                                             <TableCell>{getSenderName(msg.senderId)}</TableCell>
                                             <TableCell>
@@ -520,7 +486,7 @@ export default function ZpravyPage() {
                                                     )}
                                                 </div>
                                             </TableCell>
-                                            <TableCell className="text-right">{format((msg.createdAt as Timestamp).toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
+                                            <TableCell className="text-right whitespace-nowrap">{format((msg.createdAt as Timestamp).toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
                                         </TableRow>
                                     ))
                                 )}
@@ -552,7 +518,7 @@ export default function ZpravyPage() {
                                         <TableRow key={msg.id} onClick={() => handleRowClick(msg)} className="cursor-pointer">
                                             <TableCell className="max-w-[200px] truncate">{getRecipientNames(msg.recipientIds)}</TableCell>
                                             <TableCell className="max-w-sm truncate">{msg.text}</TableCell>
-                                            <TableCell className="text-right">{format((msg.createdAt as Timestamp).toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
+                                            <TableCell className="text-right whitespace-nowrap">{format((msg.createdAt as Timestamp).toDate(), 'd. M. yyyy', { locale: cs })}</TableCell>
                                         </TableRow>
                                     ))
                                 )}
