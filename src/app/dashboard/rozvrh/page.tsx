@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -20,6 +19,7 @@ export default function RozvrhPage() {
   const firestore = useFirestore();
   const [currentDate, setCurrentDate] = useState(new Date());
 
+  // React to activeStudentId for parents
   const targetStudentId = hasRole('rodic') ? activeStudentId : (hasRole('ziak') ? user?.id : null);
 
   const studentRef = useMemoFirebase(() => {

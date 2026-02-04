@@ -81,7 +81,7 @@ const adminQuickActions = [
 
 export function DesktopDashboard() {
   const firestore = useFirestore();
-  const { user, hasRole, isSuperAdmin, loading: isUserLoading } = useAuth();
+  const { user, hasRole, isSuperAdmin, loading: isUserLoading, activeStudentId } = useAuth();
   const { unreadCount } = useUnreadMessages();
   const router = useRouter();
 
@@ -122,10 +122,11 @@ export function DesktopDashboard() {
 
   const studentRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
-    const studentId = hasRole('ziak') ? user.id : user.studentId;
+    // Fix: Use activeStudentId for parents, fallback to studentId for legacy or user.id for students
+    const studentId = hasRole('rodic') ? activeStudentId : (hasRole('ziak') ? user.id : user.studentId);
     if (!studentId) return null;
     return doc(firestore, 'users', studentId);
-  }, [firestore, user, hasRole]);
+  }, [firestore, user, hasRole, activeStudentId]);
   const { data: studentData } = useDoc<User>(studentRef);
 
   const [currentDate, setCurrentDate] = useState(new Date());

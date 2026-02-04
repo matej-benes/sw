@@ -70,7 +70,7 @@ const adminQuickActions = [
 
 export function MobileDashboard() {
   const firestore = useFirestore();
-  const { user, hasRole, isSuperAdmin, loading: isUserLoading } = useAuth();
+  const { user, hasRole, isSuperAdmin, loading: isUserLoading, activeStudentId } = useAuth();
   const router = useRouter();
   
   const isTeacher = hasRole('ucitel');
@@ -89,10 +89,11 @@ export function MobileDashboard() {
 
   const studentRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
-    const studentId = hasRole('ziak') ? user.id : user.studentId;
+    // Fix: Use activeStudentId for parents to ensure the correct child is loaded
+    const studentId = hasRole('rodic') ? activeStudentId : (hasRole('ziak') ? user.id : user.studentId);
     if (!studentId) return null;
     return doc(firestore, 'users', studentId);
-  }, [firestore, user, hasRole]);
+  }, [firestore, user, hasRole, activeStudentId]);
   const { data: studentData, isLoading: studentLoading } = useDoc<User>(studentRef);
 
   const targetClassId = useMemo(() => {
@@ -118,19 +119,14 @@ export function MobileDashboard() {
   const { data: teacherClasses, isLoading: teacherClassesLoading } = useCollection<Trida>(teacherClassesQuery);
     
   useEffect(() => {
-    if (selectedClassId) return;
-
-    if (isAdmin && !isPersonalView) {
-        if (teacherClasses && teacherClasses.length > 0) {
-            setSelectedClassId(teacherClasses[0].id);
-        }
-    } else if (!isPersonalView) { 
+    // If not admin and child/user has a class, auto-select it
+    if (!isAdmin && !isPersonalView) { 
         const classId = hasRole('ziak') ? user?.tridaId : studentData?.tridaId;
         if (classId) {
             setSelectedClassId(classId);
         }
     }
-  }, [isAdmin, user, studentData, teacherClasses, selectedClassId, isPersonalView, hasRole]);
+  }, [isAdmin, user, studentData, isPersonalView, hasRole]);
 
   const substitutionsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
