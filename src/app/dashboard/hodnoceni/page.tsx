@@ -1,3 +1,4 @@
+
 'use client';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
@@ -51,7 +52,7 @@ const gradingSchema = z.object({
 type GradingFormData = z.infer<typeof gradingSchema>;
 
 export default function HodnoceniPage() {
-    const { user, loading: userLoading, hasRole, isSuperAdmin } = useAuth();
+    const { user, loading: userLoading, hasRole, isSuperAdmin, activeStudentId } = useAuth();
     const firestore = useFirestore();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -150,29 +151,14 @@ export default function HodnoceniPage() {
 
         let q: FirestoreQuery | null = null;
         
-        // Prioritize teacher role to ensure teachers see their own grades
         if (hasRole('ucitel')) {
-             q = query(
-                collection(firestore, 'grades'),
-                where('ucitelId', '==', user.id),
-                limit(50)
-            );
+             q = query(collection(firestore, 'grades'), where('ucitelId', '==', user.id), limit(50));
         } else if (hasRole('administrator') && user.organizationId) {
-            q = query(
-                collection(firestore, 'grades'), 
-                where('organizationId', '==', user.organizationId),
-                limit(50) 
-            );
+            q = query(collection(firestore, 'grades'), where('organizationId', '==', user.organizationId), limit(50));
         } else if (hasRole('ziak') && user.id) {
-             q = query(
-                collection(firestore, 'grades'),
-                where('ziakId', '==', user.id)
-            );
-        } else if (hasRole('rodic') && user.studentId) {
-            q = query(
-                collection(firestore, 'grades'),
-                where('ziakId', '==', user.studentId)
-            );
+             q = query(collection(firestore, 'grades'), where('ziakId', '==', user.id));
+        } else if (hasRole('rodic') && activeStudentId) {
+            q = query(collection(firestore, 'grades'), where('ziakId', '==', activeStudentId));
         } else {
              setGradingsLoading(false);
              return;
@@ -184,12 +170,11 @@ export default function HodnoceniPage() {
             setGradingsLoading(false);
         }, (error) => {
             console.error("Error fetching gradings: ", error);
-            toast({ variant: 'destructive', title: 'Chyba načítání známek', description: 'Nepodařilo se načíst data o hodnocení. Zkontrolujte prosím své připojení a oprávnění.' });
             setGradingsLoading(false);
         });
 
         return () => unsubscribe();
-    }, [firestore, user, hasRole, toast]);
+    }, [firestore, user, hasRole, activeStudentId]);
 
     // Fetch students when a class is selected
     useEffect(() => {
@@ -235,7 +220,6 @@ export default function HodnoceniPage() {
             if(studentClassId) {
                 setSelectedClassId(studentClassId);
             } else {
-                // Fallback for finding the class if not in current student list
                 getDoc(doc(firestore, 'users', grading.ziakId)).then(docSnap => {
                     if (docSnap.exists()) {
                         setSelectedClassId(docSnap.data().tridaId || null);
@@ -360,13 +344,8 @@ export default function HodnoceniPage() {
 
     const isDataLoading = userLoading || gradingsLoading || classesLoading || studentsLoading || predmetyLoading || teachersLoading;
 
-    // RENDER LOGIC
     if (userLoading) {
        return <div className="flex h-full w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
-    }
-    
-    if (hasRole('administrator') && !user?.organizationId && !isSuperAdmin()) {
-        return <div className="flex h-full w-full items-center justify-center">Načítání dat organizace...</div>;
     }
     
     const showTeacherAdminView = hasRole('ucitel') || hasRole('administrator');
@@ -520,8 +499,6 @@ export default function HodnoceniPage() {
     }
     
      if (showStudentParentView) {
-        const getTeacherName = (teacherId: string) => allTeachers?.find(t => t.id === teacherId)?.name || 'Neznámý';
-        
         const gradesBySubject = useMemo(() => {
             if (!gradings) return {};
             return gradings.reduce((acc, g) => {

@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "Organization": {
@@ -27,7 +28,11 @@
           "description": "An array of roles the user has within the school.",
           "items": { "type": "string" }
         },
-        "studentId": { "type": "string", "description": "For parents, the ID of their child student. This assumes a parent is linked to one child per organization context." },
+        "studentIds": {
+          "type": "array",
+          "description": "For parents, IDs of their child students.",
+          "items": { "type": "string" }
+        },
         "pin": { "type": "string", "description": "A 6-digit PIN for initial user registration." },
         "isSuperAdmin": { "type": "boolean", "description": "Indicates if the user is a super administrator." }
       },

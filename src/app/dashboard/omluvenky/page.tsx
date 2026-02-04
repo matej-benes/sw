@@ -1,3 +1,4 @@
+
 'use client';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
@@ -11,7 +12,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format, parse, differenceInYears, eachDayOfInterval, parseISO } from 'date-fns';
 import { cs } from 'date-fns/locale';
-import { CalendarIcon, PlusCircle, Check, X, AlertTriangle, BookOpen } from 'lucide-react';
+import { CalendarIcon, PlusCircle, Check, X, AlertTriangle, BookOpen, Baby } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,48 +25,63 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const omluvenkaSchema = z.object({
+  studentId: z.string().min(1, 'Vyberte dítě.'),
   datum: z.object({ from: z.date(), to: z.date() }),
   duvod: z.string().min(10, 'Důvod je příliš krátký.'),
 });
 type OmluvenkaFormData = z.infer<typeof omluvenkaSchema>;
 
 function ParentExcuseForm() {
-    const { user } = useAuth();
+    const { user, activeStudentId } = useAuth();
     const firestore = useFirestore();
     const { toast } = useToast();
-    const { handleSubmit, control, reset, formState: { errors } } = useForm<OmluvenkaFormData>({
+
+    const studentIds = useMemo(() => user?.studentIds || (user?.studentId ? [user.studentId] : []), [user]);
+    
+    const studentsQuery = useMemoFirebase(() => {
+        if (!firestore || studentIds.length === 0) return null;
+        return query(collection(firestore, 'users'), where('id', 'in', studentIds));
+    }, [firestore, studentIds]);
+    const { data: students } = useCollection<User>(studentsQuery);
+
+    const { handleSubmit, control, reset, setValue, watch, formState: { errors } } = useForm<OmluvenkaFormData>({
         resolver: zodResolver(omluvenkaSchema),
+        defaultValues: {
+            studentId: activeStudentId || '',
+        }
     });
 
-    const studentRef = useMemoFirebase(() => {
-        if (!firestore || !user?.studentId) return null;
-        return doc(firestore, 'users', user.studentId);
-    }, [firestore, user]);
-    const {data: studentData} = useDoc<User>(studentRef);
+    useEffect(() => {
+        if (activeStudentId) setValue('studentId', activeStudentId);
+    }, [activeStudentId, setValue]);
+
+    const selectedStudentId = watch('studentId');
+    const selectedStudent = useMemo(() => students?.find(s => s.id === selectedStudentId), [students, selectedStudentId]);
 
     const onSubmit = async (data: OmluvenkaFormData) => {
-        if (!user || !user.studentId || !studentData?.tridaId) {
+        if (!user || !selectedStudent?.tridaId) {
             toast({ variant: 'destructive', title: 'Chyba', description: 'Nelze odeslat omluvenku, chybí údaje o studentovi nebo jeho třídě.' });
             return;
         }
         
         const newOmluvenka: Omit<Omluvenka, 'id'> = {
-            studentId: user.studentId,
+            studentId: data.studentId,
             parentId: user.id,
-            tridaId: studentData.tridaId,
+            tridaId: selectedStudent.tridaId,
             datumOd: format(data.datum.from, 'yyyy-MM-dd'),
             datumDo: format(data.datum.to, 'yyyy-MM-dd'),
             duvod: data.duvod,
             status: 'pending',
             datumPodani: Timestamp.now(),
-            organizationId: studentData.organizationId || '',
+            organizationId: selectedStudent.organizationId || '',
         };
 
         await addDocumentNonBlocking(collection(firestore, 'omluvenky'), newOmluvenka);
         toast({ title: 'Omluvenka odeslána', description: 'Vaše žádost o omluvení byla odeslána třídnímu učiteli.' });
-        reset();
+        reset({ ...data, duvod: '' });
     };
 
     return (
@@ -76,6 +92,27 @@ function ParentExcuseForm() {
             </CardHeader>
             <form onSubmit={handleSubmit(onSubmit)}>
                 <CardContent className="space-y-4">
+                    {students && students.length > 1 && (
+                        <div className="grid gap-2">
+                            <Label>Dítě</Label>
+                            <Controller
+                                name="studentId"
+                                control={control}
+                                render={({ field }) => (
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="Vyberte dítě" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {students.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                            />
+                            {errors.studentId && <p className="text-sm text-destructive">{errors.studentId.message}</p>}
+                        </div>
+                    )}
+
                     <div className="grid gap-2">
                         <label>Datum nepřítomnosti</label>
                         <Controller
@@ -138,6 +175,7 @@ function StudentExcuseForm() {
 
     const { handleSubmit, control, reset, formState: { errors } } = useForm<OmluvenkaFormData>({
         resolver: zodResolver(omluvenkaSchema),
+        defaultValues: { studentId: user?.id || '' }
     });
 
     const onSubmit = async (data: OmluvenkaFormData) => {

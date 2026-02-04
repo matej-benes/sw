@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
@@ -5,8 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { BookCopy, Printer, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import { useFirestore } from '@/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
 import type { Grading, User } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
@@ -16,21 +17,28 @@ interface SubjectAverage {
 }
 
 export default function VysvedceniPage() {
-    const { user, hasRole, loading: userLoading } = useAuth();
+    const { user, hasRole, loading: userLoading, activeStudentId } = useAuth();
     const firestore = useFirestore();
     const [grades, setGrades] = useState<Grading[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     
-    const studentId = hasRole('ziak') ? user?.id : user?.studentId;
-    const studentName = hasRole('ziak') ? user?.name : 'vašeho dítěte';
+    const targetStudentId = hasRole('rodic') ? activeStudentId : (hasRole('ziak') ? user?.id : null);
+
+    const activeStudentRef = useMemoFirebase(() => {
+        if (!firestore || !targetStudentId) return null;
+        return doc(firestore, 'users', targetStudentId);
+    }, [firestore, targetStudentId]);
+    const { data: activeStudent } = useDoc<User>(activeStudentRef);
+
+    const studentName = activeStudent?.name || '...';
 
     useEffect(() => {
-        if (!firestore || !studentId) {
+        if (!firestore || !targetStudentId) {
             setIsLoading(false);
             return;
         }
         setIsLoading(true);
-        const q = query(collection(firestore, 'grades'), where('ziakId', '==', studentId));
+        const q = query(collection(firestore, 'grades'), where('ziakId', '==', targetStudentId));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const results = snapshot.docs.map(doc => ({...doc.data(), id: doc.id})) as Grading[];
             setGrades(results);
@@ -40,7 +48,7 @@ export default function VysvedceniPage() {
             setIsLoading(false);
         });
         return () => unsubscribe();
-    }, [firestore, studentId]);
+    }, [firestore, targetStudentId]);
 
     const finalGrades = useMemo(() => {
         if (!grades) return [];
@@ -87,7 +95,7 @@ export default function VysvedceniPage() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Náhled vysvědčení pro {studentName}</CardTitle>
+                    <CardTitle>Náhled vysvědčení pro: {studentName}</CardTitle>
                     <CardDescription>Školní rok 2023/2024 - 2. pololetí</CardDescription>
                 </CardHeader>
                 <CardContent>

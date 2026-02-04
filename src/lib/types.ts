@@ -1,3 +1,4 @@
+
 import { Timestamp } from "firebase/firestore";
 
 export type Role = 'ucitel' | 'rodic' | 'ziak' | 'administrator' | 'vedouci pracovnik' | 'asistent pedagoga' | 'vedouci skupiny' | 'hlavni vedouci skupiny' | 'clen';
@@ -19,7 +20,8 @@ export interface User {
   email: string;
   roles: Role[];
   avatarUrl?: string;
-  studentId?: string; 
+  studentId?: string; // Backward compatibility
+  studentIds?: string[]; 
   pin?: string | null;
   isSuperAdmin?: boolean;
   organizationId?: string;

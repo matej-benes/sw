@@ -14,10 +14,6 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      // Check for a custom claim, which is more secure and efficient.
-      // This requires a Cloud Function to set the claim upon user creation/promotion.
-      // return request.auth.token.isSuperAdmin == true;
-      // Fallback to checking a field in the user's document.
       return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuperAdmin == true;
     }
     
@@ -35,25 +31,19 @@ service cloud.firestore {
     
     function isMyStudent(studentId) {
         let parentData = getUserData();
-        return parentData.roles.hasAny(['rodic']) && parentData.studentId == studentId;
+        let isParent = parentData.roles.hasAny(['rodic']);
+        let studentIds = parentData.get('studentIds', []);
+        let legacyStudentId = parentData.get('studentId', '');
+        return isParent && (studentId in studentIds || legacyStudentId == studentId);
     }
     
     // Per-Collection Rules
 
     match /users/{userId} {
-      // Admins can list all users.
       allow list: if hasRole('administrator');
-      // Users can see their own profile, admins can see anyone's.
-      allow get: if isOwner(userId) || hasRole('administrator');
-      
-      // Admins can create users. This is broad to allow the client-side admin creation flow.
-      // A more secure implementation would use a Cloud Function.
+      allow get: if isOwner(userId) || hasRole('administrator') || isMyStudent(userId);
       allow create: if hasRole('administrator');
-
-      // Users can update their own profile, admins can update anyone's.
       allow update: if isOwner(userId) || hasRole('administrator');
-
-      // Only admins can delete users.
       allow delete: if hasRole('administrator');
     }
     
@@ -64,14 +54,14 @@ service cloud.firestore {
         allow get: if isSignedIn() && (
             user_roles.hasAny(['administrator', 'ucitel']) ||
             resource.data.ziakId == request.auth.uid ||
-            (user_roles.hasAny(['rodic']) && user_data.studentId == resource.data.ziakId)
+            isMyStudent(resource.data.ziakId)
         );
 
         allow list: if isSignedIn() && (
             user_roles.hasAny(['administrator']) ||
             (user_roles.hasAny(['ucitel']) && request.query.where.ucitelId == request.auth.uid) ||
             (user_roles.hasAny(['ziak']) && request.query.where.ziakId == request.auth.uid) ||
-            (user_roles.hasAny(['rodic']) && user_data.studentId == request.query.where.ziakId)
+            (user_roles.hasAny(['rodic']) && isMyStudent(request.query.where.ziakId))
         );
 
         allow create, update, delete: if isSignedIn() && user_roles.hasAny(['administrator', 'ucitel']);

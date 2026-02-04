@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -84,8 +85,6 @@ const roleTranslations: { [key in Role]: string } = {
   'clen': 'Člen',
 };
 const allSchoolRoles: Role[] = ['ucitel', 'rodic', 'ziak', 'administrator', 'vedouci pracovnik', 'asistent pedagoga'];
-const allInterestGroupRoles: Role[] = ['hlavni vedouci skupiny', 'vedouci skupiny', 'clen', 'administrator'];
-
 
 const userSchema = z.object({
   name: z.string().min(1, 'Jméno je povinné'),
@@ -93,7 +92,7 @@ const userSchema = z.object({
   roles: z.array(z.string()).min(1, 'Uživatel musí mít alespoň jednu roli'),
   pin: z.string().optional().nullable(),
   tridaId: z.string().optional().nullable(),
-  studentId: z.string().optional().nullable(),
+  studentIds: z.array(z.string()).optional().default([]),
 });
 
 type UserFormData = z.infer<typeof userSchema>;
@@ -109,7 +108,6 @@ function UserForm({
   onSave: (data: UserFormData, pin: string | null) => void;
   closeDialog: () => void;
 }) {
-  const { hasRole } = useAuth();
   const firestore = useFirestore();
   
   const tridyQuery = useMemoFirebase(() => {
@@ -134,7 +132,7 @@ function UserForm({
       roles: user?.roles || [],
       pin: user?.pin || null,
       tridaId: (user as any)?.tridaId || null,
-      studentId: user?.studentId || null,
+      studentIds: user?.studentIds || (user?.studentId ? [user.studentId] : []),
     },
   });
   
@@ -147,7 +145,7 @@ function UserForm({
   };
 
   const generatePin = () => {
-    const newPin = Math.random().toString(36).substring(2, 10);
+    const newPin = Math.floor(100000 + Math.random() * 900000).toString();
     setValue('pin', newPin, { shouldValidate: true });
   };
   
@@ -162,7 +160,7 @@ function UserForm({
       setValue('tridaId', null);
     }
      if (!isRodic) {
-        setValue('studentId', null);
+        setValue('studentIds', []);
     }
   }, [isZiak, isRodic, setValue]);
   
@@ -225,17 +223,17 @@ function UserForm({
 
        {isRodic && (
         <div className="space-y-1">
-            <Label htmlFor="studentId">Dítě (Žák)</Label>
+            <Label htmlFor="studentIds">Děti (Žáci)</Label>
              <Controller
-                name="studentId"
+                name="studentIds"
                 control={control}
                 render={({ field }) => (
-                    <Select onValueChange={field.onChange} value={field.value || ''}>
-                        <SelectTrigger><SelectValue placeholder="Vyberte dítě" /></SelectTrigger>
-                        <SelectContent>
-                            {students.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
-                        </SelectContent>
-                    </Select>
+                    <MultiSelect
+                        options={students.map((s) => ({ value: s.id, label: s.name }))}
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                        placeholder="Vyberte děti..."
+                    />
                 )}
             />
         </div>
@@ -246,7 +244,7 @@ function UserForm({
         <div className="flex items-center gap-2">
           <Input id="pin" {...register('pin')} type={showPin ? 'text' : 'password'} placeholder={user ? "Nezměněno" : "Není vygenerováno"} />
           <Button type="button" variant="ghost" size="icon" onClick={() => setShowPin(!showPin)} className="h-9 w-9">
-              {showPin ? <EyeOff /> : <Eye />}
+              {showPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </Button>
           <Button type="button" variant="outline" onClick={generatePin}>
             <ShieldCheck className="mr-2 h-4 w-4" />
@@ -399,21 +397,13 @@ function AdminUserManagement() {
 
         try {
             const userRef = doc(firestore, 'users', deletingUser.id);
-            const userSnap = await getDoc(userRef);
-
             const batch = writeBatch(firestore);
-            
             batch.delete(userRef);
-
-            // Note: This does not delete the user from Firebase Authentication,
-            // which must be done with admin privileges, typically via a backend function.
-            // We are only deleting the Firestore user document.
-
             await batch.commit();
             
             toast({
               title: 'Uživatel smazán',
-              description: 'Uživatel byl úspěšně odstraněn ze systému. Pro úplné smazání (včetně autentizace) je nutné provést akci ve Firebase konzoli.',
+              description: 'Uživatel byl úspěšně odstraněn ze systému.',
             });
         } catch(e) {
             console.error("Error deleting user:", e);
@@ -428,11 +418,6 @@ function AdminUserManagement() {
       setIsDialogOpen(true);
     };
     
-    const roleOptions = [
-      { value: 'all', label: 'Všechny role' },
-      ...allSchoolRoles.map(r => ({ value: r, label: roleTranslations[r] }))
-    ];
-
     return (
     <>
       <Card>
@@ -444,16 +429,6 @@ function AdminUserManagement() {
             </CardDescription>
           </div>
            <div className="flex items-center gap-2">
-              <Select value="all" onValueChange={() => {}}>
-                  <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Filtrovat podle role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                      {roleOptions.map(option => (
-                          <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                      ))}
-                  </SelectContent>
-              </Select>
               <Button onClick={() => openDialog(null)}>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Přidat uživatele
@@ -486,7 +461,7 @@ function AdminUserManagement() {
               {!usersLoading && allUsers?.length === 0 && (
                   <TableRow>
                       <TableCell colSpan={4} className="h-24 text-center">
-                          Žádní uživatelé neodpovídají filtru.
+                          Žádní uživatelé nenalezeni.
                       </TableCell>
                   </TableRow>
               )}
@@ -524,7 +499,7 @@ function AdminUserManagement() {
                   Opravdu chcete smazat uživatele?
                 </AlertDialogTitle>
                 <AlertDialogDescription>
-                  Tato akce trvale smaže uživatelský záznam "{deletingUser?.name}" z databáze. Pro kompletní odstranění z autentizace je třeba zásah ve Firebase konzoli.
+                  Tato akce trvale smaže uživatelský záznam "{deletingUser?.name}" z databáze.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

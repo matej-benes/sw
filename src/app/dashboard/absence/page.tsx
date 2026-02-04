@@ -36,7 +36,7 @@ const attendanceStatusVariant = {
 
 
 function AbsenceView() {
-    const { user, hasRole, activeOrganizationId } = useAuth();
+    const { user, hasRole, activeStudentId } = useAuth();
     const firestore = useFirestore();
 
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
@@ -45,10 +45,10 @@ function AbsenceView() {
     
     // Determine the student ID to query for based on the user role
     const targetStudentId = useMemo(() => {
+        if (hasRole('rodic')) return activeStudentId;
         if (hasRole('ziak')) return user?.id;
-        if (hasRole('rodic')) return user?.studentId;
         return selectedStudentId; // For teachers/admins
-    }, [user, hasRole, selectedStudentId]);
+    }, [user, hasRole, selectedStudentId, activeStudentId]);
 
 
     // Data fetching
@@ -62,8 +62,6 @@ function AbsenceView() {
         if (dateRange?.to) {
             q = query(q, where('datum', '<=', format(dateRange.to, 'yyyy-MM-dd')));
         }
-        // Ordering by date descending would be nice, but requires composite index
-        // q = query(q, orderBy('datum', 'desc'));
         return q;
     }, [firestore, targetStudentId, dateRange]);
     const { data: absences, isLoading } = useCollection<Absence>(absencesQuery);
@@ -201,6 +199,3 @@ export default function AbsencePage() {
         </div>
     );
 }
-
-
-    

@@ -1,3 +1,4 @@
+
 'use client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -9,15 +10,31 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/use-auth';
-import { LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut, User as UserIcon, Baby, Check } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { useRouter } from 'next/navigation';
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, where } from 'firebase/firestore';
+import type { User } from '@/lib/types';
 
 export function UserNav() {
-  const { user, signOut, hasRole } = useAuth();
+  const { user, signOut, hasRole, activeStudentId, setActiveStudentId } = useAuth();
   const router = useRouter();
+  const firestore = useFirestore();
+
+  const isParent = hasRole('rodic');
+  const studentIds = user?.studentIds || (user?.studentId ? [user.studentId] : []);
+
+  const studentsQuery = useMemoFirebase(() => {
+    if (!firestore || !isParent || studentIds.length === 0) return null;
+    return query(collection(firestore, 'users'), where('id', 'in', studentIds));
+  }, [firestore, isParent, studentIds]);
+
+  const { data: students } = useCollection<User>(studentsQuery);
 
   if (!user) {
     return null;
@@ -72,6 +89,22 @@ export function UserNav() {
               <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
             </div>
           </DropdownMenuLabel>
+          
+          {isParent && students && students.length > 1 && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs font-semibold uppercase text-muted-foreground">Přepnout dítě</DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={activeStudentId || ''} onValueChange={setActiveStudentId}>
+                {students.map((student) => (
+                  <DropdownMenuRadioItem key={student.id} value={student.id} className="flex items-center gap-2">
+                    <Baby className="h-4 w-4" />
+                    <span>{student.name}</span>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </>
+          )}
+
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem onClick={() => router.push('/dashboard/profil')}>

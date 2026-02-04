@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -12,26 +13,25 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, XCircle } from 'lucide-react';
 import { addDays, subDays } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
 export default function RozvrhPage() {
-  const { user, hasRole, loading: userLoading } = useAuth();
+  const { user, hasRole, loading: userLoading, activeStudentId } = useAuth();
   const firestore = useFirestore();
   const [currentDate, setCurrentDate] = useState(new Date());
 
+  const targetStudentId = hasRole('rodic') ? activeStudentId : (hasRole('ziak') ? user?.id : null);
+
   const studentRef = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
-    const studentId = hasRole('ziak') ? user.id : user.studentId;
-    if (!studentId) return null;
-    return doc(firestore, 'users', studentId);
-  }, [firestore, user, hasRole]);
+    if (!firestore || !targetStudentId) return null;
+    return doc(firestore, 'users', targetStudentId);
+  }, [firestore, targetStudentId]);
   const { data: studentData, isLoading: studentLoading } = useDoc<User>(studentRef);
 
   const targetClassId = useMemo(() => {
     if (hasRole('ucitel')) return null;
-    if (hasRole('ziak')) return user?.tridaId;
-    if (hasRole('rodic')) return studentData?.tridaId;
-    return undefined;
-  }, [hasRole, user, studentData]);
+    return studentData?.tridaId;
+  }, [hasRole, studentData]);
 
   const scheduleId = useMemo(() => {
     if (!targetClassId) return null;
@@ -43,14 +43,12 @@ export default function RozvrhPage() {
   }, [scheduleId, firestore]);
   const { data: scheduleData, isLoading: scheduleLoading } = useDoc<Rozvrh>(scheduleRef);
 
-  // Fetch substitutions
   const substitutionsQuery = useMemoFirebase(() => {
     if (!firestore || !targetClassId) return null;
     return query(collection(firestore, 'suplovani'), where('originalLesson.classId', '==', targetClassId));
   }, [firestore, targetClassId]);
   const { data: substitutionsData } = useCollection<Substitution>(substitutionsQuery);
 
-  // Fetch all staff and subjects to resolve names for substituted lessons
   const staffQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'users'), where('roles', 'array-contains-any', ['ucitel', 'administrator']));
@@ -68,7 +66,7 @@ export default function RozvrhPage() {
 
   const isLoading = userLoading || studentLoading || scheduleLoading || !substitutionsData || !allStaff || !allSubjects;
 
-  const title = hasRole('rodic') ? 'Rozvrh dítěte' : 'Váš rozvrh';
+  const title = hasRole('rodic') ? `Rozvrh (${studentData?.name || '...'})` : 'Váš rozvrh';
   const description = 'Přehled vyučovacích hodin.';
 
   return (
@@ -138,9 +136,6 @@ export default function RozvrhPage() {
                                             displayLesson.subjectShortcut = newSubj.shortcut;
                                         }
                                     }
-                                    if (sub.changes.ucebnaId) {
-                                        displayLesson.ucebnaName = sub.changes.ucebnaId; // Simplified
-                                    }
                                 }
                             }
 
@@ -149,8 +144,10 @@ export default function RozvrhPage() {
                                     <td className="p-2 font-medium text-center">{index + 1}.</td>
                                     <td className="p-2 text-muted-foreground">{scheduleData.timeSlots[index]}</td>
                                     {isCancelled ? (
-                                        <td colSpan={3} className="p-2 text-center text-destructive font-bold flex items-center justify-center gap-2">
-                                            <XCircle className="h-4 w-4" /> Odpadá ({originalLesson?.subjectShortcut})
+                                        <td colSpan={3} className="p-2 text-center text-destructive font-bold">
+                                            <div className="flex items-center justify-center gap-2">
+                                                <XCircle className="h-4 w-4" /> Odpadá ({originalLesson?.subjectShortcut})
+                                            </div>
                                         </td>
                                     ) : displayLesson ? (
                                         <>
