@@ -1,4 +1,3 @@
-
 'use client';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
@@ -92,7 +91,7 @@ function ParentExcuseForm() {
             </CardHeader>
             <form onSubmit={handleSubmit(onSubmit)}>
                 <CardContent className="space-y-4">
-                    {students && students.length > 1 && (
+                    {students && students.length > 0 && (
                         <div className="grid gap-2">
                             <Label>Dítě</Label>
                             <Controller

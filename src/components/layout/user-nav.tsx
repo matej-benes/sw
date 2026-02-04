@@ -1,4 +1,3 @@
-
 'use client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -92,7 +91,7 @@ export function UserNav() {
             </div>
           </DropdownMenuLabel>
           
-          {isParent && students && students.length > 1 && (
+          {isParent && students && students.length > 0 && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs font-semibold uppercase text-muted-foreground">Přepnout dítě</DropdownMenuLabel>
