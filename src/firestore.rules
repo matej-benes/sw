@@ -52,15 +52,18 @@ service cloud.firestore {
     // --- PRAVIDLA PRO KOLEKCE ---
 
     match /users/{userId} {
-      // Umožníme listování všem přihlášeným (pro výběr příjemců), ale výsledky budou filtrovány dotazem
-      allow list: if isSignedIn();
-      
       // Umožníme číst profil: sobě, adminovi, rodiči (své dítě) nebo komukoli ze stejné školy
+      // Důležité pro viditelnost jmen učitelů v aplikaci
       allow get: if isSignedIn() && (
         isOwner(userId) || 
         hasRole('administrator') || 
         isMyStudent(userId) ||
         getUserData().organizationId == resource.data.organizationId
+      );
+      
+      // Listování je povoleno pro výběr příjemců zpráv, filtrováno dotazem na organizationId
+      allow list: if isSignedIn() && (
+        hasAnyRole(['administrator', 'ucitel', 'rodic', 'ziak'])
       );
       
       allow create: if hasRole('administrator');

@@ -5,14 +5,14 @@ import React, { useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, where, documentId } from 'firebase/firestore';
-import type { User, ScheduleTemplate } from '@/lib/types';
+import type { User, ScheduleTemplate, Trida } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
-import { Mail, GraduationCap, Loader2, Users } from 'lucide-react';
+import { Mail, GraduationCap, Loader2, Users, Star } from 'lucide-react';
 
 function getInitials(name: string) {
   if (!name) return '';
@@ -23,16 +23,16 @@ interface TeacherListProps {
   student: User;
   allTeachers: User[];
   scheduleTemplate: ScheduleTemplate | null;
+  classData: Trida | null;
   showAllTeachers: boolean;
 }
 
-function TeacherList({ student, allTeachers, scheduleTemplate, showAllTeachers }: TeacherListProps) {
+function TeacherList({ student, allTeachers, scheduleTemplate, classData, showAllTeachers }: TeacherListProps) {
   const myTeachersInfo = useMemo(() => {
-    if (!scheduleTemplate || !allTeachers) return new Map<string, Set<string>>();
-
     const teacherToSubjects = new Map<string, Set<string>>();
 
-    scheduleTemplate.days?.forEach(day => {
+    // 1. Add teachers from schedule
+    scheduleTemplate?.days?.forEach(day => {
       day.lessons?.forEach(lesson => {
         if (lesson) {
           if (!teacherToSubjects.has(lesson.teacherId)) {
@@ -43,8 +43,27 @@ function TeacherList({ student, allTeachers, scheduleTemplate, showAllTeachers }
       });
     });
 
+    // 2. Add special roles from class definition
+    if (classData) {
+        if (classData.ucitelId && !teacherToSubjects.has(classData.ucitelId)) {
+            teacherToSubjects.set(classData.ucitelId, new Set(['Třídní učitel']));
+        } else if (classData.ucitelId) {
+            teacherToSubjects.get(classData.ucitelId)?.add('Třídní učitel');
+        }
+
+        classData.asistentiIds?.forEach(id => {
+            if (!teacherToSubjects.has(id)) teacherToSubjects.set(id, new Set(['Asistent pedagoga']));
+            else teacherToSubjects.get(id)?.add('Asistent pedagoga');
+        });
+
+        classData.zastupciIds?.forEach(id => {
+            if (!teacherToSubjects.has(id)) teacherToSubjects.set(id, new Set(['Zástupce třídního']));
+            else teacherToSubjects.get(id)?.add('Zástupce třídního');
+        });
+    }
+
     return teacherToSubjects;
-  }, [scheduleTemplate, allTeachers]);
+  }, [scheduleTemplate, classData]);
 
   const teachersToDisplay = useMemo(() => {
     if (!allTeachers) return [];
@@ -55,14 +74,21 @@ function TeacherList({ student, allTeachers, scheduleTemplate, showAllTeachers }
 
     return allTeachers
       .filter(t => myTeachersInfo.has(t.id))
-      .sort((a, b) => a.name.localeCompare(b.name, 'cs'));
-  }, [allTeachers, myTeachersInfo, showAllTeachers]);
+      .sort((a, b) => {
+          // Sort class teacher to the top
+          const isClassTeacherA = classData?.ucitelId === a.id;
+          const isClassTeacherB = classData?.ucitelId === b.id;
+          if (isClassTeacherA && !isClassTeacherB) return -1;
+          if (!isClassTeacherA && isClassTeacherB) return 1;
+          return a.name.localeCompare(b.name, 'cs');
+      });
+  }, [allTeachers, myTeachersInfo, showAllTeachers, classData]);
 
   if (teachersToDisplay.length === 0 && !showAllTeachers) {
     return (
       <div className="flex flex-col items-center justify-center py-10 text-center border rounded-xl border-dashed bg-muted/20">
         <Users className="h-10 w-10 text-muted-foreground mb-4" />
-        <p className="text-muted-foreground">Pro třídu tohoto žáka nebyli v rozvrhu nalezeni žádní vyučující.</p>
+        <p className="text-muted-foreground font-medium">Pro třídu tohoto žáka nebyli v rozvrhu nalezeni žádní vyučující.</p>
         <p className="text-xs text-muted-foreground mt-1">Zkuste přepnout na zobrazení všech učitelů školy.</p>
       </div>
     );
@@ -73,9 +99,10 @@ function TeacherList({ student, allTeachers, scheduleTemplate, showAllTeachers }
       {teachersToDisplay.map((teacher) => {
         const subjectsTaught = myTeachersInfo.get(teacher.id);
         const isMyTeacher = !!subjectsTaught;
+        const isClassTeacher = classData?.ucitelId === teacher.id;
 
         return (
-          <Card key={teacher.id} className={cn("overflow-hidden transition-all hover:shadow-md", isMyTeacher && "ring-1 ring-primary/20 shadow-sm")}>
+          <Card key={teacher.id} className={cn("overflow-hidden transition-all hover:shadow-md", isMyTeacher && "ring-1 ring-primary/20 shadow-sm", isClassTeacher && "border-primary/40 bg-primary/5")}>
             <CardHeader className="flex flex-row items-center gap-4 pb-2">
               <Avatar className="h-14 w-14 border-2 border-background shadow-sm">
                 <AvatarImage src={teacher.avatarUrl} alt={teacher.name} />
@@ -83,24 +110,27 @@ function TeacherList({ student, allTeachers, scheduleTemplate, showAllTeachers }
                   {getInitials(teacher.name)}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex-1">
-                <CardTitle className="text-lg leading-tight">{teacher.name}</CardTitle>
+              <div className="flex-1 overflow-hidden">
+                <div className="flex items-center gap-2">
+                    <CardTitle className="text-lg leading-tight truncate">{teacher.name}</CardTitle>
+                    {isClassTeacher && <Star className="h-4 w-4 fill-primary text-primary shrink-0" />}
+                </div>
                 <CardDescription className="flex items-center gap-1.5 mt-1">
                   <Mail className="h-3 w-3 text-muted-foreground" />
-                  <span className="truncate max-w-[150px]">{teacher.email}</span>
+                  <span className="truncate">{teacher.email}</span>
                 </CardDescription>
               </div>
             </CardHeader>
             <CardContent className="space-y-4 pt-2">
               {isMyTeacher ? (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-primary uppercase tracking-wider">
+                  <div className="flex items-center gap-2 text-[10px] font-bold text-primary uppercase tracking-wider">
                     <GraduationCap className="h-3 w-3" />
-                    Vyučuje:
+                    Vztah / Předměty:
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {Array.from(subjectsTaught).map(sub => (
-                      <Badge key={sub} variant="secondary" className="font-medium">
+                      <Badge key={sub} variant={isClassTeacher && sub === 'Třídní učitel' ? 'default' : 'secondary'} className="font-medium text-[10px]">
                         {sub}
                       </Badge>
                     ))}
@@ -124,12 +154,11 @@ export default function VyucujiciPage() {
   const firestore = useFirestore();
   const [showAllTeachers, setShowAllTeachers] = useState(false);
 
-  // 1. Získání ID všech dětí (nebo sebe jako žáka)
+  // 1. Get IDs of all children
   const studentIds = useMemo(() => {
     if (!user) return [];
     if (hasRole('rodic')) {
-      const ids = user.studentIds || (user.studentId ? [user.studentId] : []);
-      return ids;
+      return user.studentIds || (user.studentId ? [user.studentId] : []);
     }
     if (hasRole('ziak')) {
       return [user.id];
@@ -137,26 +166,34 @@ export default function VyucujiciPage() {
     return [];
   }, [user, hasRole]);
 
-  // 2. Načtení profilů všech dětí
+  // 2. Fetch student profiles
   const studentsQuery = useMemoFirebase(() => {
     if (!firestore || studentIds.length === 0) return null;
     return query(collection(firestore, 'users'), where(documentId(), 'in', studentIds));
   }, [firestore, studentIds]);
   const { data: students, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
 
-  // 3. Načtení šablon rozvrhů pro všechny dotčené třídy
+  // 3. Get class IDs
   const classIds = useMemo(() => {
     if (!students || students.length === 0) return [];
     return [...new Set(students.map(s => s.tridaId).filter(Boolean))] as string[];
   }, [students]);
 
+  // 4. Fetch schedule templates
   const templatesQuery = useMemoFirebase(() => {
     if (!firestore || classIds.length === 0) return null;
     return query(collection(firestore, 'scheduleTemplates'), where(documentId(), 'in', classIds));
   }, [firestore, classIds]);
   const { data: templates, isLoading: templatesLoading } = useCollection<ScheduleTemplate>(templatesQuery);
 
-  // 4. Načtení všech učitelů školy
+  // 5. Fetch Class data (to get class teachers even if no schedule)
+  const classesQuery = useMemoFirebase(() => {
+      if (!firestore || classIds.length === 0) return null;
+      return query(collection(firestore, 'tridy'), where(documentId(), 'in', classIds));
+  }, [firestore, classIds]);
+  const { data: classesData, isLoading: classesLoading } = useCollection<Trida>(classesQuery);
+
+  // 6. Fetch all teachers in organization
   const teachersQuery = useMemoFirebase(() => {
     if (!firestore || !user?.organizationId) return null;
     return query(
@@ -167,7 +204,7 @@ export default function VyucujiciPage() {
   }, [firestore, user?.organizationId]);
   const { data: allTeachers, isLoading: teachersLoading } = useCollection<User>(teachersQuery);
 
-  const isLoading = studentsLoading || (classIds.length > 0 && templatesLoading) || teachersLoading;
+  const isLoading = studentsLoading || (classIds.length > 0 && (templatesLoading || classesLoading)) || teachersLoading;
 
   if (isLoading) {
     return (
@@ -177,7 +214,7 @@ export default function VyucujiciPage() {
     );
   }
 
-  const isStudentOrParent = hasRole('ziak') || hasRole('rodic');
+  const isStudentOrParent = hasRole('rodic') || hasRole('ziak');
 
   return (
     <div className="space-y-10">
@@ -207,6 +244,7 @@ export default function VyucujiciPage() {
         <div className="space-y-16">
           {students.map(student => {
             const template = templates?.find(t => t.id === student.tridaId) || null;
+            const classData = classesData?.find(c => c.id === student.tridaId) || null;
             return (
               <div key={student.id} className="space-y-6">
                 <div className="flex items-center gap-4 border-b pb-4">
@@ -218,13 +256,14 @@ export default function VyucujiciPage() {
                   </Avatar>
                   <div>
                     <h2 className="text-2xl font-bold tracking-tight">{student.name}</h2>
-                    <p className="text-sm text-muted-foreground">Vyučující žáka v tomto pololetí</p>
+                    <p className="text-sm text-muted-foreground">Třída: {classData?.nazev || 'Nezadána'}</p>
                   </div>
                 </div>
                 <TeacherList 
                   student={student} 
                   allTeachers={allTeachers || []} 
                   scheduleTemplate={template} 
+                  classData={classData}
                   showAllTeachers={showAllTeachers} 
                 />
               </div>
@@ -236,6 +275,7 @@ export default function VyucujiciPage() {
           student={{} as User} 
           allTeachers={allTeachers || []} 
           scheduleTemplate={null} 
+          classData={null}
           showAllTeachers={true} 
         />
       ) : (
