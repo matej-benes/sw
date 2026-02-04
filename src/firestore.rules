@@ -48,7 +48,7 @@ service cloud.firestore {
     // Per-Collection Rules
 
     match /users/{userId} {
-      allow list: if hasRole('administrator');
+      allow list: if isSignedIn();
       allow get: if isOwner(userId) || hasRole('administrator') || isMyStudent(userId);
       allow create: if hasRole('administrator');
       allow update: if isOwner(userId) || hasRole('administrator');

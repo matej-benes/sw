@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { Loader2, Send, UserPlus, Inbox, Send as SendIcon, Pencil, CheckCircle, Eye, Reply } from 'lucide-react';
-import { useFirestore, useCollection, useDoc, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
 import { collection, doc, query, where, Timestamp, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
 import type { Trida, User, Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -45,36 +45,60 @@ function getInitials(name: string) {
 function RecipientDialog({ isOpen, onOpenChange, allUsers, allClasses, selectedRecipients, onToggleRecipient, hasRole }: { isOpen: boolean, onOpenChange: (open: boolean) => void, allUsers: User[], allClasses: Trida[], selectedRecipients: string[], onToggleRecipient: (id: string) => void, hasRole: (role: any) => boolean }) {
   const { user } = useAuth();
 
-  const studentRecipientOptions = useMemo(() => {
-    if (!user || !hasRole('ziak') || !allClasses || !allUsers) return [];
+  const teacherRecipientOptions = useMemo(() => {
+    if (!user || !allUsers || !allClasses) return [];
     
-    const studentClass = allClasses.find(c => c.id === user.tridaId);
-    if(!studentClass) return [];
-    
-    const classTeacher = allUsers.find(u => u.id === studentClass.ucitelId);
-    const substitutes = studentClass.zastupciIds?.map(id => allUsers.find(u => u.id === id)).filter(Boolean) as User[];
-    const assistants = studentClass.asistentiIds?.map(id => allUsers.find(u => u.id === id)).filter(Boolean) as User[];
-    
-    const specialRoles: { user: User, role: string }[] = [];
-    if(classTeacher) specialRoles.push({ user: classTeacher, role: 'Tříní učitel'});
-    substitutes.forEach(sub => specialRoles.push({ user: sub, role: 'Zástupce třídního' }));
-    assistants.forEach(as => specialRoles.push({ user: as, role: 'Asistent pedagoga ve vaší třídě' }));
+    // If not a teacher, we show teachers
+    if (!hasRole('ucitel')) {
+        // Collect class IDs for the user or their children
+        const myClassIds = new Set<string>();
+        if (hasRole('ziak') && user.tridaId) {
+            myClassIds.add(user.tridaId);
+        }
+        if (hasRole('rodic')) {
+            const childrenIds = user.studentIds || (user.studentId ? [user.studentId] : []);
+            childrenIds.forEach(cid => {
+                const child = allUsers.find(u => u.id === cid);
+                if (child?.tridaId) myClassIds.add(child.tridaId);
+            });
+        }
 
-    const specialRoleIds = specialRoles.map(r => r.user.id);
-    
-    const specialRoleOptions = specialRoles.map(r => ({
-      ...r.user,
-      label: `${r.user.name} (${r.role})`,
-    }));
-    
-    const otherTeachers = allUsers
-      .filter(u => u.roles.includes('ucitel') && !specialRoleIds.includes(u.id))
-      .map(t => ({
-        ...t,
-        label: `${t.name} (Učitel)`
-      }));
+        const specialTeacherIds = new Set<string>();
+        const specialTeacherList: { user: User, label: string }[] = [];
 
-    return [...specialRoleOptions, ...otherTeachers];
+        myClassIds.forEach(cid => {
+            const cls = allClasses?.find(c => c.id === cid);
+            if (cls) {
+                const classTeacher = allUsers.find(u => u.id === cls.ucitelId);
+                if (classTeacher) {
+                    specialTeacherList.push({ user: classTeacher, label: `${classTeacher.name} (Třídní učitel - ${cls.nazev})` });
+                    specialTeacherIds.add(classTeacher.id);
+                }
+                cls.zastupciIds?.forEach(id => {
+                    const t = allUsers.find(u => u.id === id);
+                    if (t && !specialTeacherIds.has(id)) {
+                        specialTeacherList.push({ user: t, label: `${t.name} (Zástupce třídního - ${cls.nazev})` });
+                        specialTeacherIds.add(id);
+                    }
+                });
+                cls.asistentiIds?.forEach(id => {
+                    const t = allUsers.find(u => u.id === id);
+                    if (t && !specialTeacherIds.has(id)) {
+                        specialTeacherList.push({ user: t, label: `${t.name} (Asistent v ${cls.nazev})` });
+                        specialTeacherIds.add(id);
+                    }
+                });
+            }
+        });
+
+        const otherTeachers = allUsers
+            .filter(u => u.roles.includes('ucitel') && !specialTeacherIds.has(u.id))
+            .map(t => ({ user: t, label: `${t.name} (Učitel)` }));
+
+        return [...specialTeacherList, ...otherTeachers];
+    }
+
+    return []; // Teachers see allUsers anyway in the CommandGroup branch
   }, [user, hasRole, allUsers, allClasses]);
 
   return (
@@ -98,12 +122,21 @@ function RecipientDialog({ isOpen, onOpenChange, allUsers, allClasses, selectedR
               </CommandGroup>
             )}
             <CommandGroup heading={hasRole('ucitel') ? 'Uživatelé' : 'Učitelé'}>
-              {(hasRole('ucitel') ? allUsers.filter(u => u.id !== user?.id) : studentRecipientOptions).map(u => (
-                <CommandItem key={u.id} onSelect={() => onToggleRecipient(u.id)}>
-                  <Checkbox checked={selectedRecipients.includes(u.id)} className="mr-2" />
-                  <span>{(u as any).label || u.name}</span>
-                </CommandItem>
-              ))}
+              {hasRole('ucitel') ? (
+                allUsers.filter(u => u.id !== user?.id).map(u => (
+                  <CommandItem key={u.id} onSelect={() => onToggleRecipient(u.id)}>
+                    <Checkbox checked={selectedRecipients.includes(u.id)} className="mr-2" />
+                    <span>{u.name}</span>
+                  </CommandItem>
+                ))
+              ) : (
+                teacherRecipientOptions.map(opt => (
+                  <CommandItem key={opt.user.id} onSelect={() => onToggleRecipient(opt.user.id)}>
+                    <Checkbox checked={selectedRecipients.includes(opt.user.id)} className="mr-2" />
+                    <span>{opt.label}</span>
+                  </CommandItem>
+                ))
+              )}
             </CommandGroup>
           </CommandList>
         </Command>
@@ -213,8 +246,17 @@ export default function ZpravyPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   
   // --- Data Fetching ---
-  const { data: allUsers, isLoading: usersLoading } = useCollection<User>(useMemoFirebase(() => firestore ? collection(firestore, "users") : null, [firestore]));
-  const { data: allClasses, isLoading: classesLoading } = useCollection<Trida>(useMemoFirebase(() => firestore ? collection(firestore, 'tridy') : null, [firestore]));
+  const usersQuery = useMemoFirebase(() => {
+    if (!firestore || !user?.organizationId) return null;
+    return query(collection(firestore, "users"), where("organizationId", "==", user.organizationId));
+  }, [firestore, user?.organizationId]);
+  const { data: allUsers, isLoading: usersLoading } = useCollection<User>(usersQuery);
+
+  const classesQuery = useMemoFirebase(() => {
+    if (!firestore || !user?.organizationId) return null;
+    return query(collection(firestore, 'tridy'), where('organizationId', '==', user.organizationId));
+  }, [firestore, user?.organizationId]);
+  const { data: allClasses, isLoading: classesLoading } = useCollection<Trida>(classesQuery);
   
   const [receivedMessages, setReceivedMessages] = useState<Message[]>([]);
   const [sentMessages, setSentMessages] = useState<Message[]>([]);
@@ -300,6 +342,7 @@ export default function ZpravyPage() {
       text: messageText,
       createdAt: Timestamp.now(),
       readBy: [],
+      organizationId: user.organizationId || '',
     };
 
     try {
@@ -324,6 +367,7 @@ export default function ZpravyPage() {
         text: replyText,
         createdAt: Timestamp.now(),
         readBy: [],
+        organizationId: user.organizationId || '',
     };
     try {
         await addDocumentNonBlocking(collection(firestore, 'messages'), newMessage);
@@ -459,7 +503,7 @@ export default function ZpravyPage() {
                                     receivedMessages?.map(msg => (
                                         <TableRow key={msg.id} onClick={() => handleRowClick(msg)} className={cn("cursor-pointer", !hasUserReadMessage(msg) && "font-bold")}>
                                             <TableCell className="text-center">
-                                                {!hasUserReadMessage(msg) && <div className="h-2 w-2 rounded-full bg-primary"></div>}
+                                                {!hasUserReadMessage(msg) && <div className="h-2 v-2 rounded-full bg-primary"></div>}
                                             </TableCell>
                                             <TableCell>{getSenderName(msg.senderId)}</TableCell>
                                             <TableCell>
