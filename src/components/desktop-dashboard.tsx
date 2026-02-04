@@ -46,7 +46,7 @@ import { WhatsNewDialog } from '@/components/dashboard/whats-new-dialog';
 import { useRouter } from 'next/navigation';
 
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, query, where, getDocs, doc, writeBatch, getDoc, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, writeBatch, getDoc, limit, documentId } from 'firebase/firestore';
 import type {
   Trida,
   User,
@@ -107,7 +107,7 @@ export function DesktopDashboard() {
   const studentIds = useMemo(() => user?.studentIds || (user?.studentId ? [user.studentId] : []), [user]);
   const studentsQuery = useMemoFirebase(() => {
     if (!firestore || !isParent || studentIds.length === 0) return null;
-    return query(collection(firestore, 'users'), where('id', 'in', studentIds));
+    return query(collection(firestore, 'users'), where(documentId(), 'in', studentIds));
   }, [firestore, isParent, studentIds]);
   const { data: studentsDataFetched } = useCollection<User>(studentsQuery);
 
@@ -121,7 +121,7 @@ export function DesktopDashboard() {
 
   const parentClassesQuery = useMemoFirebase(() => {
     if (!firestore || studentTridaIds.length === 0) return null;
-    return query(collection(firestore, 'tridy'), where('id', 'in', studentTridaIds));
+    return query(collection(firestore, 'tridy'), where(documentId(), 'in', studentTridaIds));
   }, [firestore, studentTridaIds]);
   const { data: parentClasses } = useCollection<Trida>(parentClassesQuery);
 

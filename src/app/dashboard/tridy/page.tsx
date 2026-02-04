@@ -1,9 +1,10 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import { collection, query, where, documentId } from 'firebase/firestore';
 import type { Trida, User } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Users } from 'lucide-react';
@@ -26,7 +27,7 @@ export default function TridyPage() {
         }
         // Students and parents don't need a list of all classes, they are in one.
         if ((hasRole('ziak') || hasRole('rodic')) && user?.tridaId) {
-             return query(collection(firestore, 'tridy'), where('id', '==', user.tridaId));
+             return query(collection(firestore, 'tridy'), where(documentId(), '==', user.tridaId));
         }
         return null;
     }, [firestore, user, hasRole]);
@@ -37,7 +38,7 @@ export default function TridyPage() {
         if (!firestore || !selectedClassId) return null;
         const selectedClass = classes?.find(c => c.id === selectedClassId);
         if (!selectedClass?.ucitelId) return null;
-        return query(collection(firestore, 'users'), where('id', '==', selectedClass.ucitelId));
+        return query(collection(firestore, 'users'), where(documentId(), '==', selectedClass.ucitelId));
     }, [firestore, selectedClassId, classes]));
 
 

@@ -1,3 +1,4 @@
+
 'use client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -17,7 +18,7 @@ import { LogOut, User as UserIcon, Baby, Check, UserPlus, Users, X } from 'lucid
 import { Badge } from '../ui/badge';
 import { useRouter } from 'next/navigation';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import { collection, query, where, documentId } from 'firebase/firestore';
 import type { User } from '@/lib/types';
 
 export function UserNav() {
@@ -30,7 +31,7 @@ export function UserNav() {
 
   const studentsQuery = useMemoFirebase(() => {
     if (!firestore || !isParent || studentIds.length === 0) return null;
-    return query(collection(firestore, 'users'), where('id', 'in', studentIds));
+    return query(collection(firestore, 'users'), where(documentId(), 'in', studentIds));
   }, [firestore, isParent, studentIds]);
 
   const { data: students } = useCollection<User>(studentsQuery);

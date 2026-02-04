@@ -40,7 +40,7 @@ import {
 import { cs } from 'date-fns/locale';
 
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, query, where, getDoc, doc, writeBatch, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDoc, doc, writeBatch, getDocs, documentId } from 'firebase/firestore';
 import type {
   Trida,
   User,
@@ -94,7 +94,7 @@ export function MobileDashboard() {
   const studentIds = useMemo(() => user?.studentIds || (user?.studentId ? [user.studentId] : []), [user]);
   const studentsQuery = useMemoFirebase(() => {
     if (!firestore || !isParent || studentIds.length === 0) return null;
-    return query(collection(firestore, 'users'), where('id', 'in', studentIds));
+    return query(collection(firestore, 'users'), where(documentId(), 'in', studentIds));
   }, [firestore, isParent, studentIds]);
   const { data: studentsDataFetched } = useCollection<User>(studentsQuery);
 
@@ -108,7 +108,7 @@ export function MobileDashboard() {
 
   const parentClassesQuery = useMemoFirebase(() => {
     if (!firestore || studentTridaIds.length === 0) return null;
-    return query(collection(firestore, 'tridy'), where('id', 'in', studentTridaIds));
+    return query(collection(firestore, 'tridy'), where(documentId(), 'in', studentTridaIds));
   }, [firestore, studentTridaIds]);
   const { data: parentClasses } = useCollection<Trida>(parentClassesQuery);
 

@@ -1,10 +1,11 @@
+
 'use client';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useFirestore, useCollection, useDoc, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, doc, Timestamp, getDoc } from 'firebase/firestore';
+import { collection, query, where, doc, Timestamp, getDoc, documentId } from 'firebase/firestore';
 import type { Omluvenka, User, Trida, Rozvrh, LessonBlock } from '@/lib/types';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -42,7 +43,7 @@ function ParentExcuseForm() {
     
     const studentsQuery = useMemoFirebase(() => {
         if (!firestore || studentIds.length === 0) return null;
-        return query(collection(firestore, 'users'), where('id', 'in', studentIds));
+        return query(collection(firestore, 'users'), where(documentId(), 'in', studentIds));
     }, [firestore, studentIds]);
     const { data: students } = useCollection<User>(studentsQuery);
 
