@@ -290,13 +290,13 @@ function UserRow({ user, onEdit, onDelete }: { user: User, onEdit: (user: User) 
                     <MoreHorizontal className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                    <DropdownMenuItem onSelect={() => onEdit(user)}>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onEdit(user)}>
                     <Pencil className="mr-2 h-4 w-4" />
                     Upravit
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                    onSelect={() => onDelete(user)}
+                    onClick={() => onDelete(user)}
                     className="text-destructive"
                     >
                     <Trash2 className="mr-2 h-4 w-4" />
@@ -435,69 +435,70 @@ function AdminUserManagement() {
 
     return (
     <>
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <div>
+            <CardTitle>Seznam uživatelů</CardTitle>
+            <CardDescription>
+              Celkem {allUsers?.length ?? 0} uživatelů.
+            </CardDescription>
+          </div>
+           <div className="flex items-center gap-2">
+              <Select value="all" onValueChange={() => {}}>
+                  <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Filtrovat podle role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                      {roleOptions.map(option => (
+                          <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ))}
+                  </SelectContent>
+              </Select>
+              <Button onClick={() => openDialog(null)}>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Přidat uživatele
+              </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Jméno</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>
+                  <span className="sr-only">Akce</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {usersLoading && (
+                <TableRow>
+                  <TableCell colSpan={4} className="h-24 text-center">
+                    Načítání dat...
+                  </TableCell>
+                </TableRow>
+              )}
+              {!usersLoading && allUsers?.map((user) => (
+                  <UserRow key={user.id} user={user} onEdit={openDialog} onDelete={setDeletingUser} />
+              ))}
+              {!usersLoading && allUsers?.length === 0 && (
+                  <TableRow>
+                      <TableCell colSpan={4} className="h-24 text-center">
+                          Žádní uživatelé neodpovídají filtru.
+                      </TableCell>
+                  </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
       <Dialog open={isDialogOpen} onOpenChange={(isOpen) => {
         setIsDialogOpen(isOpen);
         if (!isOpen) setEditingUser(null);
       }}>
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <div>
-              <CardTitle>Seznam uživatelů</CardTitle>
-              <CardDescription>
-                Celkem {allUsers?.length ?? 0} uživatelů.
-              </CardDescription>
-            </div>
-             <div className="flex items-center gap-2">
-                <Select value="all" onValueChange={() => {}}>
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Filtrovat podle role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {roleOptions.map(option => (
-                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                <Button onClick={() => openDialog(null)}>
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Přidat uživatele
-                </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Jméno</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>
-                    <span className="sr-only">Akce</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {usersLoading && (
-                  <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center">
-                      Načítání dat...
-                    </TableCell>
-                  </TableRow>
-                )}
-                {!usersLoading && allUsers?.map((user) => (
-                    <UserRow key={user.id} user={user} onEdit={openDialog} onDelete={setDeletingUser} />
-                ))}
-                {!usersLoading && allUsers?.length === 0 && (
-                    <TableRow>
-                        <TableCell colSpan={4} className="h-24 text-center">
-                            Žádní uživatelé neodpovídají filtru.
-                        </TableCell>
-                    </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
         <DialogContent className={cn("sm:max-w-[425px]")}>
           <DialogHeader>
             <DialogTitle>

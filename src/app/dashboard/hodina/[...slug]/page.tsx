@@ -406,11 +406,11 @@ export default function LessonDetailPage() {
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" size="icon">
-                                <MoreVertical />
+                                <MoreVertical className="h-5 w-5" />
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={() => handleNavigation('/dashboard/tridni-kniha/zapis', {
+                            <DropdownMenuItem onClick={() => handleNavigation('/dashboard/tridni-kniha/zapis', {
                                 tridaId: lesson.classId,
                                 datum: format(day, 'yyyy-MM-dd'),
                                 hodina: period.toString(),
@@ -419,17 +419,17 @@ export default function LessonDetailPage() {
                                 <Pencil className="mr-2 h-4 w-4"/>
                                 Zapsat do třídní knihy
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setIsGradingDialogOpen(true)}>
+                            <DropdownMenuItem onClick={() => setIsGradingDialogOpen(true)}>
                                 <PencilRuler className="mr-2 h-4 w-4"/>
                                 Zadat nové hodnocení
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onSelect={() => setIsSubDialogOpen(true)}>
+                            <DropdownMenuItem onClick={() => setIsSubDialogOpen(true)}>
                                 <VenetianMask className="mr-2 h-4 w-4"/>
                                 {substitution ? 'Upravit suplování' : 'Zadat suplování'}
                             </DropdownMenuItem>
                             {substitution && (
-                                <DropdownMenuItem onSelect={() => setDeletingSubstitution(substitution)} className="text-destructive">
+                                <DropdownMenuItem onClick={() => setDeletingSubstitution(substitution)} className="text-destructive">
                                     <XCircle className="mr-2 h-4 w-4"/>
                                     Zrušit suplování
                                 </DropdownMenuItem>

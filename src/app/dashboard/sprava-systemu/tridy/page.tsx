@@ -255,13 +255,13 @@ function ClassRow({ classData, allUsers, onEdit, onDelete }: { classData: Class,
                     <MoreHorizontal className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                    <DropdownMenuItem onSelect={() => onEdit(classData)}>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onEdit(classData)}>
                     <Pencil className="mr-2 h-4 w-4" />
                     Upravit
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                    onSelect={() => onDelete(classData)}
+                    onClick={() => onDelete(classData)}
                     className="text-destructive"
                     >
                     <Trash2 className="mr-2 h-4 w-4" />
@@ -402,50 +402,51 @@ function AdminClassManagement() {
     
   return (
     <>
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <div>
+            <CardTitle>Seznam tříd</CardTitle>
+            <CardDescription>
+              Celkem {classes?.length ?? 0} tříd v databázi.
+            </CardDescription>
+          </div>
+          <Button onClick={() => openDialog(null)} disabled={teachersLoading || assistantsLoading}>
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Přidat třídu
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Název třídy</TableHead>
+                <TableHead>Učitelé a Asistenti</TableHead>
+                <TableHead>Počet žáků</TableHead>
+                <TableHead>
+                  <span className="sr-only">Akce</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(classesLoading || teachersLoading || assistantsLoading || allStaffLoading) && (
+                <TableRow>
+                  <TableCell colSpan={4} className="h-24 text-center">
+                    Načítání dat...
+                  </TableCell>
+                </TableRow>
+              )}
+              {!(classesLoading || teachersLoading || assistantsLoading || allStaffLoading) && classes?.map((cls) => (
+                  <ClassRow key={cls.id} classData={cls} allUsers={allStaff || []} onEdit={openDialog} onDelete={setDeletingClass} />
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
       <Dialog open={isDialogOpen} onOpenChange={(isOpen) => {
         setIsDialogOpen(isOpen);
         if (!isOpen) setEditingClass(null);
       }}>
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <div>
-              <CardTitle>Seznam tříd</CardTitle>
-              <CardDescription>
-                Celkem {classes?.length ?? 0} tříd v databázi.
-              </CardDescription>
-            </div>
-            <Button onClick={() => openDialog(null)} disabled={teachersLoading || assistantsLoading}>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Přidat třídu
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Název třídy</TableHead>
-                  <TableHead>Učitelé a Asistenti</TableHead>
-                  <TableHead>Počet žáků</TableHead>
-                  <TableHead>
-                    <span className="sr-only">Akce</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(classesLoading || teachersLoading || assistantsLoading || allStaffLoading) && (
-                  <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center">
-                      Načítání dat...
-                    </TableCell>
-                  </TableRow>
-                )}
-                {!(classesLoading || teachersLoading || assistantsLoading || allStaffLoading) && classes?.map((cls) => (
-                    <ClassRow key={cls.id} classData={cls} allUsers={allStaff || []} onEdit={openDialog} onDelete={setDeletingClass} />
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>

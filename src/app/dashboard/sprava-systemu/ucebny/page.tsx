@@ -136,13 +136,13 @@ function UcebnaRow({ ucebna, onEdit, onDelete }: { ucebna: Ucebna; onEdit: (uceb
                     <MoreHorizontal className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                    <DropdownMenuItem onSelect={() => onEdit(ucebna)}>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onEdit(ucebna)}>
                     <Pencil className="mr-2 h-4 w-4" />
                     Upravit
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                    onSelect={() => onDelete(ucebna)}
+                    onClick={() => onDelete(ucebna)}
                     className="text-destructive"
                     >
                     <Trash2 className="mr-2 h-4 w-4" />
@@ -203,49 +203,50 @@ function AdminUcebnaManagement() {
 
   return (
     <>
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <div>
+            <CardTitle>Seznam učeben</CardTitle>
+            <CardDescription>
+              Celkem {ucebny?.length ?? 0} učeben v databázi.
+            </CardDescription>
+          </div>
+          <Button onClick={() => openDialog(null)}>
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Přidat učebnu
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Název učebny</TableHead>
+                <TableHead>Kapacita</TableHead>
+                <TableHead>
+                  <span className="sr-only">Akce</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ucebnyLoading && (
+                <TableRow>
+                  <TableCell colSpan={3} className="h-24 text-center">
+                    Načítání dat...
+                  </TableCell>
+                </TableRow>
+              )}
+              {!ucebnyLoading && ucebny?.map((uc) => (
+                  <UcebnaRow key={uc.id} ucebna={uc} onEdit={openDialog} onDelete={setDeletingUcebna} />
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
       <Dialog open={isDialogOpen} onOpenChange={(isOpen) => {
         setIsDialogOpen(isOpen);
         if (!isOpen) setEditingUcebna(null);
       }}>
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <div>
-              <CardTitle>Seznam učeben</CardTitle>
-              <CardDescription>
-                Celkem {ucebny?.length ?? 0} učeben v databázi.
-              </CardDescription>
-            </div>
-            <Button onClick={() => openDialog(null)}>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Přidat učebnu
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Název učebny</TableHead>
-                  <TableHead>Kapacita</TableHead>
-                  <TableHead>
-                    <span className="sr-only">Akce</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ucebnyLoading && (
-                  <TableRow>
-                    <TableCell colSpan={3} className="h-24 text-center">
-                      Načítání dat...
-                    </TableCell>
-                  </TableRow>
-                )}
-                {!ucebnyLoading && ucebny?.map((uc) => (
-                    <UcebnaRow key={uc.id} ucebna={uc} onEdit={openDialog} onDelete={setDeletingUcebna} />
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>

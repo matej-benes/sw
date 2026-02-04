@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { PlusCircle, Pencil, Trash2, Loader2, BarChart2, BookOpen, Star, Type, Award } from 'lucide-react';
+import { PlusCircle, Pencil, Trash2, Loader2, BarChart2, BookOpen, Star, Type, Award, MoreHorizontal } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -33,6 +33,12 @@ import { Separator } from '@/components/ui/separator';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 const gradingSchema = z.object({
   studentIds: z.array(z.string()).min(1, 'Je třeba vybrat alespoň jednoho žáka.'),
@@ -409,8 +415,21 @@ export default function HodnoceniPage() {
                                             <TableCell>{(typeof g.vaha === 'number' && !isNaN(g.vaha) ? g.vaha : 1.0).toFixed(1)}</TableCell>
                                             <TableCell className="max-w-xs truncate">{g.komentar}</TableCell>
                                             <TableCell className="text-right">
-                                                <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleOpenDialog(g); }}><Pencil className="h-4 w-4" /></Button>
-                                                <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setDeletingGrading(g); }} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                                        <Button variant="ghost" size="icon">
+                                                            <MoreHorizontal className="h-4 w-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onClick={() => handleOpenDialog(g)}>
+                                                            <Pencil className="mr-2 h-4 w-4" /> Upravit
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem className="text-destructive" onClick={() => setDeletingGrading(g)}>
+                                                            <Trash2 className="mr-2 h-4 w-4" /> Smazat
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
                                             </TableCell>
                                         </TableRow>
                                     ))

@@ -244,7 +244,7 @@ function LessonContextMenu({ children, lesson, dayInfo, period, classId, onSubst
     if (!isTeacher) return <>{children}</>;
     return (
         <DropdownMenu>
-            <DropdownMenuTrigger asChild onContextMenu={(e) => e.preventDefault()}>{children}</DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
             <DropdownMenuContent>
                 <DropdownMenuItem onClick={() => handleNavigation('/dashboard/tridni-kniha/zapis', { tridaId: lesson.classId, datum: format(dayInfo.fullDate, 'yyyy-MM-dd'), hodina: (period).toString(), predmetId: lesson.subjectId })}>Zapsat do třídní knihy</DropdownMenuItem>
                 <DropdownMenuItem onClick={onGrade}><PencilRuler className="mr-2"/>Nové hodnocení</DropdownMenuItem>
@@ -263,7 +263,7 @@ function EmptySlotContextMenu({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild onContextMenu={(e) => e.preventDefault()}>{children}</DropdownMenuTrigger>
+      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
       <DropdownMenuContent><DropdownMenuItem onClick={() => router.push('/dashboard/udalosti')}><PlusCircle className="mr-2 h-4 w-4" />Vytvořit událost</DropdownMenuItem></DropdownMenuContent>
     </DropdownMenu>
   );
@@ -279,9 +279,9 @@ function LessonBlockCmp({ lesson, isTeacher, dayInfo, period, classId, onSubstit
         return `hsl(${h}, 60%, 85%)`;
     };
     const blockContent = (
-         <div className={cn("h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer relative", isSubstituted && 'bg-muted text-muted-foreground')} style={{ backgroundColor: isNewSubstitutedLesson ? 'hsl(346.8 77.2% 49.8% / 0.2)' : isSubstituted ? 'hsl(var(--muted))' : getSubjectColor(lesson.subjectId) }}>
+         <button className={cn("w-full h-full p-1 text-xs rounded-sm flex flex-col justify-center items-center text-center cursor-pointer relative border-none outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2", isSubstituted && 'bg-muted text-muted-foreground')} style={{ backgroundColor: isNewSubstitutedLesson ? 'hsl(346.8 77.2% 49.8% / 0.2)' : isSubstituted ? 'hsl(var(--muted))' : getSubjectColor(lesson.subjectId) }}>
             <div className="font-bold text-sm">{lesson.subjectShortcut}</div>
-        </div>
+        </button>
     );
     const interactiveBlock = (isTeacher && !isSubstituted) ? <LessonContextMenu lesson={lesson} dayInfo={dayInfo} period={period} classId={classId} onSubstitute={onSubstitute} onGrade={onGrade} isTeacher={isTeacher} isSubstitutedLesson={isNewSubstitutedLesson} onCancelSubstitution={onCancelSubstitution}>{blockContent}</LessonContextMenu> : blockContent;
     return (
@@ -399,7 +399,7 @@ export function TimetableWidget({ dailySchedule, eventsData, substitutionsData, 
                                     <div onClick={() => handleCellClick(isTeacher, lessonInfo, day, periodIndex)} className="h-full">
                                         <LessonBlockCmp lesson={lesson} isTeacher={isTeacher} dayInfo={dayInfo} period={periodIndex + 1} classId={classId} isNewSubstitutedLesson={lesson.isSubstitution} onSubstitute={() => { setEditingSubFor({ lesson, dayInfo, period: periodIndex + 1, classId, substitution: null }); setIsSubDialogOpen(true); }} onGrade={() => handleGrade(lesson, dayInfo, periodIndex + 1, classId)} topic={zapis?.topic} />
                                     </div>
-                                ) : (isTeacher && !event && <EmptySlotContextMenu><div className="h-full w-full"></div></EmptySlotContextMenu>)}
+                                ) : (isTeacher && !event && <EmptySlotContextMenu><button className="h-full w-full bg-transparent border-none appearance-none cursor-pointer"></button></EmptySlotContextMenu>)}
                             </div>
                         )
                     })}

@@ -151,13 +151,13 @@ function SubjectRow({ subject, onEdit, onDelete }: { subject: Subject; onEdit: (
                     <MoreHorizontal className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                    <DropdownMenuItem onSelect={() => onEdit(subject)}>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onEdit(subject)}>
                     <Pencil className="mr-2 h-4 w-4" />
                     Upravit
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                    onSelect={() => onDelete(subject)}
+                    onClick={() => onDelete(subject)}
                     className="text-destructive"
                     >
                     <Trash2 className="mr-2 h-4 w-4" />
@@ -219,50 +219,51 @@ function AdminSubjectManagement() {
 
   return (
     <>
+      <Card>
+        <CardHeader className="flex-row items-center justify-between">
+          <div>
+            <CardTitle>Seznam předmětů</CardTitle>
+            <CardDescription>
+              Celkem {subjects?.length ?? 0} předmětů v databázi.
+            </CardDescription>
+          </div>
+          <Button onClick={() => openDialog(null)}>
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Přidat předmět
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Název předmětu</TableHead>
+                <TableHead>Zkratka</TableHead>
+                <TableHead>Počet vyučujících</TableHead>
+                <TableHead>
+                  <span className="sr-only">Akce</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {subjectsLoading && (
+                <TableRow>
+                  <TableCell colSpan={4} className="h-24 text-center">
+                    Načítání dat...
+                  </TableCell>
+                </TableRow>
+              )}
+              {!subjectsLoading && subjects?.map((subject) => (
+                  <SubjectRow key={subject.id} subject={subject} onEdit={openDialog} onDelete={setDeletingSubject} />
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
       <Dialog open={isDialogOpen} onOpenChange={(isOpen) => {
         setIsDialogOpen(isOpen);
         if (!isOpen) setEditingSubject(null);
       }}>
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <div>
-              <CardTitle>Seznam předmětů</CardTitle>
-              <CardDescription>
-                Celkem {subjects?.length ?? 0} předmětů v databázi.
-              </CardDescription>
-            </div>
-            <Button onClick={() => openDialog(null)}>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Přidat předmět
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Název předmětu</TableHead>
-                  <TableHead>Zkratka</TableHead>
-                  <TableHead>Počet vyučujících</TableHead>
-                  <TableHead>
-                    <span className="sr-only">Akce</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {subjectsLoading && (
-                  <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center">
-                      Načítání dat...
-                    </TableCell>
-                  </TableRow>
-                )}
-                {!subjectsLoading && subjects?.map((subject) => (
-                    <SubjectRow key={subject.id} subject={subject} onEdit={openDialog} onDelete={setDeletingSubject} />
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>
