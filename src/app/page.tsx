@@ -18,7 +18,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
-import { Loader2 } from 'lucide-react';
+import { Loader2, FileEdit } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
@@ -54,7 +54,6 @@ export default function LoginPage() {
     setIsSigningIn(true);
     try {
       await signIn(data.email, data.password);
-      // AuthProvider will handle redirection based on user state (pin)
     } catch (error: any) {
       toast({
         variant: 'destructive',
@@ -75,53 +74,76 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex h-screen w-full items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center">
-          <Logo className="mx-auto h-12 w-12 text-primary" />
-          <CardTitle className="mt-4 text-2xl">Vítejte ve ŠkolaWeb</CardTitle>
-          <CardDescription>
-            Zadejte své přihlašovací údaje pro vstup do systému.
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <CardContent className="space-y-4">
-            <div className="space-y-1">
-              <Label htmlFor="email">E-mail</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="jmeno.prijmeni@skola.cz"
-                {...register('email')}
-                disabled={isSigningIn}
-              />
-              {errors.email && (
-                <p className="text-sm text-destructive">{errors.email.message}</p>
-              )}
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="password">Heslo</Label>
-              <Input
-                id="password"
-                type="password"
-                {...register('password')}
-                disabled={isSigningIn}
-              />
-              {errors.password && (
-                <p className="text-sm text-destructive">
-                  {errors.password.message}
-                </p>
-              )}
-            </div>
-          </CardContent>
-          <CardFooter className="flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={isSigningIn}>
-              {isSigningIn && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Přihlásit se
+    <main className="flex min-h-screen w-full flex-col items-center justify-center bg-muted/40 p-4">
+      <div className="w-full max-w-sm space-y-6">
+        <Card>
+          <CardHeader className="text-center">
+            <Logo className="mx-auto h-12 w-12 text-primary" />
+            <CardTitle className="mt-4 text-2xl">Vítejte ve ŠkolaWeb</CardTitle>
+            <CardDescription>
+              Zadejte své přihlašovací údaje pro vstup do systému.
+            </CardDescription>
+          </CardHeader>
+          <form onSubmit={handleSubmit(onSubmit)}>
+            <CardContent className="space-y-4">
+              <div className="space-y-1">
+                <Label htmlFor="email">E-mail</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="jmeno.prijmeni@skola.cz"
+                  {...register('email')}
+                  disabled={isSigningIn}
+                />
+                {errors.email && (
+                  <p className="text-sm text-destructive">{errors.email.message}</p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="password">Heslo</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  {...register('password')}
+                  disabled={isSigningIn}
+                />
+                {errors.password && (
+                  <p className="text-sm text-destructive">
+                    {errors.password.message}
+                  </p>
+                )}
+              </div>
+            </CardContent>
+            <CardFooter className="flex-col gap-4">
+              <Button type="submit" className="w-full" disabled={isSigningIn}>
+                {isSigningIn && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Přihlásit se
+              </Button>
+            </CardFooter>
+          </form>
+        </Card>
+
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Zájemci o studium</CardTitle>
+            <CardDescription>
+              Ještě u nás nestudujete? Podejte si elektronickou přihlášku.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" className="w-full bg-background" asChild>
+              <Link href="/zapis">
+                <FileEdit className="mr-2 h-4 w-4 text-primary" />
+                Podat přihlášku ke studiu
+              </Link>
             </Button>
-          </CardFooter>
-        </form>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
+      
+      <p className="mt-8 text-center text-xs text-muted-foreground">
+        &copy; {new Date().getFullYear()} ŠkolaWeb. Všechna práva vyhrazena.
+      </p>
     </main>
   );
 }
