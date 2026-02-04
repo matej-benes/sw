@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { XCircle, CheckCircle, ChevronDown, XIcon, WandSparkles } from "lucide-react"
+import { XCircle, CheckCircle, ChevronDown, XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
@@ -113,9 +113,8 @@ export const MultiSelect = React.forwardRef<
                 <PopoverTrigger asChild>
                     <Button
                         ref={ref}
-                        {...props}
-                        onClick={() => setIsPopoverOpen(!isPopoverOpen)}
-                        className={cn("flex w-full min-h-10 p-1 rounded-md border border-input bg-transparent hover:bg-transparent", className)}
+                        type="button"
+                        className={cn("flex w-full min-h-10 p-1 rounded-md border border-input bg-transparent hover:bg-transparent text-foreground justify-between", className)}
                     >
                         {selectedValues.length > 0 ? (
                             <div className="flex justify-between items-center w-full">
@@ -178,19 +177,11 @@ export const MultiSelect = React.forwardRef<
                     </Button>
                 </PopoverTrigger>
                 <PopoverContent
-                    className="w-full p-0 relative"
+                    className="w-[var(--radix-popover-trigger-width)] p-0 z-[100]"
                     align="start"
                     onEscapeKeyDown={() => setIsPopoverOpen(false)}
                 >
-                     <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="absolute top-2 right-2 h-6 w-6 z-10"
-                        onClick={() => setIsPopoverOpen(false)}
-                    >
-                        <XIcon className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                    <Command>
+                    <Command className="pointer-events-auto">
                         <CommandInput
                             placeholder="Hledat..."
                             onKeyDown={handleInputKeyDown}
@@ -204,10 +195,6 @@ export const MultiSelect = React.forwardRef<
                                         <CommandItem
                                             key={option.value}
                                             onSelect={() => toggleOption(option.value)}
-                                            style={{
-                                                pointerEvents: "auto",
-                                                opacity: 1,
-                                            }}
                                             className="cursor-pointer"
                                         >
                                             <div
@@ -238,11 +225,7 @@ export const MultiSelect = React.forwardRef<
                                                     setSelectedValues([]);
                                                     onValueChange([])
                                                 }}
-                                                style={{
-                                                    pointerEvents: "auto",
-                                                    opacity: 1,
-                                                }}
-                                                className="flex-1 justify-center cursor-pointer"
+                                                className="flex-1 justify-center cursor-pointer font-medium"
                                             >
                                                 Smazat
                                             </CommandItem>
@@ -254,11 +237,7 @@ export const MultiSelect = React.forwardRef<
                                     )}
                                     <CommandItem
                                         onSelect={() => setIsPopoverOpen(false)}
-                                        style={{
-                                            pointerEvents: "auto",
-                                            opacity: 1,
-                                        }}
-                                        className="flex-1 justify-center cursor-pointer"
+                                        className="flex-1 justify-center cursor-pointer font-medium"
                                     >
                                         Zavřít
                                     </CommandItem>
