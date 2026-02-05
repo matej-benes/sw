@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -36,6 +36,17 @@ import { Separator } from '@/components/ui/separator';
 function getInitials(name: string) {
     if (!name) return '';
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
+}
+
+// Utility to get milliseconds from Firestore timestamp or other formats safely
+function getTimestampMs(ts: any): number {
+    if (!ts) return 0;
+    if (typeof ts.toMillis === 'function') return ts.toMillis();
+    if (ts.seconds !== undefined) return ts.seconds * 1000 + (ts.nanoseconds || 0) / 1000000;
+    if (ts instanceof Date) return ts.getTime();
+    if (typeof ts === 'number') return ts;
+    const parsed = Date.parse(ts);
+    return isNaN(parsed) ? 0 : parsed;
 }
 
 function RecipientDialog({ 
@@ -108,6 +119,7 @@ function MessageDetailDialog({ message, isOpen, onOpenChange, allUsers, onReply 
 
   if (!message) return null;
   const sender = allUsers.find(u => u.id === message.senderId);
+  const dateMs = getTimestampMs(message.createdAt);
   
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -118,7 +130,7 @@ function MessageDetailDialog({ message, isOpen, onOpenChange, allUsers, onReply 
                     <Avatar className="h-10 w-10"><AvatarImage src={sender?.avatarUrl} /><AvatarFallback>{getInitials(sender?.name || '?')}</AvatarFallback></Avatar>
                     <div>
                         <p className="font-semibold">{sender?.name || 'Neznámý odesílatel'}</p>
-                        <p className="text-xs text-muted-foreground">{message.createdAt ? format(message.createdAt.toDate(), 'd.M.yyyy HH:mm') : ''}</p>
+                        <p className="text-xs text-muted-foreground">{dateMs ? format(new Date(dateMs), 'd.M.yyyy HH:mm') : ''}</p>
                     </div>
                 </div>
                 <Separator />
@@ -159,18 +171,23 @@ export default function ZpravyPage() {
     const studentIds = user.studentIds || (user.studentId ? [user.studentId] : []);
     const searchIds = [user.id, ...studentIds];
 
-    // NOTE: Removed orderBy from server queries to avoid composite index requirement
-    // Sorting is performed locally in the snapshot callback
+    // CRITICAL: We DO NOT use orderBy('createdAt') in the query itself to avoid the requirement for a composite index.
+    // Sorting is handled client-side in the snapshot listener to maintain stability and performance.
     const rQuery = query(collection(firestore, 'messages'), where('recipientIds', 'array-contains-any', searchIds));
     const sQuery = query(collection(firestore, 'messages'), where('senderId', '==', user.id));
     
     const unsubR = onSnapshot(rQuery, s => {
         const msgs = s.docs.map(d => ({...d.data(), id: d.id} as Message));
-        setReceivedMessages(msgs.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0)));
+        setReceivedMessages(msgs.sort((a, b) => getTimestampMs(b.createdAt) - getTimestampMs(a.createdAt)));
+    }, (err) => {
+        console.error("Received messages listener error:", err);
     });
+
     const unsubS = onSnapshot(sQuery, s => {
         const msgs = s.docs.map(d => ({...d.data(), id: d.id} as Message));
-        setSentMessages(msgs.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0)));
+        setSentMessages(msgs.sort((a, b) => getTimestampMs(b.createdAt) - getTimestampMs(a.createdAt)));
+    }, (err) => {
+        console.error("Sent messages listener error:", err);
     });
     
     return () => { unsubR(); unsubS(); };
@@ -186,7 +203,7 @@ export default function ZpravyPage() {
         readBy: [], 
         organizationId: user.organizationId || '' 
     };
-    await addDocumentNonBlocking(collection(firestore, 'messages'), newMessage);
+    addDocumentNonBlocking(collection(firestore, 'messages'), newMessage);
     setMessageText(''); 
     setSelectedRecipients([]); 
     toast({ title: 'Zpráva byla odeslána' });
@@ -228,11 +245,11 @@ export default function ZpravyPage() {
                                             <Avatar className="h-8 w-8"><AvatarImage src={allUsers?.find(u => u.id === m.senderId)?.avatarUrl} /><AvatarFallback>{getInitials(allUsers?.find(u => u.id === m.senderId)?.name || '?')}</AvatarFallback></Avatar>
                                         </TableCell>
                                         <TableCell className="font-medium">
-                                            {allUsers?.find(u => u.id === m.senderId)?.name || 'Načítání...'}
+                                            {allUsers?.find(u => u.id === m.senderId)?.name || '...'}
                                             {getRecipientLabel(m)}
                                         </TableCell>
                                         <TableCell className="max-w-md truncate text-muted-foreground">{m.text}</TableCell>
-                                        <TableCell className="text-right text-xs text-muted-foreground">{m.createdAt ? format(m.createdAt.toDate(), 'd.M.') : ''}</TableCell>
+                                        <TableCell className="text-right text-xs text-muted-foreground">{m.createdAt ? format(new Date(getTimestampMs(m.createdAt)), 'd.M.') : ''}</TableCell>
                                     </TableRow>
                                 ))
                             )}
@@ -251,10 +268,10 @@ export default function ZpravyPage() {
                                 sentMessages.map(m => (
                                     <TableRow key={m.id} className="cursor-pointer hover:bg-muted/50" onClick={() => { setSelectedMessage(m); setIsDetailOpen(true); }}>
                                         <TableCell className="font-medium">
-                                            Komu: {m.recipientIds.length > 1 ? `${m.recipientIds.length} příjemců` : (allUsers?.find(u => u.id === m.recipientIds[0])?.name || allClasses?.find(c => c.id === m.recipientIds[0])?.nazev || 'Načítání...')}
+                                            Komu: {m.recipientIds.length > 1 ? `${m.recipientIds.length} příjemců` : (allUsers?.find(u => u.id === m.recipientIds[0])?.name || allClasses?.find(c => c.id === m.recipientIds[0])?.nazev || '...')}
                                         </TableCell>
                                         <TableCell className="max-w-md truncate text-muted-foreground">{m.text}</TableCell>
-                                        <TableCell className="text-right text-xs text-muted-foreground">{m.createdAt ? format(m.createdAt.toDate(), 'd.M.') : ''}</TableCell>
+                                        <TableCell className="text-right text-xs text-muted-foreground">{m.createdAt ? format(new Date(getTimestampMs(m.createdAt)), 'd.M.') : ''}</TableCell>
                                     </TableRow>
                                 ))
                             )}
@@ -311,7 +328,7 @@ export default function ZpravyPage() {
                 onOpenChange={setIsDetailOpen} 
                 allUsers={allUsers} 
                 onReply={async (rid, txt) => { 
-                    await addDocumentNonBlocking(collection(firestore, 'messages'), { 
+                    addDocumentNonBlocking(collection(firestore, 'messages'), { 
                         senderId: user!.id, 
                         recipientIds: [rid], 
                         text: txt, 
