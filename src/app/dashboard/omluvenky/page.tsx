@@ -5,12 +5,12 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, doc, Timestamp, documentId, getDoc } from 'firebase/firestore';
-import type { Omluvenka, User, Trida, Rozvrh } from '@/lib/types';
+import { collection, query, where, doc, Timestamp, getDoc } from 'firebase/firestore';
+import type { Omluvenka, User, Trida } from '@/lib/types';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { format, parse, differenceInYears, eachDayOfInterval, parseISO } from 'date-fns';
+import { format, parse, differenceInYears } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { CalendarIcon, PlusCircle, Check, X, AlertTriangle } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -20,10 +20,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 
 const omluvenkaSchema = z.object({
   datum: z.object({ from: z.date(), to: z.date() }),
@@ -40,32 +36,28 @@ function ParentExcuseForm() {
         if (!firestore || !user?.studentId) return null;
         return doc(firestore, 'users', user.studentId);
     }, [firestore, user?.studentId]);
-    const { data: student } = useCollection<User>(useMemoFirebase(() => {
-        if(!firestore || !user?.studentId) return null;
-        return query(collection(firestore, 'users'), where(documentId(), '==', user.studentId));
-    }, [firestore, user?.studentId]));
+    const { data: student } = useDoc<User>(studentRef);
 
     const { handleSubmit, control, reset, formState: { errors } } = useForm<OmluvenkaFormData>({
         resolver: zodResolver(omluvenkaSchema),
     });
 
     const onSubmit = async (data: OmluvenkaFormData) => {
-        const activeStudent = student?.[0];
-        if (!user || !activeStudent?.tridaId) {
+        if (!user || !student?.tridaId) {
             toast({ variant: 'destructive', title: 'Chyba', description: 'Nelze odeslat omluvenku, chybí údaje o studentovi.' });
             return;
         }
         
         const newOmluvenka: Omit<Omluvenka, 'id'> = {
-            studentId: activeStudent.id,
+            studentId: student.id,
             parentId: user.id,
-            tridaId: activeStudent.tridaId,
+            tridaId: student.tridaId,
             datumOd: format(data.datum.from, 'yyyy-MM-dd'),
             datumDo: format(data.datum.to, 'yyyy-MM-dd'),
             duvod: data.duvod,
             status: 'pending',
             datumPodani: Timestamp.now(),
-            organizationId: activeStudent.organizationId || '',
+            organizationId: student.organizationId || '',
         };
 
         await addDocumentNonBlocking(collection(firestore, 'omluvenky'), newOmluvenka);
@@ -77,7 +69,7 @@ function ParentExcuseForm() {
         <Card>
             <CardHeader>
                 <CardTitle>Nová omluvenka</CardTitle>
-                <CardDescription>Omluvte nepřítomnost žáka: {student?.[0]?.name}</CardDescription>
+                <CardDescription>Omluvte nepřítomnost žáka: {student?.name}</CardDescription>
             </CardHeader>
             <form onSubmit={handleSubmit(onSubmit)}>
                 <CardContent className="space-y-4">
@@ -214,7 +206,6 @@ function TeacherExcuseManagement() {
     const { user } = useAuth();
     const firestore = useFirestore();
     const { toast } = useToast();
-    const [approvingExcuse, setApprovingExcuse] = React.useState<Omluvenka | null>(null);
 
     const { data: teacherClasses } = useCollection<Trida>(useMemoFirebase(() => {
         if (!firestore || !user) return null;

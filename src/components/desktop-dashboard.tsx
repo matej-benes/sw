@@ -1,12 +1,11 @@
 
 'use client';
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -19,8 +18,6 @@ import {
 import {
   ChevronLeft,
   ChevronRight,
-  Calendar as CalendarIcon,
-  ChevronDown,
   Users,
   School,
   Book,
@@ -29,21 +26,18 @@ import {
 } from 'lucide-react';
 import { TimetableWidget } from '@/components/timetable-widget';
 import {
-  startOfWeek,
-  addDays,
   format,
-  subWeeks,
-  addWeeks,
+  subDays,
+  addDays,
   isSameDay,
   parseISO,
-  getDay,
 } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { WhatsNewDialog } from '@/components/dashboard/whats-new-dialog';
 import { useRouter } from 'next/navigation';
 
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, query, where, getDocs, doc, documentId } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc } from 'firebase/firestore';
 import type {
   Trida,
   User,
@@ -84,10 +78,9 @@ export function DesktopDashboard() {
   const [viewMode, setViewMode] = useState(isAdmin ? 'tridy' : (isTeacher ? 'muj-rozvrh' : 'tridy'));
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined);
-  const [isFullWeekView, setIsFullWeekView] = useState(false);
   
-  const [teacherWeekSchedules, setTeacherWeekSchedules] = useState<Rozvrh[]>([]);
-  const [teacherSchedulesLoading, setTeacherSchedulesLoading] = useState(false);
+  const [teacherDailySchedule, setTeacherDailySchedule] = useState<Rozvrh | null>(null);
+  const [teacherScheduleLoading, setTeacherScheduleLoading] = useState(false);
 
   // Student profile for parents/students
   const targetStudentId = isParent ? user?.studentId : (hasRole('ziak') ? user?.id : null);
@@ -105,45 +98,34 @@ export function DesktopDashboard() {
   const { data: allStaff } = useCollection<User>(useMemoFirebase(() => (firestore ? query(collection(firestore, "users"), where("roles", "array-contains-any", ["ucitel", "administrator"])) : null), [firestore]));
   const { data: subjects } = useCollection<Predmet>(useMemoFirebase(() => (firestore ? collection(firestore, 'predmety') : null), [firestore]));
 
-  const weekDays = useMemo(() => {
-    const start = startOfWeek(currentDate, { weekStartsOn: 1 });
-    return isFullWeekView ? Array.from({ length: 7 }, (_, i) => addDays(start, i)) : [new Date(), addDays(new Date(), 1)];
-  }, [currentDate, isFullWeekView]);
-
   const { data: substitutionsData } = useCollection<Substitution>(useMemoFirebase(() => firestore ? collection(firestore, 'suplovani') : null, [firestore]));
   const { data: zapisyData } = useCollection<ZapisHodiny>(useMemoFirebase(() => firestore && activeClassId ? query(collection(firestore, 'zapisyHodin'), where('tridaId', '==', activeClassId)) : null, [firestore, activeClassId]));
-  const { data: schedulesData, isLoading: schedulesLoading } = useCollection<Rozvrh>(useMemoFirebase(() => firestore && activeClassId ? query(collection(firestore, 'rozvrhy'), where('tridaId', '==', activeClassId)) : null, [firestore, activeClassId]));
+  const { data: schedulesData, isLoading: schedulesLoading } = useCollection<Rozvrh>(useMemoFirebase(() => firestore && activeClassId ? query(collection(firestore, 'rozvrhy'), where('tridaId', '==', activeClassId), where('datum', '==', format(currentDate, 'yyyy-MM-dd'))) : null, [firestore, activeClassId, currentDate]));
   const { data: eventsData } = useCollection<Udalost>(useMemoFirebase(() => firestore && activeClassId ? query(collection(firestore, 'udalosti'), where('tridyIds', 'array-contains', activeClassId)) : null, [firestore, activeClassId]));
 
   useEffect(() => {
     if (viewMode !== 'muj-rozvrh' || !firestore || !user?.id || !substitutionsData) return;
-    const aggregate = async () => {
-        setTeacherSchedulesLoading(true);
-        const results: Rozvrh[] = [];
-        for (const day of weekDays) {
-            const dayStr = format(day, 'yyyy-MM-dd');
-            const q = query(collection(firestore, 'rozvrhy'), where('datum', '==', dayStr));
-            const snap = await getDocs(q);
-            const teacherLessons: (LessonBlock | null)[] = Array(defaultTimeSlots.length).fill(null);
-            snap.docs.forEach(d => {
-                const s = d.data() as Rozvrh;
-                s.hodiny.forEach((l, i) => { if (l?.teacherId === user.id) teacherLessons[i] = l; });
-            });
-            results.push({ id: dayStr, tridaId: user.id, organizationId: '', datum: dayStr, timeSlots: defaultTimeSlots, hodiny: teacherLessons });
-        }
-        setTeacherWeekSchedules(results);
-        setTeacherSchedulesLoading(false);
+    const fetchTeacherSchedule = async () => {
+        setTeacherScheduleLoading(true);
+        const dayStr = format(currentDate, 'yyyy-MM-dd');
+        const q = query(collection(firestore, 'rozvrhy'), where('datum', '==', dayStr));
+        const snap = await getDocs(q);
+        const teacherLessons: (LessonBlock | null)[] = Array(defaultTimeSlots.length).fill(null);
+        snap.docs.forEach(d => {
+            const s = d.data() as Rozvrh;
+            s.hodiny.forEach((l, i) => { if (l?.teacherId === user.id) teacherLessons[i] = l; });
+        });
+        setTeacherDailySchedule({ id: dayStr, tridaId: user.id, organizationId: '', datum: dayStr, timeSlots: defaultTimeSlots, hodiny: teacherLessons });
+        setTeacherScheduleLoading(false);
     };
-    aggregate();
-  }, [viewMode, firestore, weekDays, user?.id, substitutionsData]);
+    fetchTeacherSchedule();
+  }, [viewMode, firestore, currentDate, user?.id, substitutionsData]);
 
   useEffect(() => {
     if (isAdmin && allTridy?.length && !selectedClassId) setSelectedClassId(allTridy[0].id);
   }, [allTridy, isAdmin, selectedClassId]);
 
-  const isLoading = isUserLoading || (viewMode === 'muj-rozvrh' ? teacherSchedulesLoading : schedulesLoading);
-
-  if (isLoading) return <div className="flex h-full w-full items-center justify-center py-20">Načítání...</div>;
+  const isLoading = isUserLoading || (viewMode === 'muj-rozvrh' ? teacherScheduleLoading : schedulesLoading);
 
   return (
     <div className="space-y-6">
@@ -177,29 +159,29 @@ export function DesktopDashboard() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={() => setCurrentDate(subWeeks(currentDate, 1))}><ChevronLeft/></Button>
+            <Button variant="outline" size="icon" onClick={() => setCurrentDate(subDays(currentDate, 1))}><ChevronLeft/></Button>
             <Button variant="outline" onClick={() => setCurrentDate(new Date())}>Dnes</Button>
-            <Button variant="outline" size="icon" onClick={() => setCurrentDate(addWeeks(currentDate, 1))}><ChevronRight/></Button>
+            <Button variant="outline" size="icon" onClick={() => setCurrentDate(addDays(currentDate, 1))}><ChevronRight/></Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-8">
-          {weekDays.map(day => (
-            <div key={day.toISOString()} className="space-y-4">
-              <h3 className="text-xl font-bold border-b pb-2">{format(day, 'EEEE, d. MMMM', { locale: cs })}</h3>
-              <TimetableWidget
-                dailySchedule={viewMode === 'muj-rozvrh' ? teacherWeekSchedules.find(s => isSameDay(parseISO(s.datum), day)) : schedulesData?.find(s => isSameDay(parseISO(s.datum), day))}
-                eventsData={eventsData || []}
-                substitutionsData={substitutionsData || []}
-                zapisyData={zapisyData || []}
-                isTeacher={isTeacher || isAdmin}
-                userId={user?.id || ''}
-                userClassId={activeClassId}
-                day={day}
-                teachers={allStaff || []}
-                subjects={subjects || []}
-              />
+        <CardContent>
+            <div className="space-y-4">
+              <h3 className="text-xl font-bold border-b pb-2">{format(currentDate, 'EEEE, d. MMMM', { locale: cs })}</h3>
+              {isLoading ? <div className="text-center py-10 text-muted-foreground">Načítání...</div> : (
+                <TimetableWidget
+                    dailySchedule={viewMode === 'muj-rozvrh' ? teacherDailySchedule : (schedulesData?.find(s => isSameDay(parseISO(s.datum), currentDate)))}
+                    eventsData={eventsData || []}
+                    substitutionsData={substitutionsData || []}
+                    zapisyData={zapisyData || []}
+                    isTeacher={isTeacher || isAdmin}
+                    userId={user?.id || ''}
+                    userClassId={activeClassId}
+                    day={currentDate}
+                    teachers={allStaff || []}
+                    subjects={subjects || []}
+                />
+              )}
             </div>
-          ))}
         </CardContent>
       </Card>
       <WhatsNewDialog unreadMessagesCount={unreadCount} pendingExcusesCount={0} isClassTeacher={isTeacher} />

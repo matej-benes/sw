@@ -24,8 +24,6 @@ import {
     Book,
     Home,
     UserCheck,
-    Building,
-    CalendarDays,
     UserX,
     FileText,
     GraduationCap,
@@ -84,7 +82,7 @@ function getInitials(name: string) {
 }
 
 export function AppSidebar() {
-  const { user, hasRole, isSuperAdmin, savedAccounts, switchAccount, addAccount } = useAuth();
+  const { user, hasRole, savedAccounts, switchAccount, addAccount } = useAuth();
   const { unreadCount } = useUnreadMessages();
   const pathname = usePathname();
   const [showAccounts, setShowAccounts] = useState(false);
@@ -131,7 +129,6 @@ export function AppSidebar() {
             </Link>
         </div>
 
-        {/* Account Switcher - prominent on Mobile Sidebar */}
         <div className="px-4 py-3">
             <div 
                 className="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer border bg-muted/20"
