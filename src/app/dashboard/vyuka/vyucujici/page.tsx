@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useMemo } from 'react';
@@ -154,7 +153,7 @@ export default function VyucujiciPage() {
   const firestore = useFirestore();
   const [showAllTeachers, setShowAllTeachers] = useState(false);
 
-  // 1. Get IDs of all children
+  // 1. Get IDs of all relevant students (children)
   const studentIds = useMemo(() => {
     if (!user) return [];
     if (hasRole('rodic')) {
@@ -173,13 +172,13 @@ export default function VyucujiciPage() {
   }, [firestore, studentIds]);
   const { data: students, isLoading: studentsLoading } = useCollection<User>(studentsQuery);
 
-  // 3. Get class IDs
+  // 3. Get class IDs for these students
   const classIds = useMemo(() => {
     if (!students || students.length === 0) return [];
     return [...new Set(students.map(s => s.tridaId).filter(Boolean))] as string[];
   }, [students]);
 
-  // 4. Fetch schedule templates
+  // 4. Fetch schedule templates for these classes
   const templatesQuery = useMemoFirebase(() => {
     if (!firestore || classIds.length === 0) return null;
     return query(collection(firestore, 'scheduleTemplates'), where(documentId(), 'in', classIds));

@@ -1,14 +1,13 @@
-
 'use client';
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { Loader2, Send, UserPlus, Inbox, Send as SendIcon, Pencil, CheckCircle, Reply } from 'lucide-react';
-import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
-import { collection, doc, query, where, Timestamp, arrayUnion, onSnapshot } from 'firebase/firestore';
+import { Loader2, UserPlus, Inbox, Send as SendIcon } from 'lucide-react';
+import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
+import { collection, query, where, Timestamp, onSnapshot, orderBy } from 'firebase/firestore';
 import type { Trida, User, Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import {
@@ -16,8 +15,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
-  DialogClose
+  DialogFooter
 } from '@/components/ui/dialog';
 import {
   Command,
@@ -31,11 +29,9 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { format } from 'date-fns';
-import { cs } from 'date-fns/locale';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
-import { Label } from '@/components/ui/label';
 
 function getInitials(name: string) {
     if (!name) return '';
@@ -61,7 +57,6 @@ function RecipientDialog({
     hasRole: (role: any) => boolean,
     isLoading: boolean
 }) {
-  const { user } = useAuth();
   const users = allUsers || [];
   const classes = allClasses || [];
 
@@ -105,26 +100,37 @@ function RecipientDialog({
   )
 }
 
-function MessageDetailDialog({ message, isOpen, onOpenChange, allUsers, onReply }: { message: Message | null, isOpen: boolean, onOpenChange: (open: boolean) => void, allUsers: User[], onReply: (recipientId: string, replyText: string) => Promise<void> }) {
+function MessageDetailDialog({ message, isOpen, onOpenChange, allUsers, onReply, currentUser }: { message: Message | null, isOpen: boolean, onOpenChange: (open: boolean) => void, allUsers: User[], onReply: (recipientId: string, replyText: string) => Promise<void>, currentUser: User | null }) {
   const [replyText, setReplyText] = useState('');
   const [isReplying, setIsReplying] = useState(false);
-  const { toast } = useToast();
+  
+  useEffect(() => { if (isOpen) setReplyText(''); }, [isOpen]);
+
   if (!message) return null;
   const sender = allUsers.find(u => u.id === message.senderId);
+  
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl">
             <DialogHeader><DialogTitle>Detail zprávy</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
-                <p><span className="font-semibold">Od:</span> {sender?.name || 'Neznámý'}</p>
+                <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10"><AvatarImage src={sender?.avatarUrl} /><AvatarFallback>{getInitials(sender?.name || '?')}</AvatarFallback></Avatar>
+                    <div>
+                        <p className="font-semibold">{sender?.name || 'Neznámý odesílatel'}</p>
+                        <p className="text-xs text-muted-foreground">{m.createdAt ? format(m.createdAt.toDate(), 'd.M.yyyy HH:mm') : ''}</p>
+                    </div>
+                </div>
                 <Separator />
-                <p className="whitespace-pre-wrap">{message.text}</p>
+                <div className="bg-muted/30 p-4 rounded-lg">
+                    <p className="whitespace-pre-wrap text-sm">{message.text}</p>
+                </div>
                 <Separator />
-                <Textarea placeholder="Odpovědět..." value={replyText} onChange={e => setReplyText(e.target.value)} />
+                <Textarea placeholder="Napsat odpověď..." value={replyText} onChange={e => setReplyText(e.target.value)} />
             </div>
              <DialogFooter>
                 <Button variant="outline" onClick={() => onOpenChange(false)}>Zavřít</Button>
-                <Button onClick={async () => { if(!sender) return; setIsReplying(true); await onReply(sender.id, replyText); setIsReplying(false); onOpenChange(false); }} disabled={isReplying}>Odeslat</Button>
+                <Button onClick={async () => { if(!sender) return; setIsReplying(true); await onReply(sender.id, replyText); setIsReplying(false); onOpenChange(false); }} disabled={isReplying || !replyText.trim()}>Odeslat odpověď</Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>
@@ -143,59 +149,173 @@ export default function ZpravyPage() {
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
+  // Fetch all users in organization for mapping names and recipient selection
   const { data: allUsers } = useCollection<User>(useMemoFirebase(() => firestore && user?.organizationId ? query(collection(firestore, "users"), where("organizationId", "==", user.organizationId)) : null, [firestore, user?.organizationId]));
   const { data: allClasses } = useCollection<Trida>(useMemoFirebase(() => firestore && user?.organizationId ? query(collection(firestore, 'tridy'), where('organizationId', '==', user.organizationId)) : null, [firestore, user?.organizationId]));
 
   useEffect(() => {
     if (!firestore || !user?.id) return;
-    const rQuery = query(collection(firestore, 'messages'), where('recipientIds', 'array-contains', user.id));
-    const sQuery = query(collection(firestore, 'messages'), where('senderId', '==', user.id));
+    
+    const studentIds = user.studentIds || (user.studentId ? [user.studentId] : []);
+    const searchIds = [user.id, ...studentIds];
+
+    const rQuery = query(collection(firestore, 'messages'), where('recipientIds', 'array-contains-any', searchIds), orderBy('createdAt', 'desc'));
+    const sQuery = query(collection(firestore, 'messages'), where('senderId', '==', user.id), orderBy('createdAt', 'desc'));
+    
     const unsubR = onSnapshot(rQuery, s => setReceivedMessages(s.docs.map(d => ({...d.data(), id: d.id} as Message))));
     const unsubS = onSnapshot(sQuery, s => setSentMessages(s.docs.map(d => ({...d.data(), id: d.id} as Message))));
+    
     return () => { unsubR(); unsubS(); };
-  }, [firestore, user?.id]);
+  }, [firestore, user?.id, user?.studentIds, user?.studentId]);
 
   const handleSendMessage = async () => {
     if (!user || !firestore || !messageText.trim() || selectedRecipients.length === 0) return;
-    const newMessage = { senderId: user.id, recipientIds: selectedRecipients, text: messageText, createdAt: Timestamp.now(), readBy: [], organizationId: user.organizationId || '' };
+    const newMessage = { 
+        senderId: user.id, 
+        recipientIds: selectedRecipients, 
+        text: messageText, 
+        createdAt: Timestamp.now(), 
+        readBy: [], 
+        organizationId: user.organizationId || '' 
+    };
     await addDocumentNonBlocking(collection(firestore, 'messages'), newMessage);
-    setMessageText(''); setSelectedRecipients([]); toast({ title: 'Odesláno' });
+    setMessageText(''); 
+    setSelectedRecipients([]); 
+    toast({ title: 'Zpráva byla odeslána' });
+  };
+
+  const getRecipientLabel = (msg: Message) => {
+      if (!user) return null;
+      const studentIds = user.studentIds || (user.studentId ? [user.studentId] : []);
+      const targetId = msg.recipientIds.find(id => studentIds.includes(id));
+      if (targetId) {
+          const student = allUsers?.find(u => u.id === targetId);
+          return student ? <Badge variant="outline" className="ml-2 bg-primary/5 text-primary border-primary/20">Pro: {student.name}</Badge> : null;
+      }
+      return null;
   };
 
   return (
     <div className="space-y-6">
-        <h1 className="text-3xl font-bold">Komunikace</h1>
-        <Tabs defaultValue="inbox">
-            <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="new">Nová zpráva</TabsTrigger>
-                <TabsTrigger value="inbox">Doručené</TabsTrigger>
-                <TabsTrigger value="sent">Odeslané</TabsTrigger>
+        <div className="flex justify-between items-center">
+            <h1 className="text-3xl font-bold tracking-tight">Komunikace</h1>
+        </div>
+        <Tabs defaultValue="inbox" className="w-full">
+            <TabsList className="grid w-full grid-cols-3 max-w-md">
+                <TabsTrigger value="inbox" className="flex items-center gap-2"><Inbox className="h-4 w-4" />Doručené</TabsTrigger>
+                <TabsTrigger value="sent" className="flex items-center gap-2"><SendIcon className="h-4 w-4" />Odeslané</TabsTrigger>
+                <TabsTrigger value="new" className="flex items-center gap-2"><UserPlus className="h-4 w-4" />Nová zpráva</TabsTrigger>
             </TabsList>
-            <TabsContent value="new">
+            
+            <TabsContent value="inbox" className="mt-6">
+                <Card>
+                    <Table>
+                        <TableBody>
+                            {receivedMessages.length === 0 ? (
+                                <TableRow><TableCell className="text-center py-10 text-muted-foreground">Žádné doručené zprávy.</TableCell></TableRow>
+                            ) : (
+                                receivedMessages.map(m => (
+                                    <TableRow key={m.id} className="cursor-pointer hover:bg-muted/50" onClick={() => { setSelectedMessage(m); setIsDetailOpen(true); }}>
+                                        <TableCell className="w-12">
+                                            <Avatar className="h-8 w-8"><AvatarImage src={allUsers?.find(u => u.id === m.senderId)?.avatarUrl} /><AvatarFallback>{getInitials(allUsers?.find(u => u.id === m.senderId)?.name || '?')}</AvatarFallback></Avatar>
+                                        </TableCell>
+                                        <TableCell className="font-medium">
+                                            {allUsers?.find(u => u.id === m.senderId)?.name || 'Načítání...'}
+                                            {getRecipientLabel(m)}
+                                        </TableCell>
+                                        <TableCell className="max-w-md truncate text-muted-foreground">{m.text}</TableCell>
+                                        <TableCell className="text-right text-xs text-muted-foreground">{m.createdAt ? format(m.createdAt.toDate(), 'd.M.') : ''}</TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </Card>
+            </TabsContent>
+
+            <TabsContent value="sent" className="mt-6">
+                <Card>
+                    <Table>
+                        <TableBody>
+                            {sentMessages.length === 0 ? (
+                                <TableRow><TableCell className="text-center py-10 text-muted-foreground">Žádné odeslané zprávy.</TableCell></TableRow>
+                            ) : (
+                                sentMessages.map(m => (
+                                    <TableRow key={m.id} className="cursor-pointer hover:bg-muted/50" onClick={() => { setSelectedMessage(m); setIsDetailOpen(true); }}>
+                                        <TableCell className="font-medium">
+                                            Komu: {m.recipientIds.length > 1 ? `${m.recipientIds.length} příjemců` : (allUsers?.find(u => u.id === m.recipientIds[0])?.name || allClasses?.find(c => c.id === m.recipientIds[0])?.nazev || 'Načítání...')}
+                                        </TableCell>
+                                        <TableCell className="max-w-md truncate text-muted-foreground">{m.text}</TableCell>
+                                        <TableCell className="text-right text-xs text-muted-foreground">{m.createdAt ? format(m.createdAt.toDate(), 'd.M.') : ''}</TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </Card>
+            </TabsContent>
+
+            <TabsContent value="new" className="mt-6">
                 <Card>
                     <CardContent className="space-y-4 pt-6">
-                        <Button variant="outline" className="w-full" onClick={() => setIsRecipientDialogOpen(true)}>Příjemci: {selectedRecipients.length}</Button>
-                        <Textarea rows={8} value={messageText} onChange={e => setMessageText(e.target.value)} placeholder="Zpráva..." />
-                        <Button onClick={handleSendMessage}>Odeslat</Button>
+                        <div className="flex flex-wrap gap-2 items-center">
+                            <Button variant="outline" onClick={() => setIsRecipientDialogOpen(true)}>
+                                <UserPlus className="mr-2 h-4 w-4" />
+                                {selectedRecipients.length === 0 ? 'Vybrat příjemce' : `Vybráno příjemců: ${selectedRecipients.length}`}
+                            </Button>
+                            <div className="flex flex-wrap gap-1">
+                                {selectedRecipients.slice(0, 3).map(id => (
+                                    <Badge key={id} variant="secondary" className="flex items-center gap-1">
+                                        {allUsers?.find(u => u.id === id)?.name || allClasses?.find(c => c.id === id)?.nazev || id}
+                                        <Checkbox checked className="h-3 w-3 pointer-events-none" />
+                                    </Badge>
+                                ))}
+                                {selectedRecipients.length > 3 && <Badge variant="secondary">+{selectedRecipients.length - 3}</Badge>}
+                            </div>
+                        </div>
+                        <Textarea rows={10} value={messageText} onChange={e => setMessageText(e.target.value)} placeholder="Zde napište text vaší zprávy..." className="resize-none" />
+                        <div className="flex justify-end">
+                            <Button onClick={handleSendMessage} disabled={!messageText.trim() || selectedRecipients.length === 0}>
+                                <SendIcon className="mr-2 h-4 w-4" />
+                                Odeslat zprávu
+                            </Button>
+                        </div>
                     </CardContent>
                 </Card>
             </TabsContent>
-            <TabsContent value="inbox">
-                <Table>
-                    <TableBody>
-                        {receivedMessages.map(m => (
-                            <TableRow key={m.id} className="cursor-pointer" onClick={() => { setSelectedMessage(m); setIsDetailOpen(true); }}>
-                                <TableCell>{allUsers?.find(u => u.id === m.senderId)?.name}</TableCell>
-                                <TableCell className="max-w-md truncate">{m.text}</TableCell>
-                                <TableCell className="text-right">{m.createdAt ? format(m.createdAt.toDate(), 'd.M.') : ''}</TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </TabsContent>
         </Tabs>
-        <RecipientDialog isOpen={isRecipientDialogOpen} onOpenChange={setIsRecipientDialogOpen} allUsers={allUsers} allClasses={allClasses} selectedRecipients={selectedRecipients} onToggleRecipient={id => setSelectedRecipients(p => p.includes(id) ? p.filter(x => x!==id) : [...p, id])} hasRole={hasRole} isLoading={!allUsers} />
-        {allUsers && <MessageDetailDialog message={selectedMessage} isOpen={isDetailOpen} onOpenChange={setIsDetailOpen} allUsers={allUsers} onReply={async (rid, txt) => { await addDocumentNonBlocking(collection(firestore, 'messages'), { senderId: user!.id, recipientIds: [rid], text: txt, createdAt: Timestamp.now(), readBy: [], organizationId: user!.organizationId || '' }); toast({ title: 'Odesláno' }); }} />}
+
+        <RecipientDialog 
+            isOpen={isRecipientDialogOpen} 
+            onOpenChange={setIsRecipientDialogOpen} 
+            allUsers={allUsers} 
+            allClasses={allClasses} 
+            selectedRecipients={selectedRecipients} 
+            onToggleRecipient={id => setSelectedRecipients(p => p.includes(id) ? p.filter(x => x!==id) : [...p, id])} 
+            hasRole={hasRole} 
+            isLoading={!allUsers} 
+        />
+
+        {allUsers && (
+            <MessageDetailDialog 
+                message={selectedMessage} 
+                isOpen={isDetailOpen} 
+                onOpenChange={setIsDetailOpen} 
+                allUsers={allUsers} 
+                currentUser={user}
+                onReply={async (rid, txt) => { 
+                    await addDocumentNonBlocking(collection(firestore, 'messages'), { 
+                        senderId: user!.id, 
+                        recipientIds: [rid], 
+                        text: txt, 
+                        createdAt: Timestamp.now(), 
+                        readBy: [], 
+                        organizationId: user!.organizationId || '' 
+                    }); 
+                    toast({ title: 'Odpověď byla odeslána' }); 
+                }} 
+            />
+        )}
     </div>
   );
 }
