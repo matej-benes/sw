@@ -1,4 +1,3 @@
-
 rules_version = '2';
 
 service cloud.firestore {
@@ -30,10 +29,9 @@ service cloud.firestore {
       return isSignedIn() && getUserData().isSuperAdmin == true;
     }
 
-    // Funkce pro ověření, zda je žák dítětem přihlášeného rodiče
     function isMyStudent(studentId) {
         let userData = getUserData();
-        return hasRole('rodic') && userData.studentId == studentId;
+        return (hasRole('rodic') && (userData.studentId == studentId || (userData.keys().contains('studentIds') && studentId in userData.studentIds))) || (hasRole('ziak') && request.auth.uid == studentId);
     }
 
     // --- PRAVIDLA PRO KOLEKCE ---
@@ -95,11 +93,12 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow get, list: if isSignedIn() && (
         resource.data.senderId == request.auth.uid || 
-        request.auth.uid in resource.data.recipientIds
+        request.auth.uid in resource.data.recipientIds ||
+        (hasRole('rodic') && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentId in resource.data.recipientIds ||
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentIds.hasAny(resource.data.recipientIds)))
       );
-      allow update: if isSignedIn() && (
-        request.auth.uid in resource.data.recipientIds
-      );
+      allow update: if isSignedIn();
     }
     
     match /rozvrhy/{rozvrhId} {

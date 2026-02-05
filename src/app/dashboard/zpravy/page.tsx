@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { Loader2, UserPlus, Inbox, Send as SendIcon } from 'lucide-react';
 import { useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, Timestamp, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, Timestamp, onSnapshot } from 'firebase/firestore';
 import type { Trida, User, Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import {
@@ -100,7 +100,7 @@ function RecipientDialog({
   )
 }
 
-function MessageDetailDialog({ message, isOpen, onOpenChange, allUsers, onReply, currentUser }: { message: Message | null, isOpen: boolean, onOpenChange: (open: boolean) => void, allUsers: User[], onReply: (recipientId: string, replyText: string) => Promise<void>, currentUser: User | null }) {
+function MessageDetailDialog({ message, isOpen, onOpenChange, allUsers, onReply }: { message: Message | null, isOpen: boolean, onOpenChange: (open: boolean) => void, allUsers: User[], onReply: (recipientId: string, replyText: string) => Promise<void> }) {
   const [replyText, setReplyText] = useState('');
   const [isReplying, setIsReplying] = useState(false);
   
@@ -118,7 +118,7 @@ function MessageDetailDialog({ message, isOpen, onOpenChange, allUsers, onReply,
                     <Avatar className="h-10 w-10"><AvatarImage src={sender?.avatarUrl} /><AvatarFallback>{getInitials(sender?.name || '?')}</AvatarFallback></Avatar>
                     <div>
                         <p className="font-semibold">{sender?.name || 'Neznámý odesílatel'}</p>
-                        <p className="text-xs text-muted-foreground">{m.createdAt ? format(m.createdAt.toDate(), 'd.M.yyyy HH:mm') : ''}</p>
+                        <p className="text-xs text-muted-foreground">{message.createdAt ? format(message.createdAt.toDate(), 'd.M.yyyy HH:mm') : ''}</p>
                     </div>
                 </div>
                 <Separator />
@@ -159,11 +159,19 @@ export default function ZpravyPage() {
     const studentIds = user.studentIds || (user.studentId ? [user.studentId] : []);
     const searchIds = [user.id, ...studentIds];
 
-    const rQuery = query(collection(firestore, 'messages'), where('recipientIds', 'array-contains-any', searchIds), orderBy('createdAt', 'desc'));
-    const sQuery = query(collection(firestore, 'messages'), where('senderId', '==', user.id), orderBy('createdAt', 'desc'));
+    // NOTE: Removed orderBy from server queries to avoid composite index requirement
+    // Sorting is performed locally in the snapshot callback
+    const rQuery = query(collection(firestore, 'messages'), where('recipientIds', 'array-contains-any', searchIds));
+    const sQuery = query(collection(firestore, 'messages'), where('senderId', '==', user.id));
     
-    const unsubR = onSnapshot(rQuery, s => setReceivedMessages(s.docs.map(d => ({...d.data(), id: d.id} as Message))));
-    const unsubS = onSnapshot(sQuery, s => setSentMessages(s.docs.map(d => ({...d.data(), id: d.id} as Message))));
+    const unsubR = onSnapshot(rQuery, s => {
+        const msgs = s.docs.map(d => ({...d.data(), id: d.id} as Message));
+        setReceivedMessages(msgs.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0)));
+    });
+    const unsubS = onSnapshot(sQuery, s => {
+        const msgs = s.docs.map(d => ({...d.data(), id: d.id} as Message));
+        setSentMessages(msgs.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0)));
+    });
     
     return () => { unsubR(); unsubS(); };
   }, [firestore, user?.id, user?.studentIds, user?.studentId]);
@@ -302,7 +310,6 @@ export default function ZpravyPage() {
                 isOpen={isDetailOpen} 
                 onOpenChange={setIsDetailOpen} 
                 allUsers={allUsers} 
-                currentUser={user}
                 onReply={async (rid, txt) => { 
                     await addDocumentNonBlocking(collection(firestore, 'messages'), { 
                         senderId: user!.id, 
