@@ -20,8 +20,6 @@ interface AuthContextType {
   hasRole: (role: Role) => boolean;
   isSuperAdmin: () => boolean;
   activeOrganizationId: string | null;
-  activeStudentId: string | null;
-  setActiveStudentId: (id: string | null) => void;
   savedAccounts: SavedAccount[];
   switchAccount: (account: SavedAccount) => Promise<void>;
   addAccount: () => Promise<void>;
@@ -33,7 +31,6 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeStudentId, setActiveStudentId] = useState<string | null>(null);
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
   
   const router = useRouter();
@@ -88,14 +85,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (userDocSnap.exists()) {
               const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
               setUser(userData);
-              
-              // Set default active student for parents if not set or if current active is not in list
-              if (userData.roles.includes('rodic')) {
-                const kids = userData.studentIds || (userData.studentId ? [userData.studentId] : []);
-                if (kids.length > 0 && (!activeStudentId || !kids.includes(activeStudentId))) {
-                  setActiveStudentId(kids[0]);
-                }
-              }
 
               if (userData.pin && pathname !== '/nastaveni-hesla') {
                 router.replace('/nastaveni-hesla');
@@ -114,7 +103,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
       } else {
         setUser(null);
-        setActiveStudentId(null);
         setLoading(false);
       }
     });
@@ -125,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         unsubscribeDoc();
       }
     };
-  }, [auth, firestore, pathname, router, activeStudentId]);
+  }, [auth, firestore, pathname, router]);
 
   useEffect(() => {
     if (loading) return;
@@ -197,8 +185,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     hasRole, 
     isSuperAdmin,
     activeOrganizationId,
-    activeStudentId,
-    setActiveStudentId,
     savedAccounts,
     switchAccount,
     addAccount,

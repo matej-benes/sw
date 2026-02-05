@@ -32,28 +32,13 @@ service cloud.firestore {
 
     // Funkce pro ověření, zda je žák dítětem přihlášeného rodiče
     function isMyStudent(studentId) {
-        let parentData = getUserData();
-        let sIds = parentData.get('studentIds', []);
-        let legacyId = parentData.get('studentId', '');
-        return hasRole('rodic') && (studentId in sIds || studentId == legacyId);
-    }
-
-    // Funkce pro ověření přístupu ke zprávě (pro rodiče dětí v seznamu příjemců)
-    function isParentOfAny(recipientIds) {
-        let parentData = getUserData();
-        if (!hasRole('rodic')) return false;
-        let myStudents = parentData.get('studentIds', []);
-        let legacyId = parentData.get('studentId', '');
-        
-        // Kontrola, zda se ID některého z mých dětí nachází v seznamu příjemců
-        return recipientIds.hasAny(myStudents) || (legacyId != '' && legacyId in recipientIds);
+        let userData = getUserData();
+        return hasRole('rodic') && userData.studentId == studentId;
     }
 
     // --- PRAVIDLA PRO KOLEKCE ---
 
     match /users/{userId} {
-      // Umožníme číst profil: sobě, adminovi, rodiči (své dítě) nebo komukoli ze stejné školy
-      // Důležité pro viditelnost jmen učitelů v aplikaci
       allow get: if isSignedIn() && (
         isOwner(userId) || 
         hasRole('administrator') || 
@@ -61,10 +46,7 @@ service cloud.firestore {
         getUserData().organizationId == resource.data.organizationId
       );
       
-      // Listování je povoleno pro výběr příjemců zpráv, filtrováno dotazem na organizationId
-      allow list: if isSignedIn() && (
-        hasAnyRole(['administrator', 'ucitel', 'rodic', 'ziak'])
-      );
+      allow list: if isSignedIn();
       
       allow create: if hasRole('administrator');
       allow update: if isOwner(userId) || hasRole('administrator');
@@ -113,12 +95,10 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow get, list: if isSignedIn() && (
         resource.data.senderId == request.auth.uid || 
-        request.auth.uid in resource.data.recipientIds ||
-        isParentOfAny(resource.data.recipientIds)
+        request.auth.uid in resource.data.recipientIds
       );
       allow update: if isSignedIn() && (
-        request.auth.uid in resource.data.recipientIds || 
-        isParentOfAny(resource.data.recipientIds)
+        request.auth.uid in resource.data.recipientIds
       );
     }
     

@@ -27,8 +27,7 @@ export interface User {
   email: string;
   roles: Role[];
   avatarUrl?: string;
-  studentId?: string; // Backward compatibility
-  studentIds?: string[]; 
+  studentId?: string; 
   pin?: string | null;
   isSuperAdmin?: boolean;
   organizationId?: string;
