@@ -1,3 +1,4 @@
+
 export type Role = 'admin' | 'user';
 
 export interface User {
@@ -5,6 +6,4 @@ export interface User {
   name: string;
   email: string;
   roles: Role[];
-  organizationId?: string;
-  avatarUrl?: string;
 }
