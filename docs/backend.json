@@ -1,24 +1,9 @@
 {
-  "entities": {
-    "User": {
-      "title": "User",
-      "type": "object",
-      "description": "Základní uživatelský profil.",
-      "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "email": { "type": "string", "format": "email" },
-        "role": { "type": "string", "enum": ["admin", "user"] }
-      },
-      "required": ["id", "name", "email"]
-    }
-  },
+  "entities": {},
   "auth": {
     "providers": ["password"]
   },
   "firestore": {
-    "structure": [
-      { "path": "/users/{userId}", "definition": { "schema": { "$ref": "#/backend/entities/User" } } }
-    ]
+    "structure": []
   }
 }
