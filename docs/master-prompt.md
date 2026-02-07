@@ -1,9 +1,9 @@
 
-# Master Prompt pro Vytvoření Aplikace "ŠkolaWeb" v Google AI Studio
+# Master Prompt pro Vytvoření Aplikace ŠkolaWeb
 
 ## 1. Základní Koncept
 
-Cílem je vytvořit komplexní školní informační systém (SIS) s názvem "ŠkolaWeb". Aplikace bude modulární, postavená na moderních webových technologiích a bude sloužit různým rolím v rámci vzdělávací instituce (školy nebo zájmové skupiny).
+Cílem je vytvořit komplexní školní informační systém (SIS) s názvem "ŠkolaWeb". Aplikace bude modulární, postavená na moderních webových technologiích a bude sloužit různým rolím v rámci vzdělávací instituce / školy 
 
 ---
 
@@ -25,7 +25,7 @@ Aplikace bude pracovat s následujícími datovými entitami, které budou ulož
 - **Organization:** Organizace (škola, kroužek).
 - **User:** Uživatel (administrátor, učitel, rodič, žák, superadmin). Definuje role a základní údaje.
 - **Grading (nově `grades`):** Známka, hodnocení.
-- **Trida:** Školní třída nebo skupina.
+- **Trida:** Školní třída.
 - **Predmet:** Vyučovací předmět.
 - **Ucebna:** Místnost/učebna.
 - **Rozvrh:** Denní rozvrh pro danou třídu.
@@ -46,11 +46,11 @@ Aplikace bude pracovat s následujícími datovými entitami, které budou ulož
 
 Systém bude rozlišovat následující role s jasně definovanými oprávněními, která budou vynucena pomocí Bezpečnostních pravidel Firestore (`firestore.rules`):
 
-- **Žák (ziak):** Vidí svůj rozvrh, známky, absence, domácí úkoly, může komunikovat s učiteli.
+- **Žák (zak):** Vidí svůj rozvrh, známky, absence, domácí úkoly, může komunikovat s učiteli.
 - **Rodič (rodic):** Vidí totéž co jeho dítě (žák), může omlouvat absenci.
 - **Učitel (ucitel):** Zadává známky, absence, poznámky, domácí úkoly pro třídy/předměty, které vyučuje. Komunikuje s žáky a rodiči.
 - **Administrátor (administrator):** Spravuje uživatele, třídy, předměty, učebny a další systémové číselníky. Má přístup k většině dat.
-- **Super Admin (isSuperAdmin):** Má nejvyšší oprávnění, spravuje organizace.
+
 
 ---
 
